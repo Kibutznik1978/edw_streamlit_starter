@@ -36,21 +36,32 @@ def clean_text(text: str) -> str:
 # -------------------------------------------------------------------
 # PDF Parsing & EDW Logic
 # -------------------------------------------------------------------
-def parse_pairings(pdf_path: Path):
+def parse_pairings(pdf_path: Path, progress_callback=None):
     reader = PdfReader(str(pdf_path))
     all_text = ""
-    for page in reader.pages:
+    total_pages = len(reader.pages)
+
+    for i, page in enumerate(reader.pages, start=1):
         all_text += page.extract_text() + "\n"
+        # Update progress during PDF parsing (0-40% of total progress)
+        if progress_callback and i % 10 == 0:  # Update every 10 pages
+            progress = int(5 + (i / total_pages) * 35)  # 5% to 40%
+            progress_callback(progress, f"Parsing PDF... ({i}/{total_pages} pages)")
 
     trips = []
     current_trip = []
+    in_trip = False  # Flag to track if we've started collecting trips
+
     for line in all_text.splitlines():
         if re.match(r"^\s*Trip\s*Id", line, re.IGNORECASE):
             if current_trip:
                 trips.append("\n".join(current_trip))
-                current_trip = []
-        current_trip.append(line)
-    if current_trip:
+            current_trip = [line]  # Start new trip with the Trip Id line
+            in_trip = True
+        elif in_trip:
+            current_trip.append(line)
+
+    if current_trip and in_trip:
         trips.append("\n".join(current_trip))
 
     return trips
@@ -89,6 +100,48 @@ def parse_duty_days(trip_text):
     return len(duty_blocks)
 
 
+def parse_trip_id(trip_text):
+    """Extract the actual Trip ID number from the trip text"""
+    m = re.search(r"Trip\s*Id:\s*(\d+)", trip_text, re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def parse_trip_frequency(trip_text):
+    """Extract how many times this trip runs from the date range line"""
+    # Look for patterns like "(5 trips)" or "(4 trips)"
+    m = re.search(r"\((\d+)\s+trips?\)", trip_text, re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    # If no frequency found, assume it runs once
+    return 1
+
+
+def is_hot_standby(trip_text):
+    """
+    Identify Hot Standby pairings.
+    These are single-segment pairings where departure and arrival are the same (e.g., ONT-ONT).
+    Pairings with positioning legs (e.g., ONT-DFW, DFW-DFW, DFW-ONT) are NOT hot standby.
+
+    Logic: Only mark as Hot Standby if there's exactly ONE flight segment and it's XXX-XXX.
+    """
+    # Look for airport pair patterns like "ONT-ONT", "SDF-SDF", etc.
+    # Format is typically: FLIGHT_NUMBER\nDEPT-ARVL
+    pattern = re.compile(r"\b([A-Z]{3})-([A-Z]{3})\b")
+    matches = pattern.findall(trip_text)
+
+    # Only mark as Hot Standby if:
+    # 1. Exactly one route segment found
+    # 2. That segment has same departure and arrival
+    if len(matches) == 1:
+        dept, arvl = matches[0]
+        if dept == arvl:
+            return True
+
+    return False
+
+
 # -------------------------------------------------------------------
 # Excel Utilities
 # -------------------------------------------------------------------
@@ -101,52 +154,80 @@ def _save_excel(dfs: dict, output_path: Path):
 # -------------------------------------------------------------------
 # Main Reporting
 # -------------------------------------------------------------------
-def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: str, bid_period: str):
-    trips = parse_pairings(pdf_path)
+def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: str, bid_period: str, progress_callback=None):
+    """
+    Generate EDW report from PDF.
+
+    Args:
+        progress_callback: Optional callback function(progress, message) to report progress (0-100)
+    """
+    if progress_callback:
+        progress_callback(5, "Starting PDF parsing...")
+
+    trips = parse_pairings(pdf_path, progress_callback=progress_callback)
+
+    if progress_callback:
+        progress_callback(45, f"Analyzing {len(trips)} pairings...")
 
     trip_records = []
-    for i, trip_text in enumerate(trips, start=1):
+    total_trips = len(trips)
+    for idx, trip_text in enumerate(trips, start=1):
+        trip_id = parse_trip_id(trip_text)
+        frequency = parse_trip_frequency(trip_text)
+        hot_standby = is_hot_standby(trip_text)
         edw_flag = is_edw_trip(trip_text)
         tafb_hours = parse_tafb(trip_text)
         tafb_days = tafb_hours / 24.0 if tafb_hours else 0.0
         duty_days = parse_duty_days(trip_text)
 
         trip_records.append({
-            "Trip ID": i,
+            "Trip ID": trip_id,
+            "Frequency": frequency,
+            "Hot Standby": hot_standby,
             "TAFB Hours": round(tafb_hours, 2),
             "TAFB Days": round(tafb_days, 2),
             "Duty Days": duty_days,
             "EDW": edw_flag,
         })
 
+        # Update progress every 25 trips (45-55% of total progress)
+        if progress_callback and idx % 25 == 0:
+            progress = int(45 + (idx / total_trips) * 10)  # 45% to 55%
+            progress_callback(progress, f"Analyzing pairings... ({idx}/{total_trips})")
+
     df_trips = pd.DataFrame(trip_records)
 
-    # Duty Day distribution (exclude 0s)
-    duty_dist = df_trips.groupby("Duty Days")["Trip ID"].count().reset_index(name="Trips")
-    duty_dist = duty_dist[duty_dist["Duty Days"] > 0]
+    if progress_callback:
+        progress_callback(60, "Calculating statistics...")
+
+    # Duty Day distribution (exclude 0s and Hot Standby) - weighted by frequency
+    # Filter out Hot Standby pairings from distribution analysis
+    df_regular_trips = df_trips[~df_trips["Hot Standby"]]
+    duty_dist = df_regular_trips[df_regular_trips["Duty Days"] > 0].groupby("Duty Days")["Frequency"].sum().reset_index(name="Trips")
     duty_dist["Percent"] = (duty_dist["Trips"] / duty_dist["Trips"].sum() * 100).round(1)
 
-    # Summaries
-    total_trips = len(df_trips)
-    edw_trips = df_trips["EDW"].sum()
+    # Summaries - account for frequency
+    unique_pairings = len(df_trips)
+    total_trips = df_trips["Frequency"].sum()  # Total number of actual trips
+    edw_trips = df_trips[df_trips["EDW"]]["Frequency"].sum()  # EDW trips weighted by frequency
+    hot_standby_pairings = len(df_trips[df_trips["Hot Standby"]])  # Unique hot standby pairings
+    hot_standby_trips = df_trips[df_trips["Hot Standby"]]["Frequency"].sum()  # Hot standby occurrences
 
     trip_weighted = edw_trips / total_trips * 100 if total_trips else 0
-    tafb_weighted = (
-        df_trips.loc[df_trips["EDW"], "TAFB Hours"].sum()
-        / df_trips["TAFB Hours"].sum()
-        * 100
-        if df_trips["TAFB Hours"].sum() > 0 else 0
-    )
-    dutyday_weighted = (
-        df_trips.loc[df_trips["EDW"], "Duty Days"].sum()
-        / df_trips["Duty Days"].sum()
-        * 100
-        if df_trips["Duty Days"].sum() > 0 else 0
-    )
+
+    # TAFB weighted - multiply TAFB by frequency
+    tafb_total = (df_trips["TAFB Hours"] * df_trips["Frequency"]).sum()
+    tafb_edw = (df_trips[df_trips["EDW"]]["TAFB Hours"] * df_trips[df_trips["EDW"]]["Frequency"]).sum()
+    tafb_weighted = (tafb_edw / tafb_total * 100) if tafb_total > 0 else 0
+
+    # Duty day weighted - multiply duty days by frequency
+    dutyday_total = (df_trips["Duty Days"] * df_trips["Frequency"]).sum()
+    dutyday_edw = (df_trips[df_trips["EDW"]]["Duty Days"] * df_trips[df_trips["EDW"]]["Frequency"]).sum()
+    dutyday_weighted = (dutyday_edw / dutyday_total * 100) if dutyday_total > 0 else 0
 
     trip_summary = pd.DataFrame({
-        "Metric": ["Total Trips", "EDW Trips", "Day Trips", "Pct EDW"],
-        "Value": [total_trips, edw_trips, total_trips - edw_trips, f"{trip_weighted:.1f}%"],
+        "Metric": ["Unique Pairings", "Total Trips", "EDW Trips", "Day Trips", "Pct EDW"],
+        "Value": [unique_pairings, total_trips, edw_trips, total_trips - edw_trips, f"{trip_weighted:.1f}%"],
     })
 
     weighted_summary = pd.DataFrame({
@@ -162,6 +243,14 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         ],
     })
 
+    hot_standby_summary = pd.DataFrame({
+        "Metric": ["Hot Standby Pairings", "Hot Standby Trips"],
+        "Value": [hot_standby_pairings, hot_standby_trips],
+    })
+
+    if progress_callback:
+        progress_callback(65, "Generating Excel workbook...")
+
     # Excel export
     excel_path = output_dir / f"{domicile}_{aircraft}_Bid{bid_period}_EDW_Report_Data.xlsx"
     _save_excel({
@@ -169,7 +258,11 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         "Duty Distribution": duty_dist,
         "Trip Summary": trip_summary,
         "Weighted Summary": weighted_summary,
+        "Hot Standby Summary": hot_standby_summary,
     }, excel_path)
+
+    if progress_callback:
+        progress_callback(70, "Creating charts...")
 
     # -------------------- Charts --------------------
     # Duty Day Count (bar)
@@ -177,7 +270,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     ax1.bar(duty_dist["Duty Days"], duty_dist["Trips"])
     for i, v in enumerate(duty_dist["Trips"]):
         ax1.text(duty_dist["Duty Days"].iloc[i], v, str(v), ha="center", va="bottom")
-    ax1.set_title("Trips by Duty Day Count")
+    ax1.set_title("Trips by Duty Day Count\n(excludes Hot Standby)")
     ax1.set_xlabel("Duty Days")
     ax1.set_ylabel("Trips")
 
@@ -186,7 +279,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     ax2.bar(duty_dist["Duty Days"], duty_dist["Percent"])
     for i, v in enumerate(duty_dist["Percent"]):
         ax2.text(duty_dist["Duty Days"].iloc[i], v, f"{v:.1f}%", ha="center", va="bottom")
-    ax2.set_title("Percentage of Trips by Duty Days")
+    ax2.set_title("Percentage of Trips by Duty Days\n(excludes Hot Standby)")
     ax2.set_xlabel("Duty Days")
     ax2.set_ylabel("Percent")
 
@@ -220,6 +313,9 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     ax7.pie([dutyday_weighted, 100 - dutyday_weighted], labels=["EDW", "Day"], autopct="%1.1f%%")
     ax7.set_title("Duty-day-weighted EDW %")
 
+    if progress_callback:
+        progress_callback(85, "Building PDF report...")
+
     # -------------------- PDF Build --------------------
     pdf_report_path = output_dir / f"{domicile}_{aircraft}_Bid{bid_period}_EDW_Report.pdf"
     styles = getSampleStyleSheet()
@@ -227,6 +323,8 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
 
     # Page 1 – Duty breakdown
     story.append(Paragraph(f"{domicile} {aircraft} – Bid {bid_period} Trip Length Breakdown", styles["Title"]))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("Note: Distribution excludes Hot Standby pairings", styles["Normal"]))
     story.append(Spacer(1, 12))
     data = [list(duty_dist.columns)] + duty_dist.values.tolist()
     data = [[clean_text(cell) for cell in row] for row in data]
@@ -291,6 +389,9 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     doc = SimpleDocTemplate(str(pdf_report_path), pagesize=letter)
     doc.build(story)
 
+    if progress_callback:
+        progress_callback(100, "Complete!")
+
     return {
         "excel": excel_path,
         "report_pdf": pdf_report_path,
@@ -298,6 +399,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         "duty_dist": duty_dist,
         "trip_summary": trip_summary,
         "weighted_summary": weighted_summary,
+        "hot_standby_summary": hot_standby_summary,
     }
 
 
