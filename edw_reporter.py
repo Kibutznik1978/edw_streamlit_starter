@@ -3,6 +3,8 @@ import unicodedata
 from pathlib import Path
 from io import BytesIO
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Set backend for headless environments (Streamlit Cloud)
 import matplotlib.pyplot as plt
 from PIL import Image as PILImage
 
