@@ -102,12 +102,405 @@ def parse_duty_days(trip_text):
     return len(duty_blocks)
 
 
+def parse_max_duty_day_length(trip_text):
+    """
+    Extract all duty day lengths from trip text and return the maximum length in hours.
+    Returns 0.0 if no duty days found.
+
+    Example patterns: "Duty 12h30", "Duty 8h15"
+    """
+    duty_pattern = re.findall(r"(?i)Duty\s+(\d+)h(\d+)", trip_text)
+    if not duty_pattern:
+        return 0.0
+
+    duty_lengths = []
+    for hours_str, mins_str in duty_pattern:
+        hours = int(hours_str)
+        mins = int(mins_str)
+        total_hours = hours + mins / 60.0
+        duty_lengths.append(total_hours)
+
+    return max(duty_lengths) if duty_lengths else 0.0
+
+
+def parse_max_legs_per_duty_day(trip_text):
+    """
+    Extract the maximum number of flight legs in any single duty day.
+    Returns 0 if no legs found.
+
+    A duty day is defined as text between "Briefing" and "Debriefing".
+    Legs are counted as lines matching flight numbers like:
+    - UPS flights: "UPS 986" or "UPS2344"
+    - Deadhead flights: "DH AA1820", "DH WN2969", "DH DL1342"
+    - Ground transport: "GT N/A BUS G"
+
+    Example: A trip with duty days containing 2, 1, and 4 legs would return 4.
+    """
+    # Split text into lines
+    lines = trip_text.split('\n')
+
+    legs_per_duty_day = []
+    current_duty_legs = 0
+    in_duty = False
+
+    for line in lines:
+        # Check if we're starting a duty day
+        if re.search(r'\bBriefing\b', line, re.IGNORECASE):
+            in_duty = True
+            current_duty_legs = 0
+        # Check if we're ending a duty day
+        elif re.search(r'\bDebriefing\b', line, re.IGNORECASE):
+            if in_duty:
+                legs_per_duty_day.append(current_duty_legs)
+                in_duty = False
+                current_duty_legs = 0
+        # Count flight legs - look for UPS, DH (deadhead), or GT (ground transport)
+        elif in_duty:
+            # Match patterns like:
+            # - "UPS 986" or "UPS2344" (operating flights - with or without space)
+            # - "DH AA1820" or "DH WN2969" (deadhead flights)
+            # - "GT N/A BUS G" (ground transportation)
+            stripped = line.strip()
+            # Match UPS/DH/GT followed by space, digit, or other chars (no space requirement)
+            if re.match(r'^(UPS|DH|GT)(\s|\d|N/A)', stripped, re.IGNORECASE):
+                current_duty_legs += 1
+
+    # Handle case where duty day doesn't have debriefing (incomplete data)
+    if in_duty and current_duty_legs > 0:
+        legs_per_duty_day.append(current_duty_legs)
+
+    return max(legs_per_duty_day) if legs_per_duty_day else 0
+
+
 def parse_trip_id(trip_text):
     """Extract the actual Trip ID number from the trip text"""
     m = re.search(r"Trip\s*Id:\s*(\d+)", trip_text, re.IGNORECASE)
     if m:
         return int(m.group(1))
     return None
+
+
+def parse_trip_for_table(trip_text):
+    """
+    Parse trip text into a structured format for table display.
+    Returns duty days with flights and summaries.
+    """
+    lines = trip_text.split('\n')
+
+    trip_id = parse_trip_id(trip_text)
+
+    # Find date/frequency line
+    date_freq = None
+    for line in lines:
+        # Look for frequency like "(5 trips)" or date patterns like "Only on..." or "02Dec2025-10Dec2025"
+        if (re.search(r'\d+\s+trips?\)', line, re.IGNORECASE) or
+            re.search(r'Only on|^\d{2}\w{3}\d{4}', line, re.IGNORECASE)):
+            date_freq = line.strip()
+            break
+
+    duty_days = []
+    current_duty = None
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Start of duty day (Briefing marker)
+        if re.search(r'\bBriefing\b', line, re.IGNORECASE):
+            if current_duty:
+                duty_days.append(current_duty)
+
+            # Capture briefing time from next line
+            duty_start = None
+            if i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if re.match(r'\(\d+\)\d{2}:\d{2}', next_line):
+                    duty_start = next_line
+
+            current_duty = {
+                'flights': [],
+                'duty_start': duty_start,
+                'duty_end': None,
+                'duty_time': None,
+                'block_total': None,
+                'credit': None,
+                'rest': None
+            }
+            i += 1
+            continue
+
+        # End of duty day (Debriefing marker)
+        if current_duty and re.search(r'\bDebriefing\b', line, re.IGNORECASE):
+            # Capture debriefing time from next line
+            if i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if re.match(r'\(\d+\)\d{2}:\d{2}', next_line):
+                    current_duty['duty_end'] = next_line
+            # Don't append yet - we might have more info like duty time, rest, etc.
+            i += 1
+            continue
+
+        # Inside a duty day
+        if current_duty is not None:
+            # Look for flight pattern: day indicator followed by flight number
+            # Pattern: "1 (  )   " or "1 (Mo)Tu " followed by "UPS 986"
+            day_pattern = re.match(r'^\d+\s+\(', line)
+            if day_pattern and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                # Check if next line is a flight number (UPS, GT, or DH)
+                if re.match(r'^(UPS|GT|DH)', next_line, re.IGNORECASE):
+                    # This is a flight with day indicator
+                    day_info = line
+                    flight_num = next_line
+
+                    # Next line should be route
+                    if i + 2 < len(lines) and re.match(r'^[A-Z]{3}-[A-Z]{3}$', lines[i + 2].strip()):
+                        route = lines[i + 2].strip()
+                        depart = lines[i + 3].strip() if i + 3 < len(lines) else ''
+                        arrive = lines[i + 4].strip() if i + 4 < len(lines) else ''
+                        block = lines[i + 5].strip() if i + 5 < len(lines) and re.match(r'\d+h\d+', lines[i + 5].strip()) else ''
+                        # Connection time is usually at i + 7 (after aircraft type)
+                        connection = lines[i + 7].strip() if i + 7 < len(lines) and re.match(r'\d+h\d+', lines[i + 7].strip()) else ''
+
+                        current_duty['flights'].append({
+                            'day': day_info,
+                            'flight': flight_num,
+                            'route': route,
+                            'depart': depart,
+                            'arrive': arrive,
+                            'block': block,
+                            'connection': connection
+                        })
+                        # Skip past this flight's data (route, times, block, aircraft, connection, crew needs)
+                        i += 9
+                        continue
+
+            # Look for flight number without day pattern (continuation of same day)
+            elif re.match(r'^(UPS|GT|DH)', line, re.IGNORECASE):
+                # Check if this is actually a new flight (not already processed)
+                # Next line should be route
+                if i + 1 < len(lines) and re.match(r'^[A-Z]{3}-[A-Z]{3}$', lines[i + 1].strip()):
+                    flight_num = line
+                    route = lines[i + 1].strip()
+                    depart = lines[i + 2].strip() if i + 2 < len(lines) else ''
+                    arrive = lines[i + 3].strip() if i + 3 < len(lines) else ''
+                    block = lines[i + 4].strip() if i + 4 < len(lines) and re.match(r'\d+h\d+', lines[i + 4].strip()) else ''
+                    connection = lines[i + 6].strip() if i + 6 < len(lines) and re.match(r'\d+h\d+', lines[i + 6].strip()) else ''
+
+                    current_duty['flights'].append({
+                        'day': None,
+                        'flight': flight_num,
+                        'route': route,
+                        'depart': depart,
+                        'arrive': arrive,
+                        'block': block,
+                        'connection': connection
+                    })
+                    # Skip past this flight's data
+                    i += 8
+                    continue
+
+            # Capture duty summary info
+            # Check if line is "Duty" and next line has time
+            if line == 'Duty' and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if re.match(r'\d+h\d+', next_line):
+                    current_duty['duty_time'] = next_line
+
+            # Check if line is "Block" and next line has time
+            if line == 'Block' and i + 1 < len(lines) and not current_duty['block_total']:
+                next_line = lines[i + 1].strip()
+                if re.match(r'\d+h\d+', next_line):
+                    current_duty['block_total'] = next_line
+
+            # Check if line is "Credit" and next line has value
+            if line == 'Credit' and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if next_line and next_line != '-':
+                    current_duty['credit'] = next_line
+
+            # Check if line is "Rest" and next line has value
+            if line == 'Rest' and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if next_line and next_line != '-':
+                    current_duty['rest'] = next_line
+
+        i += 1
+
+    if current_duty:
+        duty_days.append(current_duty)
+
+    # Extract trip summary
+    trip_summary = {}
+    for line in lines:
+        if 'Credit Time:' in line:
+            match = re.search(r'Credit Time:\s*(\S+)', line)
+            if match:
+                trip_summary['Credit'] = match.group(1)
+        if 'Block Time:' in line:
+            match = re.search(r'Block Time:\s*(\S+)', line)
+            if match:
+                trip_summary['Blk'] = match.group(1)
+        if 'Duty Time:' in line:
+            match = re.search(r'Duty Time:\s*(\S+)', line)
+            if match:
+                trip_summary['Duty Time'] = match.group(1)
+        if 'Premium:' in line:
+            match = re.search(r'Premium:\s*\$?(\S+)', line)
+            if match:
+                trip_summary['Prem'] = '$' + match.group(1)
+        if 'per Diem:' in line or 'Per Diem:' in line:
+            match = re.search(r'[Pp]er [Dd]iem:\s*\$?(\S+)', line)
+            if match:
+                trip_summary['PDiem'] = '$' + match.group(1)
+        if 'TAFB:' in line:
+            match = re.search(r'TAFB:\s*(\S+)', line)
+            if match:
+                trip_summary['TAFB'] = match.group(1)
+
+    # Count duty days
+    trip_summary['Duty Days'] = str(len(duty_days))
+
+    return {
+        'trip_id': trip_id,
+        'date_freq': date_freq,
+        'duty_days': duty_days,
+        'trip_summary': trip_summary
+    }
+
+
+def format_trip_details(trip_text):
+    """
+    Parse and format trip text into structured data for display.
+    Returns a dictionary with formatted sections including duty days.
+    """
+    lines = trip_text.split('\n')
+
+    # Extract header info
+    trip_id = parse_trip_id(trip_text)
+
+    # Find date/frequency line
+    date_freq = None
+    for line in lines:
+        if re.search(r'\d+\s+trips?\)', line, re.IGNORECASE):
+            date_freq = line.strip()
+            break
+
+    # Parse duty days - track sections between Briefing and Debriefing
+    duty_days = []
+    current_duty = None
+    current_flight = None
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Start of duty day
+        if re.search(r'\bBriefing\b', line, re.IGNORECASE):
+            if current_duty:
+                duty_days.append(current_duty)
+            current_duty = {
+                'briefing': None,
+                'debriefing': None,
+                'flights': [],
+                'duty_time': None,
+                'block_time': None,
+                'credit': None,
+                'rest': None
+            }
+            # Next line should have briefing time
+            if i + 1 < len(lines):
+                current_duty['briefing'] = lines[i + 1].strip()
+
+        # Flight number
+        elif current_duty and re.match(r'^UPS\s*\d+$', line, re.IGNORECASE):
+            current_flight = {'flight': line}
+            current_duty['flights'].append(current_flight)
+
+        # Route (XXX-XXX)
+        elif current_flight and re.match(r'^[A-Z]{3}-[A-Z]{3}$', line):
+            current_flight['route'] = line
+            # Look ahead for start time, end time, block time, aircraft
+            if i + 1 < len(lines):
+                current_flight['start'] = lines[i + 1].strip()
+            if i + 2 < len(lines):
+                current_flight['end'] = lines[i + 2].strip()
+            if i + 3 < len(lines):
+                current_flight['block'] = lines[i + 3].strip()
+            if i + 4 < len(lines):
+                current_flight['aircraft'] = lines[i + 4].strip()
+            if i + 5 < len(lines):
+                current_flight['connection'] = lines[i + 5].strip()
+
+        # Debriefing
+        elif current_duty and re.search(r'\bDebriefing\b', line, re.IGNORECASE):
+            if i + 1 < len(lines):
+                current_duty['debriefing'] = lines[i + 1].strip()
+
+        # Duty time
+        elif current_duty and re.search(r'Duty\s+(\d+h\d+)', line, re.IGNORECASE):
+            match = re.search(r'Duty\s+(\d+h\d+)', line, re.IGNORECASE)
+            current_duty['duty_time'] = match.group(1)
+
+        # Block time (in duty summary)
+        elif current_duty and re.search(r'Block\s+(\d+h\d+)', line, re.IGNORECASE):
+            match = re.search(r'Block\s+(\d+h\d+)', line, re.IGNORECASE)
+            if not current_duty['block_time']:
+                current_duty['block_time'] = match.group(1)
+
+        # Credit
+        elif current_duty and re.search(r'Credit\s+(\S+)', line, re.IGNORECASE):
+            match = re.search(r'Credit\s+(\S+)', line, re.IGNORECASE)
+            current_duty['credit'] = match.group(1)
+
+        # Rest period
+        elif current_duty and re.search(r'Rest\s+(\S+)', line, re.IGNORECASE):
+            match = re.search(r'Rest\s+(.+)', line, re.IGNORECASE)
+            current_duty['rest'] = match.group(1).strip()
+
+        i += 1
+
+    if current_duty:
+        duty_days.append(current_duty)
+
+    # Extract trip-level summary
+    trip_summary = {}
+    for line in lines:
+        if 'TAFB:' in line:
+            match = re.search(r'TAFB:\s*(\S+)', line)
+            if match:
+                trip_summary['TAFB'] = match.group(1)
+        if 'Credit Time:' in line:
+            match = re.search(r'Credit Time:\s*(\S+)', line)
+            if match:
+                trip_summary['Credit Time'] = match.group(1)
+        if 'Block Time:' in line and 'Block Time:' not in [k for k in trip_summary.keys()]:
+            match = re.search(r'Block Time:\s*(\S+)', line)
+            if match:
+                trip_summary['Block Time'] = match.group(1)
+        if 'Duty Time:' in line:
+            match = re.search(r'Duty Time:\s*(\S+)', line)
+            if match:
+                trip_summary['Duty Time'] = match.group(1)
+        if 'Premium:' in line:
+            match = re.search(r'Premium:\s*(\S+)', line)
+            if match:
+                trip_summary['Premium'] = match.group(1)
+        if 'per Diem:' in line or 'Per Diem:' in line:
+            match = re.search(r'[Pp]er [Dd]iem:\s*(\S+)', line)
+            if match:
+                trip_summary['Per Diem'] = match.group(1)
+        if 'LDGS' in line:
+            match = re.search(r'LDGS\s+(\d+)', line)
+            if match:
+                trip_summary['Landings'] = match.group(1)
+
+    return {
+        'trip_id': trip_id,
+        'date_freq': date_freq,
+        'duty_days': duty_days,
+        'trip_summary': trip_summary
+    }
 
 
 def parse_trip_frequency(trip_text):
@@ -172,6 +565,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         progress_callback(45, f"Analyzing {len(trips)} pairings...")
 
     trip_records = []
+    trip_text_map = {}  # Map Trip ID to raw trip text
     total_trips = len(trips)
     for idx, trip_text in enumerate(trips, start=1):
         trip_id = parse_trip_id(trip_text)
@@ -181,6 +575,8 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         tafb_hours = parse_tafb(trip_text)
         tafb_days = tafb_hours / 24.0 if tafb_hours else 0.0
         duty_days = parse_duty_days(trip_text)
+        max_duty_length = parse_max_duty_day_length(trip_text)
+        max_legs = parse_max_legs_per_duty_day(trip_text)
 
         trip_records.append({
             "Trip ID": trip_id,
@@ -189,8 +585,14 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
             "TAFB Hours": round(tafb_hours, 2),
             "TAFB Days": round(tafb_days, 2),
             "Duty Days": duty_days,
+            "Max Duty Length": round(max_duty_length, 2),
+            "Max Legs/Duty": max_legs,
             "EDW": edw_flag,
         })
+
+        # Store raw trip text indexed by Trip ID
+        if trip_id is not None:
+            trip_text_map[trip_id] = trip_text
 
         # Update progress every 25 trips (45-55% of total progress)
         if progress_callback and idx % 25 == 0:
@@ -402,6 +804,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         "trip_summary": trip_summary,
         "weighted_summary": weighted_summary,
         "hot_standby_summary": hot_standby_summary,
+        "trip_text_map": trip_text_map,
     }
 
 

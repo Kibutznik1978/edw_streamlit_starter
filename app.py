@@ -1,7 +1,8 @@
 import tempfile
 from pathlib import Path
 import streamlit as st
-from edw_reporter import run_edw_report
+import pandas as pd
+from edw_reporter import run_edw_report, parse_trip_for_table
 
 st.set_page_config(page_title="EDW Pairing Analyzer", layout="centered")
 st.title("EDW Pairing Analyzer")
@@ -63,6 +64,7 @@ if run:
         "dom": dom,
         "ac": ac,
         "bid": bid,
+        "trip_text_map": res["trip_text_map"],
     }
 
     st.success("Done! Download your files below:")
@@ -116,6 +118,35 @@ if st.session_state.results is not None:
     st.header("🗂️ Trip Records")
     df_trips = res["df_trips"]
 
+    # Duty Day Length Filter (slider)
+    st.subheader("Advanced Filters")
+
+    col_filter1, col_filter2 = st.columns(2)
+
+    with col_filter1:
+        st.markdown("**Max Duty Day Length**")
+        max_duty_in_data = df_trips["Max Duty Length"].max()
+        min_duty_threshold = st.slider(
+            "Show pairings with max duty day length ≥ (hours):",
+            min_value=0.0,
+            max_value=float(max_duty_in_data) if max_duty_in_data > 0 else 24.0,
+            value=0.0,
+            step=0.5,
+            help="Filter to show only pairings where the longest duty day exceeds this threshold"
+        )
+
+    with col_filter2:
+        st.markdown("**Max Legs per Duty Day**")
+        max_legs_in_data = df_trips["Max Legs/Duty"].max()
+        min_legs_threshold = st.slider(
+            "Show pairings with max legs per duty ≥:",
+            min_value=0,
+            max_value=int(max_legs_in_data) if max_legs_in_data > 0 else 10,
+            value=0,
+            step=1,
+            help="Filter to show only pairings where any duty day has this many legs or more"
+        )
+
     # Add filters
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -123,25 +154,229 @@ if st.session_state.results is not None:
     with col2:
         filter_hs = st.selectbox("Filter by Hot Standby:", ["All", "Hot Standby Only", "Exclude Hot Standby"])
     with col3:
-        sort_by = st.selectbox("Sort by:", ["Trip ID", "Frequency", "TAFB Hours", "Duty Days"])
+        sort_by = st.selectbox("Sort by:", ["Trip ID", "Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"])
 
     # Apply filters
     filtered_df = df_trips.copy()
+
+    # Filter by duty day length threshold
+    if min_duty_threshold > 0:
+        filtered_df = filtered_df[filtered_df["Max Duty Length"] >= min_duty_threshold]
+
+    # Filter by legs per duty day threshold
+    if min_legs_threshold > 0:
+        filtered_df = filtered_df[filtered_df["Max Legs/Duty"] >= min_legs_threshold]
+
+    # Filter by EDW status
     if filter_edw == "EDW Only":
         filtered_df = filtered_df[filtered_df["EDW"] == True]
     elif filter_edw == "Day Only":
         filtered_df = filtered_df[filtered_df["EDW"] == False]
 
+    # Filter by Hot Standby status
     if filter_hs == "Hot Standby Only":
         filtered_df = filtered_df[filtered_df["Hot Standby"] == True]
     elif filter_hs == "Exclude Hot Standby":
         filtered_df = filtered_df[filtered_df["Hot Standby"] == False]
 
     # Sort
-    filtered_df = filtered_df.sort_values(by=sort_by, ascending=False if sort_by in ["Frequency", "TAFB Hours", "Duty Days"] else True)
+    filtered_df = filtered_df.sort_values(by=sort_by, ascending=False if sort_by in ["Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"] else True)
 
     st.dataframe(filtered_df, hide_index=True, width="stretch")
     st.caption(f"Showing {len(filtered_df)} of {len(df_trips)} pairings")
+
+    # === TRIP DETAILS VIEWER ===
+    st.subheader("📋 View Pairing Details")
+
+    # Get trip text map from session state
+    trip_text_map = result_data.get("trip_text_map", {})
+
+    if trip_text_map and len(filtered_df) > 0:
+        # Get list of Trip IDs from filtered results
+        available_trip_ids = sorted(filtered_df["Trip ID"].dropna().unique())
+
+        if len(available_trip_ids) > 0:
+            selected_trip_id = st.selectbox(
+                "Select a Trip ID to view full pairing details:",
+                options=available_trip_ids,
+                format_func=lambda x: f"Trip {int(x)}"
+            )
+
+            # Display the selected trip details in an expander
+            if selected_trip_id in trip_text_map:
+                with st.expander(f"📄 Trip Details - {int(selected_trip_id)} - ONT 757", expanded=True):
+                    trip_text = trip_text_map[selected_trip_id]
+
+                    # Parse the trip
+                    trip_data = parse_trip_for_table(trip_text)
+
+                    # Display date/frequency if available
+                    if trip_data['date_freq']:
+                        st.caption(trip_data['date_freq'])
+
+                    # Display as styled HTML table
+                    st.markdown("""
+                    <style>
+                    .trip-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-family: 'Courier New', monospace;
+                        font-size: 11px;
+                    }
+                    .trip-table th {
+                        background-color: #e0e0e0;
+                        padding: 6px 4px;
+                        text-align: left;
+                        border: 1px solid #999;
+                        font-weight: bold;
+                        font-size: 10px;
+                    }
+                    .trip-table td {
+                        padding: 4px;
+                        border: 1px solid #ccc;
+                        font-size: 11px;
+                    }
+                    .trip-table .subtotal-row {
+                        background-color: #f5f5f5;
+                        font-weight: bold;
+                        border-top: 2px solid #666;
+                    }
+                    .trip-table .summary-row {
+                        background-color: #d6eaf8;
+                        font-weight: bold;
+                        border-top: 3px solid #333;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
+
+                    # Build table HTML
+                    table_html = """
+                    <table class="trip-table">
+                        <thead>
+                            <tr>
+                                <th>Day</th>
+                                <th>Flight</th>
+                                <th>Dep-Arr</th>
+                                <th>Depart (L) Z</th>
+                                <th>Arrive (L) Z</th>
+                                <th>Blk</th>
+                                <th>Cxn</th>
+                                <th>Duty</th>
+                                <th>Cr</th>
+                                <th>L/O</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    """
+
+                    # Add rows for each duty day
+                    for duty_idx, duty in enumerate(trip_data['duty_days'], 1):
+                        # Add duty start row (Briefing)
+                        if duty.get('duty_start'):
+                            table_html += "<tr style='background-color: #f9f9f9; font-style: italic;'>"
+                            table_html += "<td colspan='3'><i>Briefing</i></td>"
+                            table_html += f"<td>{duty['duty_start']}</td>"  # Depart column
+                            table_html += "<td></td>"  # Arrive column
+                            table_html += "<td colspan='5'></td>"
+                            table_html += "</tr>"
+
+                        # Add flights for this duty day
+                        for flight_idx, flight in enumerate(duty['flights']):
+                            table_html += "<tr>"
+
+                            # Day
+                            table_html += f"<td>{flight.get('day') or ''}</td>"
+
+                            # Flight number
+                            table_html += f"<td>{flight.get('flight') or ''}</td>"
+
+                            # Route
+                            table_html += f"<td>{flight.get('route') or ''}</td>"
+
+                            # Depart time
+                            table_html += f"<td>{flight.get('depart') or ''}</td>"
+
+                            # Arrive time
+                            table_html += f"<td>{flight.get('arrive') or ''}</td>"
+
+                            # Block time
+                            table_html += f"<td>{flight.get('block') or ''}</td>"
+
+                            # Connection
+                            table_html += f"<td>{flight.get('connection') or ''}</td>"
+
+                            # Duty, Cr, L/O only on first row of duty day
+                            if flight_idx == 0:
+                                table_html += f"<td rowspan='{len(duty['flights'])}'></td>"
+                                table_html += f"<td rowspan='{len(duty['flights'])}'></td>"
+                                table_html += f"<td rowspan='{len(duty['flights'])}'></td>"
+
+                            table_html += "</tr>"
+
+                        # Add duty end row (Debriefing)
+                        if duty.get('duty_end'):
+                            table_html += "<tr style='background-color: #f9f9f9; font-style: italic;'>"
+                            table_html += "<td colspan='3'><i>Debriefing</i></td>"
+                            table_html += "<td></td>"  # Depart column
+                            table_html += f"<td>{duty['duty_end']}</td>"  # Arrive column
+                            table_html += "<td colspan='5'></td>"
+                            table_html += "</tr>"
+
+                        # Subtotal row for this duty day
+                        table_html += "<tr class='subtotal-row'>"
+                        table_html += "<td colspan='5' style='text-align: right;'>Duty Day Subtotal:</td>"
+                        table_html += f"<td>{duty.get('block_total') or ''}</td>"
+                        table_html += "<td></td>"
+                        table_html += f"<td>{duty.get('duty_time') or ''}</td>"
+                        table_html += f"<td>{duty.get('credit') or ''}</td>"
+                        table_html += f"<td>{duty.get('rest') or ''}</td>"
+                        table_html += "</tr>"
+
+                    # Trip summary row
+                    summary = trip_data['trip_summary']
+                    table_html += "<tr class='summary-row'>"
+                    table_html += "<td colspan='10' style='text-align: left; padding: 8px;'>"
+                    summary_parts = []
+                    if 'Credit' in summary:
+                        summary_parts.append(f"<b>Credit:</b> {summary['Credit']}")
+                    if 'Blk' in summary:
+                        summary_parts.append(f"<b>Blk:</b> {summary['Blk']}")
+                    if 'Duty Time' in summary:
+                        summary_parts.append(f"<b>Duty Time:</b> {summary['Duty Time']}")
+                    if 'Prem' in summary:
+                        summary_parts.append(f"<b>Prem:</b> {summary['Prem']}")
+                    if 'PDiem' in summary:
+                        summary_parts.append(f"<b>PDiem:</b> {summary['PDiem']}")
+                    if 'TAFB' in summary:
+                        summary_parts.append(f"<b>TAFB:</b> {summary['TAFB']}")
+                    if 'Duty Days' in summary:
+                        summary_parts.append(f"<b>Duty Days:</b> {summary['Duty Days']}")
+
+                    table_html += " &nbsp;&nbsp;&nbsp; ".join(summary_parts)
+                    table_html += "</td></tr>"
+
+                    table_html += """
+                        </tbody>
+                    </table>
+                    """
+
+                    st.markdown(table_html, unsafe_allow_html=True)
+
+                    # Raw text toggle
+                    with st.expander("🔍 View Raw Text", expanded=False):
+                        st.text_area(
+                            "Raw Pairing Text",
+                            value=trip_text,
+                            height=400,
+                            disabled=True,
+                            label_visibility="collapsed"
+                        )
+            else:
+                st.warning(f"Trip ID {int(selected_trip_id)} not found in trip text map.")
+        else:
+            st.info("No trips available in filtered results. Adjust your filters to see trip details.")
+    else:
+        st.info("Run analysis first to view trip details.")
 
     st.divider()
 
