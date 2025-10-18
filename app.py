@@ -332,28 +332,52 @@ if st.session_state.results is not None:
                         table_html += f"<td>{duty.get('rest') or ''}</td>"
                         table_html += "</tr>"
 
-                    # Trip summary row
+                    # Add trip summary section at bottom of table
                     summary = trip_data['trip_summary']
-                    table_html += "<tr class='summary-row'>"
-                    table_html += "<td colspan='10' style='text-align: left; padding: 8px;'>"
-                    summary_parts = []
-                    if 'Credit' in summary:
-                        summary_parts.append(f"<b>Credit:</b> {summary['Credit']}")
-                    if 'Blk' in summary:
-                        summary_parts.append(f"<b>Blk:</b> {summary['Blk']}")
-                    if 'Duty Time' in summary:
-                        summary_parts.append(f"<b>Duty Time:</b> {summary['Duty Time']}")
-                    if 'Prem' in summary:
-                        summary_parts.append(f"<b>Prem:</b> {summary['Prem']}")
-                    if 'PDiem' in summary:
-                        summary_parts.append(f"<b>PDiem:</b> {summary['PDiem']}")
-                    if 'TAFB' in summary:
-                        summary_parts.append(f"<b>TAFB:</b> {summary['TAFB']}")
-                    if 'Duty Days' in summary:
-                        summary_parts.append(f"<b>Duty Days:</b> {summary['Duty Days']}")
+                    if summary:
+                        # Header row for trip summary
+                        table_html += "<tr style='border-top: 3px solid #333; background-color: #d6eaf8;'>"
+                        table_html += "<td colspan='10' style='padding: 6px; font-weight: bold; text-align: center; font-size: 12px;'>TRIP SUMMARY</td>"
+                        table_html += "</tr>"
 
-                    table_html += " &nbsp;&nbsp;&nbsp; ".join(summary_parts)
-                    table_html += "</td></tr>"
+                        # Create structured table within the summary row
+                        table_html += "<tr style='background-color: #f0f8ff;'>"
+                        table_html += "<td colspan='10' style='padding: 10px;'>"
+                        table_html += "<table style='width: 100%; border-collapse: collapse; font-family: \"Courier New\", monospace; font-size: 11px;'>"
+
+                        # Row 1: Credit, Blk, Duty Time, TAFB, Duty Days
+                        table_html += "<tr>"
+                        if 'Credit' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Credit:</b> {summary['Credit']}</td>"
+                        if 'Blk' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Blk:</b> {summary['Blk']}</td>"
+                        if 'Duty Time' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Duty Time:</b> {summary['Duty Time']}</td>"
+                        if 'TAFB' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>TAFB:</b> {summary['TAFB']}</td>"
+                        if 'Duty Days' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Duty Days:</b> {summary['Duty Days']}</td>"
+                        table_html += "</tr>"
+
+                        # Row 2: Prem, PDiem, LDGS, Crew, Domicile
+                        table_html += "<tr>"
+                        if 'Prem' in summary:
+                            prem_val = summary['Prem'] if summary['Prem'].startswith('$') else f"${summary['Prem']}"
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Prem:</b> {prem_val}</td>"
+                        if 'PDiem' in summary:
+                            pdiem_val = summary['PDiem'] if summary['PDiem'].startswith('$') else f"${summary['PDiem']}"
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>PDiem:</b> {pdiem_val}</td>"
+                        if 'LDGS' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>LDGS:</b> {summary['LDGS']}</td>"
+                        if 'Crew' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Crew:</b> {summary['Crew']}</td>"
+                        if 'Domicile' in summary:
+                            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Domicile:</b> {summary['Domicile']}</td>"
+                        table_html += "</tr>"
+
+                        table_html += "</table>"
+                        table_html += "</td>"
+                        table_html += "</tr>"
 
                     table_html += """
                         </tbody>

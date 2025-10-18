@@ -332,31 +332,46 @@ def parse_trip_for_table(trip_text):
 
     # Extract trip summary
     trip_summary = {}
-    for line in lines:
-        if 'Credit Time:' in line:
-            match = re.search(r'Credit Time:\s*(\S+)', line)
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Crew has value on same line
+        if 'Crew:' in line:
+            match = re.search(r'Crew:\s*(\S+)', line)
             if match:
-                trip_summary['Credit'] = match.group(1)
-        if 'Block Time:' in line:
-            match = re.search(r'Block Time:\s*(\S+)', line)
-            if match:
-                trip_summary['Blk'] = match.group(1)
-        if 'Duty Time:' in line:
-            match = re.search(r'Duty Time:\s*(\S+)', line)
-            if match:
-                trip_summary['Duty Time'] = match.group(1)
-        if 'Premium:' in line:
-            match = re.search(r'Premium:\s*\$?(\S+)', line)
-            if match:
-                trip_summary['Prem'] = '$' + match.group(1)
-        if 'per Diem:' in line or 'Per Diem:' in line:
-            match = re.search(r'[Pp]er [Dd]iem:\s*\$?(\S+)', line)
-            if match:
-                trip_summary['PDiem'] = '$' + match.group(1)
-        if 'TAFB:' in line:
-            match = re.search(r'TAFB:\s*(\S+)', line)
-            if match:
-                trip_summary['TAFB'] = match.group(1)
+                trip_summary['Crew'] = match.group(1)
+
+        # Most fields have value on next line
+        if line == 'Domicile:' and i + 1 < len(lines):
+            trip_summary['Domicile'] = lines[i + 1].strip()
+
+        if line == 'Credit Time:' and i + 1 < len(lines):
+            trip_summary['Credit'] = lines[i + 1].strip()
+
+        if line == 'Block Time:' and i + 1 < len(lines):
+            trip_summary['Blk'] = lines[i + 1].strip()
+
+        if line == 'Duty Time:' and i + 1 < len(lines):
+            # Only capture if not already captured from duty day summary
+            if 'Duty Time' not in trip_summary:
+                trip_summary['Duty Time'] = lines[i + 1].strip()
+
+        if line == 'Premium:' and i + 1 < len(lines):
+            trip_summary['Prem'] = lines[i + 1].strip()
+
+        if line == 'per Diem:' and i + 1 < len(lines):
+            trip_summary['PDiem'] = lines[i + 1].strip()
+
+        if line == 'TAFB:' and i + 1 < len(lines):
+            trip_summary['TAFB'] = lines[i + 1].strip()
+
+        if line == 'LDGS' and i + 1 < len(lines):
+            next_val = lines[i + 1].strip()
+            if next_val.isdigit():
+                trip_summary['LDGS'] = next_val
+
+        i += 1
 
     # Count duty days
     trip_summary['Duty Days'] = str(len(duty_days))
