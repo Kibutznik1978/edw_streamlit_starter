@@ -147,6 +147,57 @@ if st.session_state.results is not None:
             help="Filter to show only pairings where any duty day has this many legs or more"
         )
 
+    # New: Duty Day Criteria Filters
+    st.markdown("---")
+    st.markdown("**🔍 Duty Day Criteria** - Find duty days matching multiple conditions")
+    st.caption("Filter pairings where a single duty day meets ALL selected criteria below")
+
+    col_dd1, col_dd2, col_dd3 = st.columns(3)
+
+    with col_dd1:
+        st.markdown("**Min Duty Duration**")
+        duty_duration_min = st.number_input(
+            "Hours:",
+            min_value=0.0,
+            max_value=24.0,
+            value=0.0,
+            step=0.5,
+            help="Show duty days with duration >= this value",
+            key="duty_duration_min"
+        )
+
+    with col_dd2:
+        st.markdown("**Min Legs**")
+        legs_min = st.number_input(
+            "Legs:",
+            min_value=0,
+            max_value=20,
+            value=0,
+            step=1,
+            help="Show duty days with legs >= this value",
+            key="legs_min"
+        )
+
+    with col_dd3:
+        st.markdown("**EDW Status**")
+        duty_day_edw_filter = st.selectbox(
+            "Status:",
+            ["Any", "EDW Only", "Non-EDW Only"],
+            index=0,
+            help="Filter by whether the duty day touches the EDW window (02:30-05:00 local)"
+        )
+
+    # Match mode
+    match_mode = st.radio(
+        "Match mode:",
+        ["Disabled", "Any duty day matches", "All duty days match"],
+        index=0,
+        horizontal=True,
+        help="'Any' = at least one duty day meets criteria. 'All' = every duty day meets criteria."
+    )
+
+    st.markdown("---")
+
     # Add filters
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -167,6 +218,38 @@ if st.session_state.results is not None:
     if min_legs_threshold > 0:
         filtered_df = filtered_df[filtered_df["Max Legs/Duty"] >= min_legs_threshold]
 
+    # Filter by duty day criteria (combined conditions on same duty day)
+    if match_mode != "Disabled":
+        def duty_day_meets_criteria(duty_day):
+            """Check if a single duty day meets all criteria"""
+            duration_ok = duty_day['duration_hours'] >= duty_duration_min
+            legs_ok = duty_day['num_legs'] >= legs_min
+
+            # Check EDW status
+            edw_ok = True
+            if duty_day_edw_filter == "EDW Only":
+                edw_ok = duty_day.get('is_edw', False) == True
+            elif duty_day_edw_filter == "Non-EDW Only":
+                edw_ok = duty_day.get('is_edw', False) == False
+            # "Any" means no EDW filter, edw_ok stays True
+
+            return duration_ok and legs_ok and edw_ok
+
+        def trip_matches_criteria(duty_day_details):
+            """Check if trip matches based on match mode"""
+            if not duty_day_details or len(duty_day_details) == 0:
+                return False
+
+            matching_days = [dd for dd in duty_day_details if duty_day_meets_criteria(dd)]
+
+            if match_mode == "Any duty day matches":
+                return len(matching_days) > 0
+            elif match_mode == "All duty days match":
+                return len(matching_days) == len(duty_day_details)
+            return False
+
+        filtered_df = filtered_df[filtered_df["Duty Day Details"].apply(trip_matches_criteria)]
+
     # Filter by EDW status
     if filter_edw == "EDW Only":
         filtered_df = filtered_df[filtered_df["EDW"] == True]
@@ -182,7 +265,9 @@ if st.session_state.results is not None:
     # Sort
     filtered_df = filtered_df.sort_values(by=sort_by, ascending=False if sort_by in ["Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"] else True)
 
-    st.dataframe(filtered_df, hide_index=True, width="stretch")
+    # Display dataframe without the complex "Duty Day Details" column
+    display_columns = [col for col in filtered_df.columns if col != "Duty Day Details"]
+    st.dataframe(filtered_df[display_columns], hide_index=True, width="stretch")
     st.caption(f"Showing {len(filtered_df)} of {len(df_trips)} pairings")
 
     # === TRIP DETAILS VIEWER ===

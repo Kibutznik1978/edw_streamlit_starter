@@ -172,6 +172,78 @@ def parse_max_legs_per_duty_day(trip_text):
     return max(legs_per_duty_day) if legs_per_duty_day else 0
 
 
+def parse_duty_day_details(trip_text):
+    """
+    Extract detailed information for each duty day in a trip.
+
+    Returns: List of dictionaries, one per duty day:
+    [
+        {'day': 1, 'duration_hours': 7.73, 'num_legs': 2, 'is_edw': True},
+        {'day': 2, 'duration_hours': 12.5, 'num_legs': 3, 'is_edw': False},
+        ...
+    ]
+
+    Returns empty list if no duty days found.
+    """
+    lines = trip_text.split('\n')
+
+    duty_day_details = []
+    current_duty_day = None
+    duty_day_number = 0
+    briefing_line_idx = None
+
+    for i, line in enumerate(lines):
+        # Start of a new duty day
+        if re.search(r'\bBriefing\b', line, re.IGNORECASE):
+            if current_duty_day:
+                # Check if this duty day is EDW before appending
+                if briefing_line_idx is not None:
+                    duty_day_text = '\n'.join(lines[briefing_line_idx:i])
+                    current_duty_day['is_edw'] = is_edw_trip(duty_day_text)
+                duty_day_details.append(current_duty_day)
+
+            duty_day_number += 1
+            briefing_line_idx = i
+            current_duty_day = {
+                'day': duty_day_number,
+                'duration_hours': 0.0,
+                'num_legs': 0,
+                'is_edw': False
+            }
+
+        # End of duty day - capture duration by searching between briefing and debriefing
+        elif current_duty_day and re.search(r'\bDebriefing\b', line, re.IGNORECASE):
+            # Search backwards from debriefing to briefing for "Duty" label
+            # Pattern: "Duty" followed by "XhY" format on next line
+            if briefing_line_idx is not None:
+                for j in range(briefing_line_idx, i):
+                    duty_match = re.match(r'^\s*Duty\s*$', lines[j].strip(), re.IGNORECASE)
+                    if duty_match and j + 1 < len(lines):
+                        time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                        if time_match:
+                            hours = int(time_match.group(1))
+                            mins = int(time_match.group(2))
+                            current_duty_day['duration_hours'] = round(hours + mins / 60.0, 2)
+                            break
+
+        # Count flight legs within duty day
+        elif current_duty_day:
+            stripped = line.strip()
+            # Match UPS/DH/GT followed by space, digit, or other chars
+            if re.match(r'^(UPS|DH|GT)(\s|\d|N/A)', stripped, re.IGNORECASE):
+                current_duty_day['num_legs'] += 1
+
+    # Don't forget the last duty day
+    if current_duty_day:
+        # Check EDW for the last duty day
+        if briefing_line_idx is not None:
+            duty_day_text = '\n'.join(lines[briefing_line_idx:])
+            current_duty_day['is_edw'] = is_edw_trip(duty_day_text)
+        duty_day_details.append(current_duty_day)
+
+    return duty_day_details
+
+
 def parse_trip_id(trip_text):
     """Extract the actual Trip ID number from the trip text"""
     m = re.search(r"Trip\s*Id:\s*(\d+)", trip_text, re.IGNORECASE)
@@ -592,6 +664,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         duty_days = parse_duty_days(trip_text)
         max_duty_length = parse_max_duty_day_length(trip_text)
         max_legs = parse_max_legs_per_duty_day(trip_text)
+        duty_day_details = parse_duty_day_details(trip_text)
 
         trip_records.append({
             "Trip ID": trip_id,
@@ -603,6 +676,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
             "Max Duty Length": round(max_duty_length, 2),
             "Max Legs/Duty": max_legs,
             "EDW": edw_flag,
+            "Duty Day Details": duty_day_details,  # Store list of duty day info
         })
 
         # Store raw trip text indexed by Trip ID
