@@ -4,8 +4,8 @@ import streamlit as st
 import pandas as pd
 from edw_reporter import run_edw_report, parse_trip_for_table
 
-st.set_page_config(page_title="EDW Pairing Analyzer", layout="centered")
-st.title("EDW Pairing Analyzer")
+st.set_page_config(page_title="Pairing Analyzer Tool 1.0", layout="centered")
+st.title("Pairing Analyzer Tool 1.0")
 
 st.markdown(
     "Upload a formatted bid-pack PDF. I'll return an **Excel** workbook and a **3-page PDF** "
