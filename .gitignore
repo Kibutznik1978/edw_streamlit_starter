@@ -1,3 +1,8 @@
 /.DS_Store
 /.venv
 /__pycache__
+
+# Debug and test files
+/debug/
+/test_data/
+*.backup
