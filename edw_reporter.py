@@ -148,8 +148,9 @@ def parse_max_legs_per_duty_day(trip_text):
         is_briefing = re.search(r'\bBriefing\b', line, re.IGNORECASE)
 
         # Fallback: detect duty start without "Briefing"
+        # Only use fallback when NOT already in a duty day
         is_fallback_start = False
-        if not is_briefing and i + 3 < len(lines):
+        if not is_briefing and not in_duty and i + 3 < len(lines):
             time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
             duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip())
             duty_label = lines[i + 2].strip() == 'Duty'
@@ -221,8 +222,9 @@ def parse_duty_day_details(trip_text):
         is_briefing = re.search(r'\bBriefing\b', line, re.IGNORECASE)
 
         # Fallback: detect duty start without "Briefing"
+        # Only use fallback when NOT already in a duty day
         is_fallback_start = False
-        if not is_briefing and i + 3 < len(lines):
+        if not is_briefing and not current_duty_day and i + 3 < len(lines):
             time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
             duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip())
             duty_label = lines[i + 2].strip() == 'Duty'
@@ -379,8 +381,9 @@ def parse_trip_for_table(trip_text):
 
         # Fallback: Detect duty day start pattern without "Briefing" keyword
         # Pattern: (HH)MM:SS followed by duration followed by "Duty" label
+        # Only use fallback when NOT already in a duty day
         is_fallback_duty_start = False
-        if not is_briefing and i + 3 < len(lines):
+        if not is_briefing and not current_duty and i + 3 < len(lines):
             # Check if current line is a time pattern
             time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line)
             # Next line should be duration
