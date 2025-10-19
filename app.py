@@ -95,6 +95,37 @@ if st.session_state.results is not None:
         st.subheader("Hot Standby Summary")
         st.dataframe(res["hot_standby_summary"], hide_index=True, width="stretch")
 
+    # Second row - Duty Day Statistics
+    st.markdown("")  # Add spacing
+
+    col4, col5 = st.columns([3, 1])
+
+    with col5:
+        st.markdown("**Display:**")
+        metric_filter = st.radio(
+            "Select metric to display:",
+            options=["All Metrics", "Avg Legs", "Avg Duty Length", "Avg Block Time"],
+            index=0,
+            label_visibility="collapsed",
+            help="Filter which statistics to display in the table"
+        )
+
+    with col4:
+        st.subheader("Duty Day Statistics")
+
+        # Filter the dataframe based on selection
+        duty_stats = res["duty_day_stats"].copy()
+
+        if metric_filter == "Avg Legs":
+            duty_stats = duty_stats[duty_stats["Metric"].str.contains("Avg Legs")]
+        elif metric_filter == "Avg Duty Length":
+            duty_stats = duty_stats[duty_stats["Metric"].str.contains("Avg Duty Day Length")]
+        elif metric_filter == "Avg Block Time":
+            duty_stats = duty_stats[duty_stats["Metric"].str.contains("Avg Block Time")]
+        # "All Metrics" shows everything (no filter)
+
+        st.dataframe(duty_stats, hide_index=True, width="stretch")
+
     st.divider()
 
     # === CHARTS SECTION ===
@@ -102,15 +133,43 @@ if st.session_state.results is not None:
 
     # Duty Day Distribution
     st.subheader("Trip Length Distribution (excludes Hot Standby)")
-    duty_dist = res["duty_dist"]
+
+    # Calculate 1-day trip count for display
+    original_duty_dist = res["duty_dist"].copy()
+    one_day_trips = original_duty_dist[original_duty_dist["Duty Days"] == 1]["Trips"].sum() if 1 in original_duty_dist["Duty Days"].values else 0
+    multi_day_trips = original_duty_dist[original_duty_dist["Duty Days"] != 1]["Trips"].sum()
+    total_dist_trips = original_duty_dist["Trips"].sum()
+
+    # Toggle to exclude 1-day trips
+    exclude_turns = st.checkbox(
+        "Exclude 1-day trips (turns)",
+        value=False,
+        help=f"Remove {one_day_trips} single-day trips ({one_day_trips/total_dist_trips*100:.1f}% of total) to focus on {multi_day_trips} multi-day pairings"
+    )
+
+    duty_dist = original_duty_dist.copy()
+
+    # Filter out 1-day trips if checkbox is checked
+    if exclude_turns:
+        duty_dist = duty_dist[duty_dist["Duty Days"] != 1].copy()
+        # Recalculate percentages based on filtered data
+        if len(duty_dist) > 0:
+            duty_dist["Percent"] = (duty_dist["Trips"] / duty_dist["Trips"].sum() * 100).round(1)
+            st.caption(f"📊 Showing {multi_day_trips} multi-day trips (excluding {one_day_trips} turns)")
 
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Duty Days vs Trips**")
-        st.bar_chart(duty_dist.set_index("Duty Days")["Trips"], x_label="Duty Days", y_label="Trips")
+        if len(duty_dist) > 0:
+            st.bar_chart(duty_dist.set_index("Duty Days")["Trips"], x_label="Duty Days", y_label="Trips")
+        else:
+            st.info("No trips to display with current filter")
     with col2:
         st.markdown("**Duty Days vs Percentage**")
-        st.bar_chart(duty_dist.set_index("Duty Days")["Percent"], x_label="Duty Days", y_label="Percent")
+        if len(duty_dist) > 0:
+            st.bar_chart(duty_dist.set_index("Duty Days")["Percent"], x_label="Duty Days", y_label="Percent")
+        else:
+            st.info("No trips to display with current filter")
 
     st.divider()
 
