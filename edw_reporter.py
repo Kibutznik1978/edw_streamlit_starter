@@ -148,14 +148,21 @@ def parse_max_legs_per_duty_day(trip_text):
         is_briefing = re.search(r'\bBriefing\b', line, re.IGNORECASE)
 
         # Fallback: detect duty start without "Briefing"
-        # Only use fallback when NOT already in a duty day
+        # Only use fallback when we didn't recently see "Briefing" keyword
         is_fallback_start = False
-        if not is_briefing and not in_duty and i + 3 < len(lines):
-            time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
-            duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip())
-            duty_label = lines[i + 2].strip() == 'Duty'
-            if time_match and duration_match and duty_label:
-                is_fallback_start = True
+        if not is_briefing and i + 3 < len(lines):
+            # Check if "Briefing" appeared in the last 2 lines
+            recent_briefing = any(
+                i - offset >= 0 and re.search(r'\bBriefing\b', lines[i - offset], re.IGNORECASE)
+                for offset in range(1, 3)
+            )
+
+            if not recent_briefing:
+                time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
+                duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip())
+                duty_label = lines[i + 2].strip() == 'Duty'
+                if time_match and duration_match and duty_label:
+                    is_fallback_start = True
 
         if is_briefing or is_fallback_start:
             in_duty = True
@@ -222,17 +229,45 @@ def parse_duty_day_details(trip_text):
         is_briefing = re.search(r'\bBriefing\b', line, re.IGNORECASE)
 
         # Fallback: detect duty start without "Briefing"
-        # Only use fallback when NOT already in a duty day
+        # Only use fallback when we didn't recently see "Briefing" keyword
         is_fallback_start = False
-        if not is_briefing and not current_duty_day and i + 3 < len(lines):
-            time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
-            duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip())
-            duty_label = lines[i + 2].strip() == 'Duty'
-            if time_match and duration_match and duty_label:
-                is_fallback_start = True
+        if not is_briefing and i + 3 < len(lines):
+            # Check if "Briefing" appeared in the last 2 lines
+            recent_briefing = any(
+                i - offset >= 0 and re.search(r'\bBriefing\b', lines[i - offset], re.IGNORECASE)
+                for offset in range(1, 3)
+            )
+
+            if not recent_briefing:
+                time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
+                duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip())
+                duty_label = lines[i + 2].strip() == 'Duty'
+                if time_match and duration_match and duty_label:
+                    is_fallback_start = True
 
         if is_briefing or is_fallback_start:
             if current_duty_day:
+                # Extract duty/block times before appending (for MD-11 format without Debriefing)
+                if briefing_line_idx is not None and current_duty_day['duration_hours'] == 0.0:
+                    for j in range(briefing_line_idx, i):
+                        # Multi-line format: "Duty" on its own line
+                        duty_match = re.match(r'^\s*Duty\s*$', lines[j].strip(), re.IGNORECASE)
+                        if duty_match and j + 1 < len(lines):
+                            time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                            if time_match:
+                                hours = int(time_match.group(1))
+                                mins = int(time_match.group(2))
+                                current_duty_day['duration_hours'] = round(hours + mins / 60.0, 2)
+
+                        # Block time
+                        block_match = re.match(r'^\s*Block\s*$', lines[j].strip(), re.IGNORECASE)
+                        if block_match and j + 1 < len(lines):
+                            time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                            if time_match:
+                                hours = int(time_match.group(1))
+                                mins = int(time_match.group(2))
+                                current_duty_day['block_hours'] = round(hours + mins / 60.0, 2)
+
                 # Check if this duty day is EDW before appending
                 if briefing_line_idx is not None:
                     duty_day_text = '\n'.join(lines[briefing_line_idx:i])
@@ -314,6 +349,27 @@ def parse_duty_day_details(trip_text):
 
     # Don't forget the last duty day
     if current_duty_day:
+        # Extract duty/block times for last duty day (for MD-11 format without Debriefing)
+        if briefing_line_idx is not None and current_duty_day['duration_hours'] == 0.0:
+            for j in range(briefing_line_idx, len(lines)):
+                # Multi-line format: "Duty" on its own line
+                duty_match = re.match(r'^\s*Duty\s*$', lines[j].strip(), re.IGNORECASE)
+                if duty_match and j + 1 < len(lines):
+                    time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                    if time_match:
+                        hours = int(time_match.group(1))
+                        mins = int(time_match.group(2))
+                        current_duty_day['duration_hours'] = round(hours + mins / 60.0, 2)
+
+                # Block time
+                block_match = re.match(r'^\s*Block\s*$', lines[j].strip(), re.IGNORECASE)
+                if block_match and j + 1 < len(lines):
+                    time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                    if time_match:
+                        hours = int(time_match.group(1))
+                        mins = int(time_match.group(2))
+                        current_duty_day['block_hours'] = round(hours + mins / 60.0, 2)
+
         # Check EDW for the last duty day
         if briefing_line_idx is not None:
             duty_day_text = '\n'.join(lines[briefing_line_idx:])
@@ -381,18 +437,25 @@ def parse_trip_for_table(trip_text):
 
         # Fallback: Detect duty day start pattern without "Briefing" keyword
         # Pattern: (HH)MM:SS followed by duration followed by "Duty" label
-        # Only use fallback when NOT already in a duty day
+        # Only use fallback when we didn't recently see "Briefing" keyword
         is_fallback_duty_start = False
-        if not is_briefing and not current_duty and i + 3 < len(lines):
-            # Check if current line is a time pattern
-            time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line)
-            # Next line should be duration
-            duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip()) if i + 1 < len(lines) else None
-            # Line after that should be "Duty" label
-            duty_label = lines[i + 2].strip() == 'Duty' if i + 2 < len(lines) else False
+        if not is_briefing and i + 3 < len(lines):
+            # Check if "Briefing" appeared in the last 2 lines
+            recent_briefing = any(
+                i - offset >= 0 and re.search(r'\bBriefing\b', lines[i - offset], re.IGNORECASE)
+                for offset in range(1, 3)
+            )
 
-            if time_match and duration_match and duty_label:
-                is_fallback_duty_start = True
+            if not recent_briefing:
+                # Check if current line is a time pattern
+                time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line)
+                # Next line should be duration
+                duration_match = re.match(r'(\d+)h(\d+)', lines[i + 1].strip()) if i + 1 < len(lines) else None
+                # Line after that should be "Duty" label
+                duty_label = lines[i + 2].strip() == 'Duty' if i + 2 < len(lines) else False
+
+                if time_match and duration_match and duty_label:
+                    is_fallback_duty_start = True
 
         if is_briefing or is_fallback_duty_start:
             if current_duty:
