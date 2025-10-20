@@ -12,28 +12,44 @@
 The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streamlit web application designed for airline pilots to analyze bid packet PDFs. It identifies Early/Day/Window (EDW) trips and provides comprehensive statistics, visualizations, and downloadable reports.
 
 ### Key Features
-- **Automatic PDF header extraction** (bid period, domicile, fleet type)
+
+**EDW Pairing Analyzer (Tab 1):**
+- Automatic PDF header extraction (bid period, domicile, fleet type)
 - Parse airline pairings PDF documents (supports 757, MD-11, and other formats)
 - Identify EDW trips (any duty day touching 02:30-05:00 local time)
 - Track trip frequencies and Hot Standby assignments
 - Advanced filtering (duty day length, legs per duty day, duty day criteria, exclude 1-day trips)
 - Interactive trip details viewer with formatted pairing display
 - Generate Excel workbooks and PDF reports with charts
-- Duty day statistics (average legs, duty length, block time, **credit time**)
+- Duty day statistics (average legs, duty length, block time, credit time)
+
+**Bid Line Analyzer (Tab 2):**
+- Parse bid line PDFs for scheduling metrics (CT, BT, DO, DD)
+- Filter by Credit Time, Block Time, Days Off, Duty Days ranges
+- Pay period comparison analysis (PP1 vs PP2)
+- Reserve line detection and statistics (Captain/FO slots)
+- Buy-up line identification (CT < 75 hours)
+- Distribution charts and summary tables
+- CSV and PDF export functionality
+
+**Historical Trends (Tab 3):**
+- Placeholder for Supabase-powered trend analysis (coming soon)
+- Future: Multi-bid-period comparisons and visualizations
 
 ---
 
-## Current Status (Session 10)
+## Current Status (Session 11)
 
-✅ **Production Ready** - All known bugs fixed, 100% parsing accuracy
+✅ **Enhanced Multi-Tool Application** - Two apps merged, database integration planned
 
-### Latest Updates (October 19, 2025)
-**Session 10 - Automation & Enhanced Statistics:**
-- **Added:** Automatic PDF header extraction (bid period, domicile, fleet type)
-- **Added:** Average credit time per duty day statistics
-- **Improved:** Duty day statistics table layout (4-column format)
-- **Added:** Notes field for tracking data iterations
-- **Removed:** Manual input fields (replaced with auto-extraction)
+### Latest Updates (October 20, 2025)
+**Session 11 - Multi-App Merger & Supabase Planning:**
+- **Merged:** Bid Line Analyzer from separate repo into unified 3-tab interface
+- **Created:** Comprehensive Supabase integration plan (500+ lines)
+- **Added:** Complete database schema design (6 tables)
+- **Restored:** Detailed pairing viewer and duty day criteria analyzer
+- **Fixed:** Pairing detail table width constraint with responsive CSS
+- **Documentation:** IMPLEMENTATION_PLAN.md and SUPABASE_SETUP.md created
 
 **Session 9 - Documentation & Organization:**
 - **Restructured:** HANDOFF.md from 2,183-line monolith to organized session-based system (90% size reduction)
@@ -88,6 +104,7 @@ Detailed documentation for each development session:
 | Session 8 | Oct 19, 2025 | Parser Bug Fixes and UI Enhancements | [session-08.md](handoff/sessions/session-08.md) |
 | Session 9 | Oct 19, 2025 | Documentation Restructuring and Codebase Cleanup | [session-09.md](handoff/sessions/session-09.md) |
 | Session 10 | Oct 19, 2025 | Automatic PDF Header Extraction and Enhanced Statistics | [session-10.md](handoff/sessions/session-10.md) |
+| Session 11 | Oct 20, 2025 | Multi-App Merger and Supabase Integration Planning | [session-11.md](handoff/sessions/session-11.md) |
 
 ---
 
@@ -143,18 +160,26 @@ def is_edw_trip(trip_text):
 
 ```
 .
-├── app.py                          # Main Streamlit application
-├── edw_reporter.py                 # Core analysis module
+├── app.py                          # Main Streamlit application (3-tab interface)
+├── edw_reporter.py                 # EDW analysis module
+├── bid_parser.py                   # Bid line parsing module (NEW)
+├── report_builder.py               # Bid line PDF report generator (NEW)
 ├── requirements.txt                # Python dependencies
 ├── .python-version                 # Python version (3.9.6)
+├── .env.example                    # Supabase credentials template (NEW)
+├── .gitignore                      # Git ignore rules (updated)
 ├── HANDOFF.md                      # This file (main index)
 ├── HANDOFF.md.backup               # Backup of original monolithic file
+├── CLAUDE.md                       # Project instructions for Claude Code
+├── docs/                           # Documentation (NEW)
+│   ├── IMPLEMENTATION_PLAN.md      # 6-phase Supabase integration plan
+│   └── SUPABASE_SETUP.md           # Database setup guide
 ├── handoff/
 │   └── sessions/
 │       ├── session-01.md           # Session 1 details
 │       ├── session-02.md           # Session 2 details
-│       ├── ...                     # Sessions 3-9
-│       └── session-10.md           # Session 10 details (latest)
+│       ├── ...                     # Sessions 3-10
+│       └── session-11.md           # Session 11 details (latest)
 └── debug/                          # Debug and test scripts (not in git)
 └── test_data/                      # Test PDFs and data (not in git)
 ```
@@ -243,6 +268,6 @@ For questions or issues, please open an issue on GitHub.
 
 ---
 
-**Last Updated:** October 19, 2025
-**Status:** ✅ Production Ready - Parser handles all PDF formats with 100% accuracy
-**Next Session:** Continue with feature enhancements or new PDF format support as needed
+**Last Updated:** October 20, 2025
+**Status:** ✅ Enhanced Multi-Tool Application - Two apps merged, Supabase integration planned
+**Next Session:** Implement database.py and save functionality for both analyzers

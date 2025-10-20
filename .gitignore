@@ -6,3 +6,10 @@
 /debug/
 /test_data/
 *.backup
+
+# Environment variables
+.env
+
+# Generated reports (optional - uncomment if you don't want to track these)
+# *_EDW_Report*.pdf
+# *_EDW_Report*.xlsx
