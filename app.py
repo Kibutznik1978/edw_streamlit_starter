@@ -2,22 +2,49 @@ import tempfile
 from pathlib import Path
 import streamlit as st
 import pandas as pd
-from edw_reporter import run_edw_report, parse_trip_for_table
+from edw_reporter import run_edw_report, parse_trip_for_table, extract_pdf_header_info
 
 st.set_page_config(page_title="Pairing Analyzer Tool 1.0", layout="centered")
 st.title("Pairing Analyzer Tool 1.0")
 
 st.markdown(
-    "Upload a formatted bid-pack PDF. I'll return an **Excel** workbook and a **3-page PDF** "
+    "Upload a formatted Pairing PDF. I'll return an **Excel** workbook and a **3-page PDF** "
     "with the trip-length breakdown, EDW vs Day, and length-weighted explanation."
 )
 
-with st.expander("Labels (optional)"):
-    dom = st.text_input("Domicile", value="ONT")
-    ac  = st.text_input("Aircraft", value="757")
-    bid = st.text_input("Bid period", value="2507")
-
 uploaded = st.file_uploader("Pairings PDF", type=["pdf"])
+
+# Initialize session state for header info
+if "header_info" not in st.session_state:
+    st.session_state.header_info = None
+
+# Extract header info when file is uploaded
+if uploaded is not None:
+    # Save to temp file to extract header info
+    tmpdir = Path(tempfile.mkdtemp())
+    pdf_path = tmpdir / uploaded.name
+    pdf_path.write_bytes(uploaded.getvalue())
+
+    # Extract header information
+    header_info = extract_pdf_header_info(pdf_path)
+    st.session_state.header_info = header_info
+
+    # Display extracted information in an info box
+    st.info(
+        f"**Extracted from PDF:**\n\n"
+        f"📅 Bid Period: **{header_info['bid_period']}**\n\n"
+        f"🏠 Domicile: **{header_info['domicile']}**\n\n"
+        f"✈️ Fleet Type: **{header_info['fleet_type']}**\n\n"
+        f"📆 Date Range: **{header_info['date_range']}**\n\n"
+        f"🕒 Report Date: **{header_info['report_date']}**"
+    )
+
+# Add notes section
+notes = st.text_area(
+    "Notes (Optional)",
+    placeholder="e.g., Final Data, Round 1, Round 2, etc.",
+    help="Add any notes about this data set (e.g., whether this is final data or an early round)"
+)
 
 # Initialize session state for results
 if "results" not in st.session_state:
@@ -27,6 +54,10 @@ run = st.button("Run Analysis", disabled=(uploaded is None))
 if run:
     if uploaded is None:
         st.warning("Please upload a PDF first.")
+        st.stop()
+
+    if st.session_state.header_info is None:
+        st.error("Could not extract header information from PDF. Please check the PDF format.")
         st.stop()
 
     # Create progress bar
@@ -44,12 +75,18 @@ if run:
     out_dir = tmpdir / "outputs"
     out_dir.mkdir(exist_ok=True)
 
+    # Use extracted header info
+    header = st.session_state.header_info
+    dom = header['domicile']
+    ac = header['fleet_type']
+    bid = header['bid_period']
+
     res = run_edw_report(
         pdf_path,
         out_dir,
-        domicile=dom.strip() or "DOM",
-        aircraft=ac.strip() or "AC",
-        bid_period=bid.strip() or "0000",
+        domicile=dom,
+        aircraft=ac,
+        bid_period=bid,
         progress_callback=update_progress,
     )
 
@@ -65,6 +102,8 @@ if run:
         "ac": ac,
         "bid": bid,
         "trip_text_map": res["trip_text_map"],
+        "notes": notes,
+        "header_info": header,
     }
 
     st.success("Done! Download your files below:")
@@ -80,6 +119,19 @@ if st.session_state.results is not None:
 
     # === SUMMARY SECTION ===
     st.header("📊 Analysis Summary")
+
+    # Display PDF header information
+    if "header_info" in result_data and result_data["header_info"]:
+        header = result_data["header_info"]
+        st.info(
+            f"**PDF Information:** Bid Period: **{header['bid_period']}** | "
+            f"Domicile: **{header['domicile']}** | Fleet: **{header['fleet_type']}** | "
+            f"Date Range: **{header['date_range']}**"
+        )
+
+    # Display notes if provided
+    if "notes" in result_data and result_data["notes"]:
+        st.success(f"**Notes:** {result_data['notes']}")
 
     col1, col2, col3 = st.columns(3)
 
@@ -98,33 +150,8 @@ if st.session_state.results is not None:
     # Second row - Duty Day Statistics
     st.markdown("")  # Add spacing
 
-    col4, col5 = st.columns([3, 1])
-
-    with col5:
-        st.markdown("**Display:**")
-        metric_filter = st.radio(
-            "Select metric to display:",
-            options=["All Metrics", "Avg Legs", "Avg Duty Length", "Avg Block Time"],
-            index=0,
-            label_visibility="collapsed",
-            help="Filter which statistics to display in the table"
-        )
-
-    with col4:
-        st.subheader("Duty Day Statistics")
-
-        # Filter the dataframe based on selection
-        duty_stats = res["duty_day_stats"].copy()
-
-        if metric_filter == "Avg Legs":
-            duty_stats = duty_stats[duty_stats["Metric"].str.contains("Avg Legs")]
-        elif metric_filter == "Avg Duty Length":
-            duty_stats = duty_stats[duty_stats["Metric"].str.contains("Avg Duty Day Length")]
-        elif metric_filter == "Avg Block Time":
-            duty_stats = duty_stats[duty_stats["Metric"].str.contains("Avg Block Time")]
-        # "All Metrics" shows everything (no filter)
-
-        st.dataframe(duty_stats, hide_index=True, width="stretch")
+    st.subheader("Duty Day Statistics")
+    st.dataframe(res["duty_day_stats"], hide_index=True, width="stretch")
 
     st.divider()
 

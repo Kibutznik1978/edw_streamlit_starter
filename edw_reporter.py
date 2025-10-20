@@ -36,6 +36,64 @@ def clean_text(text: str) -> str:
 
 
 # -------------------------------------------------------------------
+# PDF Header Extraction
+# -------------------------------------------------------------------
+def extract_pdf_header_info(pdf_path: Path):
+    """
+    Extract bid period, domicile, fleet type, and date range from PDF header.
+    Returns a dictionary with the extracted information.
+    """
+    reader = PdfReader(str(pdf_path))
+    if len(reader.pages) == 0:
+        return {
+            'bid_period': 'Unknown',
+            'domicile': 'Unknown',
+            'fleet_type': 'Unknown',
+            'date_range': 'Unknown',
+            'report_date': 'Unknown'
+        }
+
+    # Extract text from first page to get header info
+    first_page_text = reader.pages[0].extract_text()
+
+    # Initialize results
+    result = {
+        'bid_period': 'Unknown',
+        'domicile': 'Unknown',
+        'fleet_type': 'Unknown',
+        'date_range': 'Unknown',
+        'report_date': 'Unknown'
+    }
+
+    # Extract Bid Period (e.g., "Bid Period : 2601")
+    bid_period_match = re.search(r"Bid\s+Period\s*:\s*(\d+)", first_page_text, re.IGNORECASE)
+    if bid_period_match:
+        result['bid_period'] = bid_period_match.group(1)
+
+    # Extract Domicile (e.g., "Domicile: ONT")
+    domicile_match = re.search(r"Domicile\s*:\s*([A-Z]{3})", first_page_text, re.IGNORECASE)
+    if domicile_match:
+        result['domicile'] = domicile_match.group(1)
+
+    # Extract Fleet Type (e.g., "Fleet Type: 757")
+    fleet_match = re.search(r"Fleet\s+Type\s*:\s*([A-Z0-9\-]+)", first_page_text, re.IGNORECASE)
+    if fleet_match:
+        result['fleet_type'] = fleet_match.group(1)
+
+    # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 30Nov2025 - 25Jan2026")
+    date_range_match = re.search(r"Bid\s+Period\s+Date\s+Range\s*:\s*(.+?)(?:\n|Date/Time)", first_page_text, re.IGNORECASE)
+    if date_range_match:
+        result['date_range'] = date_range_match.group(1).strip()
+
+    # Extract Date/Time (e.g., "Date/Time: 16Oct2025 16:32")
+    report_date_match = re.search(r"Date/Time\s*:\s*(.+?)(?:\n|$)", first_page_text, re.IGNORECASE)
+    if report_date_match:
+        result['report_date'] = report_date_match.group(1).strip()
+
+    return result
+
+
+# -------------------------------------------------------------------
 # PDF Parsing & EDW Logic
 # -------------------------------------------------------------------
 def parse_pairings(pdf_path: Path, progress_callback=None):
@@ -247,7 +305,7 @@ def parse_duty_day_details(trip_text):
 
         if is_briefing or is_fallback_start:
             if current_duty_day:
-                # Extract duty/block times before appending (for MD-11 format without Debriefing)
+                # Extract duty/block/credit times before appending (for MD-11 format without Debriefing)
                 if briefing_line_idx is not None and current_duty_day['duration_hours'] == 0.0:
                     for j in range(briefing_line_idx, i):
                         # Multi-line format: "Duty" on its own line
@@ -268,6 +326,15 @@ def parse_duty_day_details(trip_text):
                                 mins = int(time_match.group(2))
                                 current_duty_day['block_hours'] = round(hours + mins / 60.0, 2)
 
+                        # Credit time
+                        credit_match = re.match(r'^\s*Credit\s*$', lines[j].strip(), re.IGNORECASE)
+                        if credit_match and j + 1 < len(lines):
+                            time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                            if time_match:
+                                hours = int(time_match.group(1))
+                                mins = int(time_match.group(2))
+                                current_duty_day['credit_hours'] = round(hours + mins / 60.0, 2)
+
                 # Check if this duty day is EDW before appending
                 if briefing_line_idx is not None:
                     duty_day_text = '\n'.join(lines[briefing_line_idx:i])
@@ -281,6 +348,7 @@ def parse_duty_day_details(trip_text):
                 'duration_hours': 0.0,
                 'num_legs': 0,
                 'block_hours': 0.0,
+                'credit_hours': 0.0,
                 'is_edw': False
             }
 
@@ -289,12 +357,14 @@ def parse_duty_day_details(trip_text):
         is_fallback_end = (line.strip() == 'Duty Time:')
 
         if current_duty_day and (is_debriefing or is_fallback_end):
-            # Search backwards from debriefing to briefing for "Duty" time and "Block" time
+            # Search from briefing through a few lines after debriefing for "Duty", "Block", and "Credit" times
             # Handles both formats:
-            # - Multi-line: "Duty" on one line, "7h44" on next
+            # - Multi-line: "Duty" on one line, "7h44" on next (appears AFTER Debriefing)
             # - Single-line: "Briefing (00)08:50 1h00 Duty 7h34 Crew: 1/1/0"
             if briefing_line_idx is not None:
-                for j in range(briefing_line_idx, i + 1):  # Include debriefing line
+                # Search up to 5 lines after debriefing to catch duty/block/credit times
+                search_end = min(i + 6, len(lines))
+                for j in range(briefing_line_idx, search_end):
                     # Multi-line format: "Duty" on its own line
                     duty_match = re.match(r'^\s*Duty\s*$', lines[j].strip(), re.IGNORECASE)
                     if duty_match and j + 1 < len(lines):
@@ -327,6 +397,24 @@ def parse_duty_day_details(trip_text):
                         hours = int(inline_block_match.group(1))
                         mins = int(inline_block_match.group(2))
                         current_duty_day['block_hours'] = round(hours + mins / 60.0, 2)
+
+                    # Credit time - Multi-line format: "Credit" on its own line
+                    credit_match = re.match(r'^\s*Credit\s*$', lines[j].strip(), re.IGNORECASE)
+                    if credit_match and j + 1 < len(lines):
+                        # Credit format can be "6h19L" or "6h19"
+                        time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                        if time_match:
+                            hours = int(time_match.group(1))
+                            mins = int(time_match.group(2))
+                            current_duty_day['credit_hours'] = round(hours + mins / 60.0, 2)
+
+                    # Single-line format: "Credit 6h19L" embedded in line
+                    # Avoid matching "Credit Time:" from trip summary
+                    inline_credit_match = re.search(r'\bCredit\s+(\d+)h(\d+)', lines[j])
+                    if inline_credit_match and 'Credit Time:' not in lines[j] and current_duty_day['credit_hours'] == 0.0:
+                        hours = int(inline_credit_match.group(1))
+                        mins = int(inline_credit_match.group(2))
+                        current_duty_day['credit_hours'] = round(hours + mins / 60.0, 2)
 
         # Count flight legs within duty day
         elif current_duty_day:
@@ -369,6 +457,15 @@ def parse_duty_day_details(trip_text):
                         hours = int(time_match.group(1))
                         mins = int(time_match.group(2))
                         current_duty_day['block_hours'] = round(hours + mins / 60.0, 2)
+
+                # Credit time
+                credit_match = re.match(r'^\s*Credit\s*$', lines[j].strip(), re.IGNORECASE)
+                if credit_match and j + 1 < len(lines):
+                    time_match = re.match(r'(\d+)h(\d+)', lines[j + 1].strip())
+                    if time_match:
+                        hours = int(time_match.group(1))
+                        mins = int(time_match.group(2))
+                        current_duty_day['credit_hours'] = round(hours + mins / 60.0, 2)
 
         # Check EDW for the last duty day
         if briefing_line_idx is not None:
@@ -1171,6 +1268,10 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     avg_block_edw = sum(dd['block_hours'] for dd in edw_duty_days) / len(edw_duty_days) if edw_duty_days else 0
     avg_block_non_edw = sum(dd['block_hours'] for dd in non_edw_duty_days) / len(non_edw_duty_days) if non_edw_duty_days else 0
 
+    avg_credit_all = sum(dd['credit_hours'] for dd in all_duty_days) / len(all_duty_days) if all_duty_days else 0
+    avg_credit_edw = sum(dd['credit_hours'] for dd in edw_duty_days) / len(edw_duty_days) if edw_duty_days else 0
+    avg_credit_non_edw = sum(dd['credit_hours'] for dd in non_edw_duty_days) / len(non_edw_duty_days) if non_edw_duty_days else 0
+
     trip_summary = pd.DataFrame({
         "Metric": ["Unique Pairings", "Total Trips", "EDW Trips", "Day Trips", "Pct EDW"],
         "Value": [unique_pairings, total_trips, edw_trips, total_trips - edw_trips, f"{trip_weighted:.1f}%"],
@@ -1191,26 +1292,28 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
 
     duty_day_stats = pd.DataFrame({
         "Metric": [
-            "Avg Legs/Duty Day (All)",
-            "Avg Legs/Duty Day (EDW)",
-            "Avg Legs/Duty Day (Non-EDW)",
-            "Avg Duty Day Length (All)",
-            "Avg Duty Day Length (EDW)",
-            "Avg Duty Day Length (Non-EDW)",
-            "Avg Block Time (All)",
-            "Avg Block Time (EDW)",
-            "Avg Block Time (Non-EDW)",
+            "Avg Legs/Duty Day",
+            "Avg Duty Day Length",
+            "Avg Block Time",
+            "Avg Credit Time",
         ],
-        "Value": [
+        "All": [
             f"{avg_legs_all:.2f}",
-            f"{avg_legs_edw:.2f}",
-            f"{avg_legs_non_edw:.2f}",
             f"{avg_duration_all:.2f}h",
-            f"{avg_duration_edw:.2f}h",
-            f"{avg_duration_non_edw:.2f}h",
             f"{avg_block_all:.2f}h",
+            f"{avg_credit_all:.2f}h",
+        ],
+        "EDW": [
+            f"{avg_legs_edw:.2f}",
+            f"{avg_duration_edw:.2f}h",
             f"{avg_block_edw:.2f}h",
+            f"{avg_credit_edw:.2f}h",
+        ],
+        "Non-EDW": [
+            f"{avg_legs_non_edw:.2f}",
+            f"{avg_duration_non_edw:.2f}h",
             f"{avg_block_non_edw:.2f}h",
+            f"{avg_credit_non_edw:.2f}h",
         ],
     })
 

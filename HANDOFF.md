@@ -12,31 +12,33 @@
 The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streamlit web application designed for airline pilots to analyze bid packet PDFs. It identifies Early/Day/Window (EDW) trips and provides comprehensive statistics, visualizations, and downloadable reports.
 
 ### Key Features
+- **Automatic PDF header extraction** (bid period, domicile, fleet type)
 - Parse airline pairings PDF documents (supports 757, MD-11, and other formats)
 - Identify EDW trips (any duty day touching 02:30-05:00 local time)
 - Track trip frequencies and Hot Standby assignments
 - Advanced filtering (duty day length, legs per duty day, duty day criteria, exclude 1-day trips)
 - Interactive trip details viewer with formatted pairing display
 - Generate Excel workbooks and PDF reports with charts
-- Duty day statistics (average legs, duty length, block time)
+- Duty day statistics (average legs, duty length, block time, **credit time**)
 
 ---
 
-## Current Status (Session 9)
+## Current Status (Session 10)
 
 ✅ **Production Ready** - All known bugs fixed, 100% parsing accuracy
 
 ### Latest Updates (October 19, 2025)
+**Session 10 - Automation & Enhanced Statistics:**
+- **Added:** Automatic PDF header extraction (bid period, domicile, fleet type)
+- **Added:** Average credit time per duty day statistics
+- **Improved:** Duty day statistics table layout (4-column format)
+- **Added:** Notes field for tracking data iterations
+- **Removed:** Manual input fields (replaced with auto-extraction)
+
 **Session 9 - Documentation & Organization:**
 - **Restructured:** HANDOFF.md from 2,183-line monolith to organized session-based system (90% size reduction)
 - **Organized:** Moved 49 debug/test scripts to `debug/` folder
 - **Cleaned:** Root directory now contains only production code and documentation
-- **Updated:** .gitignore to exclude debug and test data from repository
-
-**Session 8 - Parser Fixes:**
-- **Fixed:** Phantom duty days bug (eliminated 50% of duty days with 0 legs)
-- **Fixed:** MD-11 multi-day trip parsing (Trip 337 now shows 4 duty days correctly)
-- **Fixed:** Duty/block time extraction for all PDF formats
 
 ### Parser Accuracy
 - **BID2601 (757 Format):** ✅ 100% success (272 trips, 1,127 duty days)
@@ -62,9 +64,9 @@ streamlit run app.py
 The app will be available at `http://localhost:8501`
 
 ### Using the App
-1. Upload a bid packet PDF file
-2. (Optional) Customize labels: domicile, aircraft, bid period
-3. Click "Analyze Pairings" and wait for processing
+1. Upload a pairing PDF file (app automatically extracts bid period, domicile, fleet type)
+2. (Optional) Add notes to track data iteration (e.g., "Final Data", "Round 1")
+3. Click "Run Analysis" and wait for processing
 4. Download Excel and PDF reports
 5. Explore interactive visualizations and trip details
 
@@ -85,6 +87,7 @@ Detailed documentation for each development session:
 | Session 7 | Oct 18, 2025 | MD-11 Format Support | [session-07.md](handoff/sessions/session-07.md) |
 | Session 8 | Oct 19, 2025 | Parser Bug Fixes and UI Enhancements | [session-08.md](handoff/sessions/session-08.md) |
 | Session 9 | Oct 19, 2025 | Documentation Restructuring and Codebase Cleanup | [session-09.md](handoff/sessions/session-09.md) |
+| Session 10 | Oct 19, 2025 | Automatic PDF Header Extraction and Enhanced Statistics | [session-10.md](handoff/sessions/session-10.md) |
 
 ---
 
@@ -150,9 +153,10 @@ def is_edw_trip(trip_text):
 │   └── sessions/
 │       ├── session-01.md           # Session 1 details
 │       ├── session-02.md           # Session 2 details
-│       ├── ...                     # Sessions 3-7
-│       └── session-08.md           # Session 8 details (latest)
-└── [debug scripts]                 # Various test/debug scripts
+│       ├── ...                     # Sessions 3-9
+│       └── session-10.md           # Session 10 details (latest)
+└── debug/                          # Debug and test scripts (not in git)
+└── test_data/                      # Test PDFs and data (not in git)
 ```
 
 ---
