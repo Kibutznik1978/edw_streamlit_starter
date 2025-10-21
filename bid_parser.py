@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Callable, Iterable, IO, List, Optional, Sequence, Tuple
+from typing import Callable, Iterable, IO, List, Optional, Sequence, Tuple, Dict, Any
 
 import pandas as pd
 import pdfplumber
@@ -46,6 +46,86 @@ class ParseDiagnostics:
     warnings: List[str]
     pay_periods: Optional[pd.DataFrame] = None
     reserve_lines: Optional[pd.DataFrame] = None  # DataFrame with columns: Line, IsReserve, CaptainSlots, FOSlots
+
+
+def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
+    """
+    Extract header information from a bid line PDF.
+
+    Extracts:
+    - Bid Period (e.g., "2507")
+    - Bid Period Date Range (e.g., "02Nov2025 - 30Nov2025")
+    - Domicile (e.g., "ONT")
+    - Fleet Type (e.g., "757")
+    - Date/Time (e.g., "26Sep2025 11:35")
+
+    Args:
+        pdf_file: File-like object containing the PDF data
+
+    Returns:
+        Dictionary with keys: bid_period, bid_period_date_range, domicile, fleet_type, date_time
+        Returns None for any field that cannot be extracted.
+    """
+    pdf_file.seek(0)
+
+    result = {
+        "bid_period": None,
+        "bid_period_date_range": None,
+        "domicile": None,
+        "fleet_type": None,
+        "date_time": None
+    }
+
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            if not pdf.pages:
+                return result
+
+            # Extract text from first page
+            first_page = pdf.pages[0]
+            text = first_page.extract_text()
+
+            if not text:
+                return result
+
+            # Extract Bid Period (e.g., "Bid Period : 2507")
+            bid_period_match = re.search(r"Bid\s+Period\s*:?\s*(\d{4})", text, re.IGNORECASE)
+            if bid_period_match:
+                result["bid_period"] = bid_period_match.group(1)
+
+            # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 02Nov2025 - 30Nov2025")
+            date_range_match = re.search(
+                r"Bid\s+Period\s+Date\s+Range\s*:?\s*(\d{2}[A-Za-z]{3}\d{4}\s*-\s*\d{2}[A-Za-z]{3}\d{4})",
+                text,
+                re.IGNORECASE
+            )
+            if date_range_match:
+                result["bid_period_date_range"] = date_range_match.group(1)
+
+            # Extract Domicile (e.g., "Domicile: ONT")
+            domicile_match = re.search(r"Domicile\s*:?\s*([A-Z]{3})", text, re.IGNORECASE)
+            if domicile_match:
+                result["domicile"] = domicile_match.group(1).upper()
+
+            # Extract Fleet Type (e.g., "Fleet Type: 757")
+            fleet_match = re.search(r"Fleet\s+Type\s*:?\s*([\w\-]+)", text, re.IGNORECASE)
+            if fleet_match:
+                result["fleet_type"] = fleet_match.group(1)
+
+            # Extract Date/Time (e.g., "Date/Time: 26Sep2025 11:35")
+            datetime_match = re.search(
+                r"Date/Time\s*:?\s*(\d{2}[A-Za-z]{3}\d{4}\s+\d{1,2}:\d{2})",
+                text,
+                re.IGNORECASE
+            )
+            if datetime_match:
+                result["date_time"] = datetime_match.group(1)
+
+    except Exception:
+        # Silently return partial results if extraction fails
+        pass
+
+    return result
 
 
 def parse_bid_lines(

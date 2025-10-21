@@ -1,6 +1,6 @@
 # EDW Pairing Analyzer - Handoff Document
 
-**Last Updated:** October 19, 2025
+**Last Updated:** October 20, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
 **Version:** 1.0 (Production Ready)
@@ -20,17 +20,20 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 - Track trip frequencies and Hot Standby assignments
 - Advanced filtering (duty day length, legs per duty day, duty day criteria, exclude 1-day trips)
 - Interactive trip details viewer with formatted pairing display
-- Generate Excel workbooks and PDF reports with charts
+- **Professional 5-page executive PDF reports** with KPI cards and 13 charts
 - Duty day statistics (average legs, duty length, block time, credit time)
 
 **Bid Line Analyzer (Tab 2):**
+- **Automatic PDF header extraction** (bid period, domicile, fleet type, date range)
 - Parse bid line PDFs for scheduling metrics (CT, BT, DO, DD)
 - Filter by Credit Time, Block Time, Days Off, Duty Days ranges
 - Pay period comparison analysis (PP1 vs PP2)
 - Reserve line detection and statistics (Captain/FO slots)
 - Buy-up line identification (CT < 75 hours)
+- **Professional 3-page PDF reports** with KPI cards showing ranges
 - Distribution charts and summary tables
 - CSV and PDF export functionality
+- **Notes/comments support** for tracking data iterations
 
 **Historical Trends (Tab 3):**
 - Placeholder for Supabase-powered trend analysis (coming soon)
@@ -38,11 +41,29 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 12)
+## Current Status (Session 14)
 
-✅ **Professional PDF Export System** - Executive-quality analytics reports with 13 charts
+✅ **Aero Crew Data Brand Fully Integrated** - Professional brand identity across all PDF exports
 
-### Latest Updates (October 20, 2025)
+### Latest Updates (October 21, 2025)
+
+**Session 14 - Brand Integration & PDF Layout Refinements:**
+- **Integrated:** Official Aero Crew Data brand palette (Navy, Teal, Sky, Gray)
+- **Updated:** All 20 charts across both PDFs with brand colors
+- **Added:** Logo support to both PDF headers (`logo-full.svg`)
+- **Fixed:** Bid Line PDF layout (side-by-side charts, section grouping)
+- **Enhanced:** Professional appearance with consistent brand identity
+- **Improved:** KeepTogether logic prevents awkward page breaks
+
+**Session 13 - PDF Enhancements & Professional Integration:**
+- **Rewrote:** Complete `report_builder.py` (717 lines) with ReportLab for professional styling
+- **Added:** KPI cards with range display (e.g., "Avg Credit: 75.3 ↑ Range 65.8-85.7")
+- **Implemented:** PDF header extraction for bid line PDFs (`extract_bid_line_header_info()`)
+- **Added:** Notes/comments text area to Bid Line Analyzer (Tab 2)
+- **Integrated:** Professional EDW PDF (`export_pdf.py`) that was created but never connected
+- **Fixed:** Data format mismatch, page break issues, filter clutter
+- **Enhanced:** Intelligent title generation from extracted PDF metadata
+
 **Session 12 - Professional PDF Report Export System:**
 - **Created:** Complete PDF export system with `export_pdf.py` (1,150+ lines)
 - **Implemented:** 13 professional charts (pie, bar, grouped bar, radar/spider)
@@ -114,6 +135,8 @@ Detailed documentation for each development session:
 | Session 10 | Oct 19, 2025 | Automatic PDF Header Extraction and Enhanced Statistics | [session-10.md](handoff/sessions/session-10.md) |
 | Session 11 | Oct 20, 2025 | Multi-App Merger and Supabase Integration Planning | [session-11.md](handoff/sessions/session-11.md) |
 | Session 12 | Oct 20, 2025 | Professional PDF Report Export System | [session-12.md](handoff/sessions/session-12.md) |
+| Session 13 | Oct 20, 2025 | PDF Enhancements & Professional Integration | [session-13.md](handoff/sessions/session-13.md) |
+| Session 14 | Oct 21, 2025 | Brand Integration & PDF Layout Refinements | [session-14.md](handoff/sessions/session-14.md) |
 
 ---
 
@@ -277,6 +300,6 @@ For questions or issues, please open an issue on GitHub.
 
 ---
 
-**Last Updated:** October 20, 2025
-**Status:** ✅ Professional PDF Export System - Executive-quality reports with 13 charts
-**Next Session:** Integrate PDF export into Streamlit app and map data from edw_reporter.py
+**Last Updated:** October 21, 2025
+**Status:** ✅ Aero Crew Data Brand Fully Integrated - Professional brand identity across all PDF exports
+**Next Session:** Consider logo conversion to PNG, test with various data sizes, potential Supabase integration (Tab 3)

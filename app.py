@@ -19,8 +19,9 @@ except ImportError:
     alt = None
 
 from edw_reporter import run_edw_report, parse_trip_for_table, extract_pdf_header_info
-from bid_parser import parse_bid_lines
+from bid_parser import parse_bid_lines, extract_bid_line_header_info
 from report_builder import ReportMetadata, build_analysis_pdf
+from export_pdf import create_pdf_report
 
 
 #==============================================================================
@@ -686,15 +687,95 @@ def display_edw_results(result_data: Dict):
         )
 
     with col2:
-        # Report PDF
-        report_pdf = res["report_pdf"]
-        st.download_button(
-            "📄 Download PDF Report",
-            data=report_pdf.read_bytes(),
-            file_name=report_pdf.name,
-            mime="application/pdf",
-            key="download_edw_pdf",
-        )
+        # Professional Executive PDF Report
+        try:
+            # Prepare data for professional PDF
+            pdf_data = {
+                "title": f"{dom} {ac} – Bid {bid}",
+                "subtitle": "Executive Dashboard • Pairing Breakdown & Duty-Day Metrics",
+                "trip_summary": {
+                    "Unique Pairings": result_data["res"]["trip_summary"].loc[0, "Value"],
+                    "Total Trips": result_data["res"]["trip_summary"].loc[1, "Value"],
+                    "EDW Trips": result_data["res"]["trip_summary"].loc[2, "Value"],
+                    "Day Trips": result_data["res"]["trip_summary"].loc[3, "Value"],
+                },
+                "weighted_summary": {
+                    "Trip-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[0, "Value"],
+                    "TAFB-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[1, "Value"],
+                    "Duty-day-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[2, "Value"],
+                },
+                "duty_day_stats": [
+                    ["Metric", "All", "EDW", "Non-EDW"],
+                    ["Avg Legs/Duty Day",
+                     str(result_data["res"]["duty_day_stats"].loc[0, "All"]),
+                     str(result_data["res"]["duty_day_stats"].loc[0, "EDW"]),
+                     str(result_data["res"]["duty_day_stats"].loc[0, "Non-EDW"])],
+                    ["Avg Duty Day Length",
+                     str(result_data["res"]["duty_day_stats"].loc[1, "All"]),
+                     str(result_data["res"]["duty_day_stats"].loc[1, "EDW"]),
+                     str(result_data["res"]["duty_day_stats"].loc[1, "Non-EDW"])],
+                    ["Avg Block Time",
+                     str(result_data["res"]["duty_day_stats"].loc[2, "All"]),
+                     str(result_data["res"]["duty_day_stats"].loc[2, "EDW"]),
+                     str(result_data["res"]["duty_day_stats"].loc[2, "Non-EDW"])],
+                    ["Avg Credit Time",
+                     str(result_data["res"]["duty_day_stats"].loc[3, "All"]),
+                     str(result_data["res"]["duty_day_stats"].loc[3, "EDW"]),
+                     str(result_data["res"]["duty_day_stats"].loc[3, "Non-EDW"])],
+                ],
+                "trip_length_distribution": [
+                    {
+                        "duty_days": int(row["Duty Days"]),
+                        "trips": int(row["Trips"])
+                    }
+                    for _, row in result_data["res"]["duty_dist"].iterrows()
+                ],
+                "notes": result_data.get("notes", ""),
+                "generated_by": "Hot Standby pairings were excluded from trip-length distribution.",
+            }
+
+            # Create branding with proper header
+            branding = {
+                "primary_hex": "#1E40AF",
+                "accent_hex": "#F3F4F6",
+                "rule_hex": "#E5E7EB",
+                "muted_hex": "#6B7280",
+                "bg_alt_hex": "#FAFAFA",
+                "logo_path": None,
+                "title_left": f"{dom} {ac} – Bid {bid} | Pairing Analysis Report"
+            }
+
+            # Create temporary file for PDF
+            import tempfile
+            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+            create_pdf_report(pdf_data, temp_pdf.name, branding)
+
+            # Read the PDF bytes
+            with open(temp_pdf.name, 'rb') as f:
+                pdf_bytes = f.read()
+
+            # Clean up temp file
+            import os
+            os.unlink(temp_pdf.name)
+
+            st.download_button(
+                "📄 Download Executive PDF Report",
+                data=pdf_bytes,
+                file_name=f"{dom}_{ac}_Bid{bid}_Executive_Report.pdf",
+                mime="application/pdf",
+                key="download_edw_pdf",
+            )
+        except Exception as e:
+            st.error(f"Error generating professional PDF: {e}")
+            # Fallback to old PDF if available
+            if "report_pdf" in res:
+                st.download_button(
+                    "📄 Download PDF Report (Basic)",
+                    data=res["report_pdf"].read_bytes(),
+                    file_name=res["report_pdf"].name,
+                    mime="application/pdf",
+                    key="download_edw_pdf_fallback",
+                )
 
 
 #==============================================================================
@@ -713,6 +794,42 @@ def render_bid_line_analyzer():
         st.session_state.bidline_last_upload_name = ""
     if "bidline_filters" not in st.session_state:
         st.session_state.bidline_filters = {}
+    if "bidline_header_info" not in st.session_state:
+        st.session_state.bidline_header_info = None
+
+    if uploaded_file is not None:
+        file_name = getattr(uploaded_file, "name", "uploaded_roster.pdf")
+        file_bytes = uploaded_file.getvalue()
+
+        # Extract header information from PDF
+        buffer = io.BytesIO(file_bytes)
+        header_info = extract_bid_line_header_info(buffer)
+        st.session_state.bidline_header_info = header_info
+
+        # Display extracted information in an info box
+        if any(header_info.values()):
+            info_parts = []
+            if header_info['bid_period']:
+                info_parts.append(f"📅 Bid Period: **{header_info['bid_period']}**")
+            if header_info['domicile']:
+                info_parts.append(f"🏠 Domicile: **{header_info['domicile']}**")
+            if header_info['fleet_type']:
+                info_parts.append(f"✈️ Fleet Type: **{header_info['fleet_type']}**")
+            if header_info['bid_period_date_range']:
+                info_parts.append(f"📆 Date Range: **{header_info['bid_period_date_range']}**")
+            if header_info['date_time']:
+                info_parts.append(f"🕒 Report Date/Time: **{header_info['date_time']}**")
+
+            if info_parts:
+                st.info("**Extracted from PDF:**\n\n" + "\n\n".join(info_parts))
+
+    # Add notes section (outside the uploaded_file block so it's always visible)
+    notes = st.text_area(
+        "Notes (Optional)",
+        placeholder="e.g., Final Data, Round 1, Round 2, etc.",
+        help="Add any notes about this data set (e.g., whether this is final data or an early round)",
+        key="bidline_notes"
+    )
 
     if uploaded_file is not None:
         file_name = getattr(uploaded_file, "name", "uploaded_roster.pdf")
@@ -794,9 +911,39 @@ def render_bid_line_analyzer():
                 )
 
                 try:
+                    # Generate title from header info
+                    header = st.session_state.get("bidline_header_info", {})
+                    if header and any(header.values()):
+                        title_parts = []
+                        if header.get('domicile'):
+                            title_parts.append(header['domicile'])
+                        if header.get('fleet_type'):
+                            title_parts.append(header['fleet_type'])
+                        if header.get('bid_period'):
+                            title_parts.append(f"Bid {header['bid_period']}")
+
+                        if title_parts:
+                            title = " ".join(title_parts) + " - Bid Line Analysis"
+                        else:
+                            title = "Bid Line Analysis"
+
+                        # Create subtitle with date range and notes
+                        subtitle_parts = []
+                        if header.get('bid_period_date_range'):
+                            subtitle_parts.append(header['bid_period_date_range'])
+                        if notes:
+                            subtitle_parts.append(f"Notes: {notes}")
+
+                        subtitle = " • ".join(subtitle_parts) if subtitle_parts else f"Source: {st.session_state['bidline_last_upload_name']}"
+                    else:
+                        title = "Bid Line Analysis"
+                        subtitle = f"Source: {st.session_state['bidline_last_upload_name']}"
+                        if notes:
+                            subtitle += f" • Notes: {notes}"
+
                     metadata = ReportMetadata(
-                        title="Bid Line Analysis",
-                        subtitle=f"Source: {st.session_state['bidline_last_upload_name']}",
+                        title=title,
+                        subtitle=subtitle,
                         filters={
                             "CT Range": [f"{filters['ct_range'][0]:.2f}", f"{filters['ct_range'][1]:.2f}"],
                             "BT Range": [f"{filters['bt_range'][0]:.2f}", f"{filters['bt_range'][1]:.2f}"],
@@ -804,11 +951,53 @@ def render_bid_line_analyzer():
                             "Duty Days": sorted(filters['dd_values']),
                         },
                     )
-                    pdf_bytes = build_analysis_pdf(filtered_df, metadata, pay_periods=pay_periods_df, reserve_lines=reserve_lines_df)
+
+                    # Create custom branding with proper header format
+                    branding = {
+                        "primary_hex": "#1E40AF",
+                        "accent_hex": "#F3F4F6",
+                        "rule_hex": "#E5E7EB",
+                        "muted_hex": "#6B7280",
+                        "bg_alt_hex": "#FAFAFA",
+                        "logo_path": None,
+                    }
+
+                    # Generate header title in format: "ONT 757 - Bid XXXX | Line Analysis Report"
+                    if header and any(header.values()):
+                        header_title_parts = []
+                        if header.get('domicile'):
+                            header_title_parts.append(header['domicile'])
+                        if header.get('fleet_type'):
+                            header_title_parts.append(header['fleet_type'])
+                        if header.get('bid_period'):
+                            header_title_parts.append(f"Bid {header['bid_period']}")
+
+                        if header_title_parts:
+                            branding["title_left"] = " ".join(header_title_parts) + " | Line Analysis Report"
+                        else:
+                            branding["title_left"] = "Line Analysis Report"
+                    else:
+                        branding["title_left"] = "Line Analysis Report"
+
+                    pdf_bytes = build_analysis_pdf(filtered_df, metadata, pay_periods=pay_periods_df, reserve_lines=reserve_lines_df, branding=branding)
+
+                    # Generate PDF filename from header info
+                    if header and any(header.values()):
+                        filename_parts = []
+                        if header.get('domicile'):
+                            filename_parts.append(header['domicile'])
+                        if header.get('fleet_type'):
+                            filename_parts.append(header['fleet_type'])
+                        if header.get('bid_period'):
+                            filename_parts.append(f"Bid{header['bid_period']}")
+                        pdf_filename = "_".join(filename_parts) + "_Bid_Line_Analysis.pdf" if filename_parts else f"{st.session_state['bidline_last_upload_name'].rsplit('.', 1)[0]}_analysis.pdf"
+                    else:
+                        pdf_filename = f"{st.session_state['bidline_last_upload_name'].rsplit('.', 1)[0]}_analysis.pdf"
+
                     st.sidebar.download_button(
                         label="Download PDF report",
                         data=pdf_bytes,
-                        file_name=f"{st.session_state['bidline_last_upload_name'].rsplit('.', 1)[0]}_analysis.pdf",
+                        file_name=pdf_filename,
                         mime="application/pdf",
                         key="bidline_download_pdf"
                     )

@@ -31,14 +31,15 @@ matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
 
 
-# Default branding
+# Default branding - Aero Crew Data brand palette
 DEFAULT_BRANDING = {
-    "primary_hex": "#1E40AF",  # Pleasant blue instead of black
-    "accent_hex": "#F3F4F6",
-    "rule_hex": "#E5E7EB",
-    "muted_hex": "#6B7280",
-    "bg_alt_hex": "#FAFAFA",
-    "logo_path": None,
+    "primary_hex": "#0C1E36",  # Brand Navy - headers, primary background
+    "accent_hex": "#1BB3A4",   # Brand Teal - accents, highlights, CTA
+    "rule_hex": "#5B6168",     # Brand Gray - dividers, borders
+    "muted_hex": "#5B6168",    # Brand Gray - secondary typography
+    "bg_alt_hex": "#F8FAFC",   # Light slate for zebra rows (high contrast)
+    "sky_hex": "#2E9BE8",      # Brand Sky - supporting data viz accent
+    "logo_path": "logo-full.svg",  # Aero Crew Data logo
     "title_left": "Pairing Analysis Report"
 }
 
@@ -88,9 +89,9 @@ def _draw_footer(canvas: canvas.Canvas, doc) -> None:
     canvas.setFont('Helvetica', 8)
     canvas.setFillColor(colors.HexColor("#6B7280"))
 
-    # Left: timestamp
+    # Left: timestamp with app name
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    canvas.drawString(36, 30, f"Generated: {timestamp}")
+    canvas.drawString(36, 30, f"Generated: {timestamp} by Aero Crew Data App")
 
     # Right: page number
     page_num = canvas.getPageNumber()
@@ -267,41 +268,44 @@ def _make_trip_length_table(
 
 def _save_donut_png(edw_trips: int, non_edw_trips: int) -> str:
     """Create and save pie chart to temp file."""
-    # Force square figure for perfect circles - exact size for consistent output
-    fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+    # Larger square figure for perfect circles with room for labels
+    fig, ax = plt.subplots(figsize=(5, 5), dpi=100)
 
     labels = ['EDW', 'Non-EDW']
     sizes = [edw_trips, non_edw_trips]
-    colors_list = ['#EF4444', '#10B981']
+    # Brand colors: Teal for EDW (accent/highlight), Sky for Non-EDW (supporting)
+    colors_list = ['#1BB3A4', '#2E9BE8']
 
     wedges, texts, autotexts = ax.pie(
         sizes,
         labels=labels,
         autopct='%1.1f%%',
         startangle=90,
-        colors=colors_list
+        colors=colors_list,
+        labeldistance=1.05  # Move labels slightly outward to prevent cutoff
         # Removed wedgeprops to make solid pie chart (not donut)
     )
 
-    # Style text
+    # Style text with brand navy
     for text in texts:
         text.set_fontsize(11)
         text.set_weight('bold')
+        text.set_color('#0C1E36')  # Brand navy for labels
     for autotext in autotexts:
-        autotext.set_color('#1F2937')  # Dark gray for visibility on all backgrounds
+        autotext.set_color('white')  # White percentage text for visibility
         autotext.set_fontsize(11)
         autotext.set_weight('bold')
 
     # Title with fixed position
-    ax.set_title('EDW vs Non-EDW Trips', fontsize=12, weight='bold', pad=10)
+    ax.set_title('EDW vs Non-EDW Trips', fontsize=12, weight='bold', pad=10, color='#0C1E36')
     ax.axis('equal')  # Ensure perfect circle
 
-    # Adjust subplot to ensure consistent margins with room for title at top
-    plt.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.05)
+    # Adjust subplot to ensure labels fit within square canvas
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.82, bottom=0.15)
 
-    # Save to temp file with fixed bbox to prevent size variation
+    # Save to temp file with fixed bbox to maintain square aspect ratio
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-    plt.savefig(temp_file.name, dpi=150, bbox_inches=None)  # Don't use tight layout
+    plt.savefig(temp_file.name, dpi=150, bbox_inches=None)  # Keep square shape
     plt.close(fig)
 
     return temp_file.name
@@ -314,7 +318,8 @@ def _save_triplen_bar_png(trip_length_distribution: List[Dict[str, int]], title:
     duty_days = [str(item["duty_days"]) for item in trip_length_distribution]
     trips = [item["trips"] for item in trip_length_distribution]
 
-    bars = ax.bar(duty_days, trips, color='#3B82F6', alpha=0.8)
+    # Use brand teal for primary data visualization
+    bars = ax.bar(duty_days, trips, color='#1BB3A4', alpha=0.9)
 
     ax.set_xlabel('Duty Days', fontsize=11, weight='bold')
     ax.set_ylabel('Number of Trips', fontsize=11, weight='bold')
@@ -351,7 +356,8 @@ def _save_triplen_percentage_bar_png(trip_length_distribution: List[Dict[str, in
     total_trips = sum(trips)
     percentages = [(t / total_trips * 100) if total_trips > 0 else 0 for t in trips]
 
-    bars = ax.bar(duty_days, percentages, color='#10B981', alpha=0.8)
+    # Use brand sky for percentage bars (lighter/supporting accent)
+    bars = ax.bar(duty_days, percentages, color='#2E9BE8', alpha=0.9)
 
     ax.set_xlabel('Duty Days', fontsize=11, weight='bold')
     ax.set_ylabel('Percentage of Trips (%)', fontsize=11, weight='bold')
@@ -395,8 +401,9 @@ def _save_edw_percentages_bar_png(weighted_summary: Dict[str, str]) -> str:
         except ValueError:
             percentages.append(0.0)
 
-    colors_list = ['#3B82F6', '#10B981', '#F59E0B']
-    bars = ax.bar(methods, percentages, color=colors_list, alpha=0.85)
+    # Use brand palette: Teal, Sky, and darker teal/navy blend for variety
+    colors_list = ['#1BB3A4', '#2E9BE8', '#0C7C73']
+    bars = ax.bar(methods, percentages, color=colors_list, alpha=0.9)
 
     ax.set_ylabel('EDW Percentage (%)', fontsize=11, weight='bold')
     ax.set_title('EDW Percentages by Weighting Method', fontsize=12, weight='bold', pad=15)
@@ -426,35 +433,38 @@ def _save_edw_percentages_bar_png(weighted_summary: Dict[str, str]) -> str:
 
 def _save_weighted_pie_png(edw_pct: float, method_name: str, color_scheme: str = 'default') -> str:
     """Create and save weighted method pie chart to temp file."""
-    # Force square figure for perfect circles - exact size for consistent output
-    fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+    # Larger square figure for perfect circles with room for labels
+    fig, ax = plt.subplots(figsize=(5, 5), dpi=100)
 
     labels = ['EDW', 'Non-EDW']
     sizes = [edw_pct, 100 - edw_pct]
 
-    # Color schemes for different methods
+    # Brand color schemes for different methods (EDW, Non-EDW)
     color_schemes = {
-        'trip': ['#3B82F6', '#93C5FD'],
-        'tafb': ['#10B981', '#6EE7B7'],
-        'duty': ['#F59E0B', '#FCD34D']
+        'trip': ['#1BB3A4', '#2E9BE8'],      # Teal, Sky
+        'tafb': ['#0C7C73', '#5BCFC2'],      # Dark Teal, Light Teal
+        'duty': ['#2E9BE8', '#7EC8F6']       # Sky, Light Sky
     }
-    colors_list = color_schemes.get(color_scheme, ['#EF4444', '#FCA5A5'])
+    # Default to brand teal and sky
+    colors_list = color_schemes.get(color_scheme, ['#1BB3A4', '#2E9BE8'])
 
     wedges, texts, autotexts = ax.pie(
         sizes,
         labels=labels,
         autopct='%1.1f%%',
         startangle=90,
-        colors=colors_list
+        colors=colors_list,
+        labeldistance=1.05  # Move labels slightly outward to prevent cutoff
         # Removed wedgeprops to make solid pie chart (not donut)
     )
 
-    # Style text
+    # Style text with brand navy
     for text in texts:
         text.set_fontsize(10)
         text.set_weight('bold')
+        text.set_color('#0C1E36')  # Brand navy for labels
     for autotext in autotexts:
-        autotext.set_color('#1F2937')  # Dark gray for visibility on all backgrounds
+        autotext.set_color('white')  # White percentage text for visibility
         autotext.set_fontsize(10)
         autotext.set_weight('bold')
 
@@ -462,12 +472,12 @@ def _save_weighted_pie_png(edw_pct: float, method_name: str, color_scheme: str =
     ax.set_title(method_name, fontsize=11, weight='bold', pad=10)
     ax.axis('equal')  # Ensure perfect circle
 
-    # Adjust subplot to ensure consistent margins with room for title at top
-    plt.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.05)
+    # Adjust subplot to ensure labels fit within square canvas
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.82, bottom=0.15)
 
-    # Save to temp file with fixed bbox to prevent size variation
+    # Save to temp file with fixed bbox to maintain square aspect ratio
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-    plt.savefig(temp_file.name, dpi=150, bbox_inches=None)  # Don't use tight layout
+    plt.savefig(temp_file.name, dpi=150, bbox_inches=None)  # Keep square shape
     plt.close(fig)
 
     return temp_file.name
@@ -491,9 +501,9 @@ def _save_duty_day_grouped_bar_png(duty_day_stats: List[List[str]]) -> str:
         edw_val = row[2]
         non_edw_val = row[3]
 
-        # Parse values (handle "X.XX h" format)
+        # Parse values (handle "X.XXh" or "X.XX h" format)
         def parse_value(val_str):
-            val_str = val_str.replace(' h', '').strip()
+            val_str = val_str.replace(' h', '').replace('h', '').strip()
             try:
                 return float(val_str)
             except ValueError:
@@ -508,10 +518,10 @@ def _save_duty_day_grouped_bar_png(duty_day_stats: List[List[str]]) -> str:
     x = np.arange(len(metrics))
     width = 0.25
 
-    # Create bars
-    bars1 = ax.bar(x - width, all_values, width, label='All Trips', color='#3B82F6', alpha=0.8)
-    bars2 = ax.bar(x, edw_values, width, label='EDW Trips', color='#EF4444', alpha=0.8)
-    bars3 = ax.bar(x + width, non_edw_values, width, label='Non-EDW Trips', color='#10B981', alpha=0.8)
+    # Create bars with brand colors
+    bars1 = ax.bar(x - width, all_values, width, label='All Trips', color='#5B6168', alpha=0.9)  # Brand gray
+    bars2 = ax.bar(x, edw_values, width, label='EDW Trips', color='#1BB3A4', alpha=0.9)  # Brand teal
+    bars3 = ax.bar(x + width, non_edw_values, width, label='Non-EDW Trips', color='#2E9BE8', alpha=0.9)  # Brand sky
 
     # Customize chart
     ax.set_ylabel('Value', fontsize=11, weight='bold')
@@ -560,9 +570,9 @@ def _save_duty_day_radar_png(duty_day_stats: List[List[str]]) -> str:
         edw_val = row[2]
         non_edw_val = row[3]
 
-        # Parse values (handle "X.XX h" format)
+        # Parse values (handle "X.XXh" or "X.XX h" format)
         def parse_value(val_str):
-            val_str = val_str.replace(' h', '').strip()
+            val_str = val_str.replace(' h', '').replace('h', '').strip()
             try:
                 return float(val_str)
             except ValueError:
@@ -588,12 +598,12 @@ def _save_duty_day_radar_png(duty_day_stats: List[List[str]]) -> str:
     non_edw_normalized += non_edw_normalized[:1]
     angles += angles[:1]
 
-    # Plot data
-    ax.plot(angles, edw_normalized, 'o-', linewidth=2, label='EDW Trips', color='#EF4444', alpha=0.7)
-    ax.fill(angles, edw_normalized, alpha=0.15, color='#EF4444')
+    # Plot data with brand colors
+    ax.plot(angles, edw_normalized, 'o-', linewidth=2, label='EDW Trips', color='#1BB3A4', alpha=0.8)  # Brand teal
+    ax.fill(angles, edw_normalized, alpha=0.2, color='#1BB3A4')
 
-    ax.plot(angles, non_edw_normalized, 'o-', linewidth=2, label='Non-EDW Trips', color='#10B981', alpha=0.7)
-    ax.fill(angles, non_edw_normalized, alpha=0.15, color='#10B981')
+    ax.plot(angles, non_edw_normalized, 'o-', linewidth=2, label='Non-EDW Trips', color='#2E9BE8', alpha=0.8)  # Brand sky
+    ax.fill(angles, non_edw_normalized, alpha=0.2, color='#2E9BE8')
 
     # Set labels
     ax.set_xticks(angles[:-1])

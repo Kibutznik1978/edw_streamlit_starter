@@ -8,6 +8,7 @@ matplotlib.use('Agg')  # Set backend for headless environments (Streamlit Cloud)
 import matplotlib.pyplot as plt
 from PIL import Image as PILImage
 
+from datetime import datetime
 from PyPDF2 import PdfReader
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -20,7 +21,9 @@ from reportlab.platypus import (
     Image,
     PageBreak,
 )
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from reportlab.pdfgen import canvas
 
 
 # -------------------------------------------------------------------
@@ -33,6 +36,82 @@ def clean_text(text: str) -> str:
     text = text.replace("\u00A0", " ")
     text = re.sub(r"[■•▪●]", "-", text)
     return text
+
+
+# -------------------------------------------------------------------
+# Professional PDF Styling Functions
+# -------------------------------------------------------------------
+def _hex_to_reportlab_color(hex_str: str) -> colors.Color:
+    """Convert hex color string to ReportLab Color object."""
+    hex_str = hex_str.lstrip('#')
+    r, g, b = int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16)
+    return colors.Color(r/255.0, g/255.0, b/255.0)
+
+
+def _draw_edw_header(canvas_obj: canvas.Canvas, doc, title: str) -> None:
+    """Draw professional header bar on each page."""
+    canvas_obj.saveState()
+
+    # Draw header bar
+    primary_color = _hex_to_reportlab_color("#1E40AF")
+    canvas_obj.setFillColor(primary_color)
+    canvas_obj.rect(0, letter[1] - 40, letter[0], 40, fill=1, stroke=0)
+
+    # Draw title text
+    canvas_obj.setFillColor(colors.white)
+    canvas_obj.setFont('Helvetica-Bold', 11)
+    canvas_obj.drawString(36, letter[1] - 25, title)
+
+    canvas_obj.restoreState()
+
+
+def _draw_edw_footer(canvas_obj: canvas.Canvas, doc) -> None:
+    """Draw footer on each page."""
+    canvas_obj.saveState()
+
+    # Footer text
+    canvas_obj.setFont('Helvetica', 8)
+    canvas_obj.setFillColor(colors.HexColor("#6B7280"))
+
+    # Left: timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    canvas_obj.drawString(36, 30, f"Generated: {timestamp}")
+
+    # Right: page number
+    page_num = canvas_obj.getPageNumber()
+    canvas_obj.drawRightString(letter[0] - 36, 30, f"Page {page_num}")
+
+    canvas_obj.restoreState()
+
+
+def _make_professional_table(data, col_widths=None):
+    """Create a professionally styled table with zebra striping."""
+    accent_color = _hex_to_reportlab_color("#F3F4F6")
+    rule_color = _hex_to_reportlab_color("#E5E7EB")
+    bg_alt_color = _hex_to_reportlab_color("#FAFAFA")
+
+    table = Table(data, colWidths=col_widths)
+
+    style = TableStyle([
+        # Header row
+        ('BACKGROUND', (0, 0), (-1, 0), accent_color),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 10),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+
+        # Grid
+        ('GRID', (0, 0), (-1, -1), 0.5, rule_color),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ])
+
+    # Add zebra striping to data rows
+    for i in range(2, len(data), 2):
+        style.add('BACKGROUND', (0, i), (-1, i), bg_alt_color)
+
+    table.setStyle(style)
+    return table
 
 
 # -------------------------------------------------------------------
@@ -1394,23 +1473,36 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     # -------------------- PDF Build --------------------
     pdf_report_path = output_dir / f"{domicile}_{aircraft}_Bid{bid_period}_EDW_Report.pdf"
     styles = getSampleStyleSheet()
+
+    # Professional title style
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        leading=22,
+        textColor=colors.HexColor("#111827"),
+        spaceAfter=6,
+        alignment=TA_CENTER
+    )
+
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=_hex_to_reportlab_color("#6B7280"),
+        spaceAfter=16,
+        alignment=TA_CENTER
+    )
+
     story = []
 
     # Page 1 – Duty breakdown
-    story.append(Paragraph(f"{domicile} {aircraft} – Bid {bid_period} Trip Length Breakdown", styles["Title"]))
-    story.append(Spacer(1, 6))
-    story.append(Paragraph("Note: Distribution excludes Hot Standby pairings", styles["Normal"]))
+    story.append(Paragraph(f"{domicile} {aircraft} – Bid {bid_period} | Trip Length Breakdown", title_style))
+    story.append(Paragraph("Note: Distribution excludes Hot Standby pairings", subtitle_style))
     story.append(Spacer(1, 12))
     data = [list(duty_dist.columns)] + duty_dist.values.tolist()
     data = [[clean_text(cell) for cell in row] for row in data]
-    t = Table(data)
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
-    ]))
+    t = _make_professional_table(data)
     story.append(t)
     story.append(Spacer(1, 12))
     for fig in [fig_duty_count, fig_duty_percent]:
@@ -1425,20 +1517,23 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     story.append(PageBreak())
 
     # Page 2 – EDW breakdown
-    story.append(Paragraph(f"{domicile} {aircraft} – Bid {bid_period} EDW Breakdown", styles["Title"]))
+    heading2_style = ParagraphStyle(
+        'CustomHeading2',
+        parent=styles['Heading2'],
+        fontSize=14,
+        leading=18,
+        textColor=colors.HexColor("#111827"),
+        spaceAfter=8,
+        spaceBefore=12
+    )
+
+    story.append(Paragraph(f"{domicile} {aircraft} – Bid {bid_period} | EDW Breakdown", title_style))
     story.append(Spacer(1, 12))
     for caption, df in {"Trip Summary": trip_summary, "Weighted Summary": weighted_summary, "Duty Day Statistics": duty_day_stats}.items():
-        story.append(Paragraph(clean_text(caption), styles["Heading2"]))
+        story.append(Paragraph(clean_text(caption), heading2_style))
         data = [list(df.columns)] + df.values.tolist()
         data = [[clean_text(cell) for cell in row] for row in data]
-        t = Table(data)
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
-        ]))
+        t = _make_professional_table(data)
         story.append(t)
         story.append(Spacer(1, 12))
     buf = BytesIO()
@@ -1461,8 +1556,25 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         story.append(Image(str(img_path), width=300, height=300))
         story.append(Spacer(1, 12))
 
-    doc = SimpleDocTemplate(str(pdf_report_path), pagesize=letter)
-    doc.build(story)
+    # Create document with margins for header/footer
+    doc = SimpleDocTemplate(
+        str(pdf_report_path),
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=60,  # Space for header
+        bottomMargin=50  # Space for footer
+    )
+
+    # Header title for all pages
+    header_title = f"{domicile} {aircraft} – Bid {bid_period} | Pairing Analysis Report"
+
+    # Build PDF with header/footer
+    def add_page_decorations(canvas_obj, doc):
+        _draw_edw_header(canvas_obj, doc, header_title)
+        _draw_edw_footer(canvas_obj, doc)
+
+    doc.build(story, onFirstPage=add_page_decorations, onLaterPages=add_page_decorations)
 
     if progress_callback:
         progress_callback(100, "Complete!")
