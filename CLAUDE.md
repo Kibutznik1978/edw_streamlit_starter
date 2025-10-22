@@ -56,8 +56,12 @@ The main application file contains a **3-tab interface** (~650+ lines):
 - Duty day distribution charts
 - Advanced filtering (duty day criteria, trip length, legs)
 - Trip details viewer with HTML table (50% width, responsive)
+- **SAFTE Fatigue Analysis** - Biomathematical fatigue modeling for individual trips
+  - Interactive effectiveness timeline chart with duty/layover visualization
+  - Danger threshold identification (77.5% = 0.05% BAC equivalent)
+  - Color-coded risk scoring (0-100 fatigue score)
 - Excel and PDF report downloads
-- Uses `edw_reporter.py` for core logic
+- Uses `edw_reporter.py`, `safte_model.py`, and `safte_integration.py`
 
 **Tab 2: Bid Line Analyzer** (lines 351-656)
 - PDF upload with progress bar
@@ -119,6 +123,54 @@ Key functions:
 - `_detect_reserve_line()` - Detects and parses reserve line slots
 - `_parse_line_blocks()` - Parses individual line blocks from pages
 - `_aggregate_pay_periods()` - Aggregates data by pay period
+
+#### SAFTE Model (`safte_model.py`)
+
+This module implements the SAFTE (Sleep, Activity, Fatigue, Task Effectiveness) biomathematical fatigue model:
+
+- **Three-Process Architecture**:
+  1. Homeostatic Reservoir Process - Sleep debt accumulation (2880-unit capacity)
+  2. Dual-Oscillator Circadian Rhythm - 24-hour + 12-hour harmonics
+  3. Sleep Inertia Process - Post-awakening grogginess (~2 hour decay)
+- **AutoSleep Algorithm**: Rule-based prediction of sleep periods from duty schedules
+- **Minute-by-Minute Simulation**: Temporal resolution for accurate fatigue tracking
+- **Scientific Validation**: Based on Federal Railroad Administration studies
+
+Key constants:
+- `RESERVOIR_CAPACITY = 2880.0` - 4 days without sleep
+- `PERFORMANCE_USE_RATE = 0.5` - Units/minute during wakefulness
+- `MAX_SLEEP_ACCUMULATION_RATE = 3.4` - Sleep replenishment cap
+- `SLEEP_INERTIA_TIME_CONSTANT = 15.0` - ~2 hour decay period
+
+Key functions:
+- `calculate_circadian_oscillator()` - Dual-harmonic circadian rhythm
+- `calculate_sleep_intensity()` - Sleep propensity + sleep debt
+- `calculate_sleep_inertia()` - Post-awakening grogginess (negative impact)
+- `calculate_effectiveness()` - Final cognitive effectiveness (0-100%+)
+- `predict_sleep_periods()` - AutoSleep algorithm
+- `run_safte_simulation()` - Main orchestration with minute-by-minute results
+
+#### SAFTE Integration (`safte_integration.py`)
+
+This module bridges parsed trip data to the SAFTE model:
+
+- **Time Parsing**: Converts "(HH)MM:SS" format from PDFs to datetime objects
+- **Duty Period Conversion**: Transforms trip structure into SAFTE-compatible format
+- **Midnight Handling**: Automatically handles duty periods spanning midnight
+- **Fatigue Metrics**: Summary statistics for risk assessment
+
+Key functions:
+- `parse_local_time()` - Parses "(08)13:30" → (8, 13, 30)
+- `trip_to_duty_periods()` - Converts parsed trip → [(duty_start, duty_end), ...]
+- `analyze_trip_fatigue()` - Full fatigue analysis orchestration
+- `calculate_fatigue_metrics()` - Summary metrics (lowest effectiveness, time in danger, fatigue score)
+- `format_fatigue_summary()` - Human-readable output
+
+Fatigue scoring:
+- Score 80-100: VERY HIGH RISK (lowest effectiveness < 70%)
+- Score 60-80: HIGH RISK (lowest effectiveness < 77.5%)
+- Score 40-60: MODERATE RISK (lowest effectiveness < 85%)
+- Score 0-40: LOW RISK (lowest effectiveness ≥ 85%)
 
 #### Report Builder (`report_builder.py`)
 
@@ -199,6 +251,12 @@ Since this is a Streamlit app without formal tests:
    - Run analysis and check all weighted EDW metrics
    - Test duty day criteria filtering (match modes: Any/All)
    - View trip details and verify table width constraint (50% on desktop)
+   - **Run SAFTE fatigue analysis** on a trip and verify:
+     - Effectiveness timeline chart displays with duty period shading (blue)
+     - Layover recovery periods visible (white gaps between blue duty periods)
+     - Danger (77.5%) and warning (85%) threshold lines appear
+     - Three metrics display: Lowest Effectiveness, Time in Danger, Fatigue Score
+     - Risk level color-coding works (green/yellow/orange/red)
    - Download Excel and PDF reports
 
 2. **Tab 2 (Bid Line Analyzer):**
@@ -226,16 +284,23 @@ Since this is a Streamlit app without formal tests:
 - **Session state conflicts**: Ensure all widget keys are unique across tabs
 - **Table width**: Pairing detail table uses responsive CSS (50%/80%/100% based on screen width)
 
-## Recent Changes (Session 11 - October 20, 2025)
+## Recent Changes (Session 15 - October 22, 2025)
 
-- **Merged Applications**: Combined separate EDW and Bid Line analyzers into unified 3-tab interface
-- **New Files**: `bid_parser.py`, `report_builder.py`, `.env.example`
-- **Documentation**: Created `docs/IMPLEMENTATION_PLAN.md` and `docs/SUPABASE_SETUP.md`
-- **Restored Features**: Detailed pairing viewer, duty day criteria analyzer
-- **Fixed**: Pairing detail table width constraint with responsive CSS
-- **Dependencies**: Added numpy, pdfplumber, altair, fpdf2, supabase, python-dotenv, plotly
+- **Implemented SAFTE Fatigue Analysis**: Complete biomathematical fatigue modeling system
+- **New Files**: `safte_model.py` (260 lines), `safte_integration.py` (279 lines), 3 test files
+- **Fixed Critical Bugs**: 7 bugs from previous Gemini implementation (sleep accumulation, effectiveness clamping, sleep inertia)
+- **Validated Model**: 25 comprehensive tests passing (4 basic + 12 scientific validation + 9 integration)
+- **Interactive UI**: Effectiveness timeline chart with duty period shading and layover recovery visualization
+- **Risk Assessment**: Color-coded fatigue scoring (0-100) with danger thresholds (77.5% = 0.05% BAC)
+- **Session State Caching**: Analysis results cached per trip for instant re-display
 
-See `handoff/sessions/session-11.md` for detailed session notes.
+See `handoff/sessions/session-15.md` for detailed session notes.
+
+### Previous Major Changes
+
+**Session 14 (Oct 21, 2025)**: Aero Crew Data brand integration across all PDF exports
+**Session 11 (Oct 20, 2025)**: Merged applications into unified 3-tab interface
+**Session 10 (Oct 19, 2025)**: Automatic PDF header extraction
 
 ## Documentation
 

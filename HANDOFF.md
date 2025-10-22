@@ -1,9 +1,9 @@
 # EDW Pairing Analyzer - Handoff Document
 
-**Last Updated:** October 20, 2025
+**Last Updated:** October 22, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
-**Version:** 1.0 (Production Ready)
+**Version:** 1.1 (SAFTE Fatigue Analysis)
 
 ---
 
@@ -20,6 +20,11 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 - Track trip frequencies and Hot Standby assignments
 - Advanced filtering (duty day length, legs per duty day, duty day criteria, exclude 1-day trips)
 - Interactive trip details viewer with formatted pairing display
+- **🆕 SAFTE Fatigue Analysis** - Scientifically-validated fatigue modeling for each pairing
+  - Cognitive effectiveness timeline with duty/layover visualization
+  - Danger threshold identification (77.5% = 0.05% BAC equivalent)
+  - 0-100 fatigue risk score with color-coded risk levels
+  - Predicted sleep periods based on duty schedule
 - **Professional 5-page executive PDF reports** with KPI cards and 13 charts
 - Duty day statistics (average legs, duty length, block time, credit time)
 
@@ -41,11 +46,21 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 14)
+## Current Status (Session 15)
 
-✅ **Aero Crew Data Brand Fully Integrated** - Professional brand identity across all PDF exports
+✅ **SAFTE Fatigue Analysis Fully Integrated** - Scientifically-validated biomathematical fatigue modeling with interactive visualization
 
-### Latest Updates (October 21, 2025)
+### Latest Updates (October 22, 2025)
+
+**Session 15 - SAFTE Fatigue Analysis Integration:**
+- **Implemented:** Complete SAFTE (Sleep, Activity, Fatigue, Task Effectiveness) fatigue model
+- **Created:** `safte_model.py` (260 lines) - Core biomathematical model with circadian rhythm, sleep debt, and sleep inertia
+- **Created:** `safte_integration.py` (279 lines) - Data bridge converting parsed trips to SAFTE format
+- **Fixed:** 7 critical bugs from previous Gemini implementation (sleep accumulation, effectiveness clamping, sleep inertia)
+- **Validated:** 25 comprehensive tests passing (4 basic + 12 scientific validation + 9 integration tests)
+- **Added:** Interactive UI with effectiveness timeline chart showing duty periods and layover recovery
+- **Integrated:** Real-time fatigue analysis for any pairing with danger thresholds (77.5% = 0.05% BAC)
+- **Enhanced:** Visualization with full trip timeline, duty period shading, and color-coded risk levels
 
 **Session 14 - Brand Integration & PDF Layout Refinements:**
 - **Integrated:** Official Aero Crew Data brand palette (Navy, Teal, Sky, Gray)
@@ -137,6 +152,7 @@ Detailed documentation for each development session:
 | Session 12 | Oct 20, 2025 | Professional PDF Report Export System | [session-12.md](handoff/sessions/session-12.md) |
 | Session 13 | Oct 20, 2025 | PDF Enhancements & Professional Integration | [session-13.md](handoff/sessions/session-13.md) |
 | Session 14 | Oct 21, 2025 | Brand Integration & PDF Layout Refinements | [session-14.md](handoff/sessions/session-14.md) |
+| Session 15 | Oct 22, 2025 | SAFTE Fatigue Analysis Integration | [session-15.md](handoff/sessions/session-15.md) |
 
 ---
 
@@ -194,25 +210,30 @@ def is_edw_trip(trip_text):
 .
 ├── app.py                          # Main Streamlit application (3-tab interface)
 ├── edw_reporter.py                 # EDW analysis module
-├── bid_parser.py                   # Bid line parsing module (NEW)
-├── report_builder.py               # Bid line PDF report generator (NEW)
+├── safte_model.py                  # SAFTE fatigue model core (NEW - Session 15)
+├── safte_integration.py            # SAFTE data bridge (NEW - Session 15)
+├── bid_parser.py                   # Bid line parsing module
+├── report_builder.py               # Bid line PDF report generator
 ├── requirements.txt                # Python dependencies
 ├── .python-version                 # Python version (3.9.6)
-├── .env.example                    # Supabase credentials template (NEW)
+├── .env.example                    # Supabase credentials template
 ├── .gitignore                      # Git ignore rules (updated)
 ├── HANDOFF.md                      # This file (main index)
 ├── HANDOFF.md.backup               # Backup of original monolithic file
 ├── CLAUDE.md                       # Project instructions for Claude Code
-├── docs/                           # Documentation (NEW)
+├── docs/                           # Documentation
 │   ├── IMPLEMENTATION_PLAN.md      # 6-phase Supabase integration plan
 │   └── SUPABASE_SETUP.md           # Database setup guide
 ├── handoff/
 │   └── sessions/
 │       ├── session-01.md           # Session 1 details
 │       ├── session-02.md           # Session 2 details
-│       ├── ...                     # Sessions 3-10
-│       └── session-11.md           # Session 11 details (latest)
+│       ├── ...                     # Sessions 3-14
+│       └── session-15.md           # Session 15 details (latest - SAFTE)
 └── debug/                          # Debug and test scripts (not in git)
+    ├── test_safte_model.py         # Basic SAFTE unit tests
+    ├── test_safte_validation.py    # Scientific validation tests
+    └── test_safte_integration.py   # Integration tests with trip data
 └── test_data/                      # Test PDFs and data (not in git)
 ```
 
@@ -300,6 +321,6 @@ For questions or issues, please open an issue on GitHub.
 
 ---
 
-**Last Updated:** October 21, 2025
-**Status:** ✅ Aero Crew Data Brand Fully Integrated - Professional brand identity across all PDF exports
-**Next Session:** Consider logo conversion to PNG, test with various data sizes, potential Supabase integration (Tab 3)
+**Last Updated:** October 22, 2025
+**Status:** ✅ SAFTE Fatigue Analysis Fully Integrated - Scientifically-validated biomathematical fatigue modeling with interactive visualization
+**Next Session:** Test SAFTE with various trip types, consider transmeridian time zone adjustments, potential Supabase integration (Tab 3)

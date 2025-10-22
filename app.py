@@ -661,6 +661,203 @@ def display_edw_results(result_data: Dict):
                             label_visibility="collapsed",
                             key="edw_raw_text"
                         )
+
+                    # === SAFTE FATIGUE ANALYSIS SECTION ===
+                    st.divider()
+                    st.subheader("😴 SAFTE Fatigue Analysis")
+
+                    fatigue_button = st.button(
+                        "🧠 Run Fatigue Analysis",
+                        key=f"fatigue_btn_{selected_trip_id}",
+                        help="Analyze pilot fatigue using the SAFTE (Sleep, Activity, Fatigue, Task Effectiveness) model"
+                    )
+
+                    if fatigue_button or f"fatigue_analysis_{selected_trip_id}" in st.session_state:
+                        # Import SAFTE integration module
+                        from safte_integration import analyze_trip_fatigue
+                        from datetime import datetime
+
+                        # Run analysis if button was clicked
+                        if fatigue_button:
+                            with st.spinner("Running SAFTE simulation..."):
+                                # Use current date as reference
+                                reference_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                                analysis = analyze_trip_fatigue(trip_data, reference_date)
+                                st.session_state[f"fatigue_analysis_{selected_trip_id}"] = analysis
+                        else:
+                            # Load cached analysis
+                            analysis = st.session_state[f"fatigue_analysis_{selected_trip_id}"]
+
+                        if 'error' in analysis:
+                            st.error(f"❌ {analysis['error']}")
+                        else:
+                            metrics = analysis['fatigue_metrics']
+                            safte_results = analysis['safte_results']
+
+                            # Display key metrics in columns
+                            st.markdown("#### Key Fatigue Metrics")
+                            metric_cols = st.columns(3)
+
+                            with metric_cols[0]:
+                                st.metric(
+                                    "Lowest Effectiveness",
+                                    f"{metrics['lowest_effectiveness']:.1f}%",
+                                    delta=None,
+                                    help="Minimum cognitive effectiveness during duty period. Below 77.5% indicates impairment equivalent to 0.05% BAC."
+                                )
+
+                            with metric_cols[1]:
+                                danger_hours = metrics['time_below_danger_threshold_minutes'] / 60.0
+                                st.metric(
+                                    "Time in Danger Zone",
+                                    f"{danger_hours:.1f} hrs",
+                                    delta=None,
+                                    help="Time spent below 77.5% effectiveness (danger threshold)"
+                                )
+
+                            with metric_cols[2]:
+                                score = metrics['overall_fatigue_score']
+                                # Determine risk color/delta
+                                if score >= 80:
+                                    risk_label = "VERY HIGH"
+                                    delta_color = "inverse"
+                                elif score >= 60:
+                                    risk_label = "HIGH"
+                                    delta_color = "inverse"
+                                elif score >= 40:
+                                    risk_label = "MODERATE"
+                                    delta_color = "off"
+                                else:
+                                    risk_label = "LOW"
+                                    delta_color = "normal"
+
+                                st.metric(
+                                    "Fatigue Score",
+                                    f"{score:.0f}/100",
+                                    delta=f"{risk_label} RISK",
+                                    delta_color=delta_color,
+                                    help="Overall fatigue risk score (0=low, 100=extreme)"
+                                )
+
+                            # Create effectiveness timeline chart
+                            st.markdown("#### Effectiveness Timeline")
+
+                            # Prepare data for Altair chart
+                            import pandas as pd
+                            import altair as alt
+
+                            # Show FULL trip timeline (duty + layovers/sleep) to show recovery
+                            duty_periods = analysis['duty_periods']
+
+                            # Get first and last duty period to determine trip bounds
+                            trip_start = min(dp[0] for dp in duty_periods)
+                            trip_end = max(dp[1] for dp in duty_periods)
+
+                            # Include all results within the trip timeframe
+                            trip_results = []
+                            for result in safte_results:
+                                timestamp = result['timestamp']
+                                if trip_start <= timestamp <= trip_end:
+                                    # Determine if this timestamp is during a duty period
+                                    on_duty = any(duty_start <= timestamp <= duty_end
+                                                 for duty_start, duty_end in duty_periods)
+
+                                    trip_results.append({
+                                        'timestamp': timestamp,
+                                        'effectiveness': result['effectiveness'],
+                                        'is_asleep': result['is_asleep'],
+                                        'on_duty': on_duty
+                                    })
+
+                            if trip_results:
+                                chart_df = pd.DataFrame(trip_results)
+
+                                # Create duty period rectangles for visual reference
+                                duty_rects = []
+                                for duty_start, duty_end in duty_periods:
+                                    duty_rects.append({
+                                        'start': duty_start,
+                                        'end': duty_end,
+                                        'label': 'On Duty'
+                                    })
+                                duty_rect_df = pd.DataFrame(duty_rects)
+
+                                # Shaded rectangles for duty periods
+                                duty_background = alt.Chart(duty_rect_df).mark_rect(
+                                    opacity=0.15,
+                                    color='lightblue'
+                                ).encode(
+                                    x='start:T',
+                                    x2='end:T',
+                                    y=alt.value(0),
+                                    y2=alt.value(350)
+                                )
+
+                                # Base line chart
+                                line = alt.Chart(chart_df).mark_line(
+                                    color='steelblue',
+                                    strokeWidth=2
+                                ).encode(
+                                    x=alt.X('timestamp:T', title='Time (Date Hour:Min)', axis=alt.Axis(format='%m/%d %H:%M')),
+                                    y=alt.Y('effectiveness:Q', title='Effectiveness (%)', scale=alt.Scale(domain=[0, 120])),
+                                    tooltip=[
+                                        alt.Tooltip('timestamp:T', title='Time', format='%Y-%m-%d %H:%M'),
+                                        alt.Tooltip('effectiveness:Q', title='Effectiveness', format='.1f'),
+                                        alt.Tooltip('on_duty:N', title='Status'),
+                                        alt.Tooltip('is_asleep:N', title='Sleeping')
+                                    ]
+                                ).properties(
+                                    width='container',
+                                    height=350
+                                )
+
+                                # Add danger threshold line (77.5%)
+                                danger_line = alt.Chart(pd.DataFrame({'y': [77.5]})).mark_rule(
+                                    color='red',
+                                    strokeDash=[5, 5],
+                                    strokeWidth=2
+                                ).encode(y='y:Q')
+
+                                # Add warning threshold line (85%)
+                                warning_line = alt.Chart(pd.DataFrame({'y': [85]})).mark_rule(
+                                    color='orange',
+                                    strokeDash=[3, 3],
+                                    strokeWidth=1
+                                ).encode(y='y:Q')
+
+                                # Combine chart (background duty periods + line + thresholds)
+                                combined_chart = (duty_background + line + danger_line + warning_line).configure_axis(
+                                    labelFontSize=11,
+                                    titleFontSize=12
+                                ).configure_view(
+                                    strokeWidth=0
+                                )
+
+                                st.altair_chart(combined_chart, use_container_width=True)
+
+                                # Add legend
+                                st.caption("🔵 Blue shaded areas: On Duty | White areas: Layover/Sleep (recovery) | 🔴 Red line: Danger (77.5%) | 🟠 Orange line: Warning (85%)")
+
+                                # Additional details in expander
+                                with st.expander("📊 Detailed Fatigue Statistics", expanded=False):
+                                    detail_cols = st.columns(2)
+
+                                    with detail_cols[0]:
+                                        st.markdown("**Effectiveness Statistics:**")
+                                        st.write(f"• Lowest: {metrics['lowest_effectiveness']:.1f}%")
+                                        st.write(f"• Average: {metrics['average_effectiveness_on_duty']:.1f}%")
+                                        st.write(f"• Occurred at: {metrics['lowest_effectiveness_time'].strftime('%H:%M')}")
+
+                                    with detail_cols[1]:
+                                        st.markdown("**Time Below Thresholds:**")
+                                        st.write(f"• Below 77.5%: {metrics['time_below_danger_threshold_minutes']} min")
+                                        st.write(f"• Below 85%: {metrics['time_below_warning_threshold_minutes']} min")
+                                        st.write(f"• Duty periods: {len(duty_periods)}")
+
+                                    st.info("💡 **Note:** SAFTE model uses predicted sleep periods based on duty schedule. "
+                                           "Actual fatigue may vary based on individual sleep patterns and commute times.")
+                            else:
+                                st.warning("No duty period data available for charting.")
             else:
                 st.warning(f"Trip ID {int(selected_trip_id)} not found in trip text map.")
         else:
