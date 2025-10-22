@@ -20,6 +20,12 @@ except ImportError:
 
 from edw_reporter import run_edw_report, parse_trip_for_table, extract_pdf_header_info
 from bid_parser import parse_bid_lines, extract_bid_line_header_info
+from bid_sorter import (
+    build_line_trip_links,
+    summarize_line_trip_metrics,
+    unmatched_trip_tokens,
+)
+from line_schedule import summarize_day_types
 from report_builder import ReportMetadata, build_analysis_pdf
 from export_pdf import create_pdf_report
 
@@ -28,11 +34,9 @@ from export_pdf import create_pdf_report
 # APP CONFIGURATION
 #==============================================================================
 
-st.set_page_config(
-    page_title="Pairing Analyzer Tool 1.0",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+import plotly.graph_objects as go
+
+st.set_page_config(layout="wide", page_title="EDW & SAFTE Analyzer")
 
 
 #==============================================================================
@@ -204,8 +208,9 @@ def display_edw_results(result_data: Dict):
 
     # Display notes if provided
     if "notes" in result_data and result_data["notes"]:
-        st.success(f"**Notes:** {result_data['notes']}")
+        st.caption(f"📝 Notes: {result_data['notes']}")
 
+    # Layout columns for key summaries
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -796,6 +801,14 @@ def render_bid_line_analyzer():
         st.session_state.bidline_filters = {}
     if "bidline_header_info" not in st.session_state:
         st.session_state.bidline_header_info = None
+    if "bidline_line_days_df" not in st.session_state:
+        st.session_state.bidline_line_days_df = None
+    if "bidline_day_start" not in st.session_state:
+        st.session_state.bidline_day_start = 6
+    if "bidline_day_end" not in st.session_state:
+        st.session_state.bidline_day_end = 23
+    if "trip_catalog_df" not in st.session_state:
+        st.session_state.trip_catalog_df = None
 
     if uploaded_file is not None:
         file_name = getattr(uploaded_file, "name", "uploaded_roster.pdf")
@@ -822,6 +835,21 @@ def render_bid_line_analyzer():
 
             if info_parts:
                 st.info("**Extracted from PDF:**\n\n" + "\n\n".join(info_parts))
+
+    day_start = st.sidebar.slider(
+        "Day flying starts at (local hour)",
+        min_value=0,
+        max_value=23,
+        value=int(st.session_state.get("bidline_day_start", 6)),
+        key="bidline_day_start",
+    )
+    day_end = st.sidebar.slider(
+        "Day flying ends at (local hour)",
+        min_value=0,
+        max_value=23,
+        value=int(st.session_state.get("bidline_day_end", 23)),
+        key="bidline_day_end",
+    )
 
     # Add notes section (outside the uploaded_file block so it's always visible)
     notes = st.text_area(
@@ -866,6 +894,9 @@ def render_bid_line_analyzer():
 
         parsed_df = st.session_state.get("bidline_parsed_df")
         diagnostics_dict = st.session_state.get("bidline_parsed_diag")
+        line_trip_links = st.session_state.get("bidline_line_trip_links")
+        line_trip_summary = st.session_state.get("bidline_line_trip_summary")
+        line_trip_metrics = st.session_state.get("bidline_line_trip_metrics")
 
         if parsed_df is None or diagnostics_dict is None:
             st.info("Click 'Parse PDF' to extract line data.")
@@ -875,6 +906,41 @@ def render_bid_line_analyzer():
             # Convert dict entries to DataFrames as needed
             pay_periods_df = _get_dataframe_from_dict(diagnostics_dict, 'pay_periods')
             reserve_lines_df = _get_dataframe_from_dict(diagnostics_dict, 'reserve_lines')
+            line_days_df = _get_dataframe_from_dict(diagnostics_dict, 'line_days')
+            st.session_state["bidline_line_days_df"] = line_days_df
+
+            trip_catalog_df = st.session_state.get("trip_catalog_df")
+            if trip_catalog_df is None:
+                edw_results = st.session_state.get("edw_results")
+                if edw_results:
+                    res_payload = edw_results.get("res")
+                    if isinstance(res_payload, dict):
+                        df_trips = res_payload.get("df_trips")
+                        if isinstance(df_trips, pd.DataFrame) and not df_trips.empty:
+                            trip_catalog_df = df_trips.copy()
+                            st.session_state["trip_catalog_df"] = trip_catalog_df
+
+            if line_days_df is not None and not line_days_df.empty and trip_catalog_df is not None:
+                line_trip_links, line_trip_summary = build_line_trip_links(
+                    line_days_df.to_dict("records"),
+                    trip_catalog_df,
+                )
+                line_trip_metrics = summarize_line_trip_metrics(
+                    line_trip_links,
+                    trip_catalog_df,
+                    int(st.session_state.get("bidline_day_start", 6)),
+                    int(st.session_state.get("bidline_day_end", 23)),
+                )
+                st.session_state["bidline_line_trip_links"] = line_trip_links
+                st.session_state["bidline_line_trip_summary"] = line_trip_summary
+                st.session_state["bidline_line_trip_metrics"] = line_trip_metrics
+            else:
+                line_trip_links = None
+                line_trip_summary = None
+                line_trip_metrics = None
+                st.session_state["bidline_line_trip_links"] = None
+                st.session_state["bidline_line_trip_summary"] = None
+                st.session_state["bidline_line_trip_metrics"] = None
 
             extraction_sources = []
             if diagnostics_dict.get('used_text'):
@@ -886,12 +952,28 @@ def render_bid_line_analyzer():
 
             show_diagnostics = st.sidebar.checkbox('Show parser diagnostics', value=False, key="bidline_diagnostics")
             warnings = diagnostics_dict.get('warnings', [])
-            if warnings:
+            if warnings or (show_diagnostics and line_days_df is not None):
                 if show_diagnostics:
                     with st.sidebar.expander('Parser diagnostics', expanded=True):
                         for msg in warnings:
                             st.warning(f'⚠️ {msg}')
-                else:
+                        if line_days_df is not None and not line_days_df.empty:
+                            st.markdown(
+                                f"**Day assignments extracted:** {len(line_days_df)} rows across "
+                                f"{line_days_df['Line'].nunique()} lines."
+                            )
+                            st.dataframe(
+                                line_days_df.head(25),
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+                        if line_trip_links is not None and not line_trip_links.empty:
+                            missing = unmatched_trip_tokens(line_trip_links)
+                            if missing:
+                                st.markdown("**Unmatched Trip Tokens**")
+                                for line_id, tokens in missing.items():
+                                    st.write(f"Line {line_id}: {', '.join(tokens)}")
+                elif warnings:
                     st.sidebar.caption('Parser noted minor inconsistencies; enable diagnostics for details.')
 
             if df.empty:
@@ -1010,7 +1092,13 @@ def render_bid_line_analyzer():
 
                 overview_tab, summary_tab, visuals_tab = st.tabs(["Overview", "Summary", "Visuals"])
                 with overview_tab:
-                    _render_overview_tab(df, filtered_df)
+                    _render_overview_tab(
+                        df,
+                        filtered_df,
+                        line_days_df,
+                        line_trip_summary,
+                        line_trip_metrics,
+                    )
                 with summary_tab:
                     _render_summary_tab(filtered_df, pay_periods_df, reserve_lines_df)
                 with visuals_tab:
@@ -1034,6 +1122,7 @@ def _parse_uploaded_pdf(file_bytes: bytes, file_name: str, _progress_callback=No
         'warnings': diagnostics.warnings,
         'pay_periods': diagnostics.pay_periods.to_dict('records') if diagnostics.pay_periods is not None else None,
         'reserve_lines': diagnostics.reserve_lines.to_dict('records') if diagnostics.reserve_lines is not None else None,
+        'line_days': diagnostics.line_day_assignments.to_dict('records') if diagnostics.line_day_assignments is not None else None,
     }
 
     return df, diag_dict
@@ -1111,7 +1200,13 @@ def _apply_filters(df: pd.DataFrame, filters: Dict[str, Tuple]) -> pd.DataFrame:
     return filtered.copy()
 
 
-def _render_overview_tab(df: pd.DataFrame, filtered_df: pd.DataFrame) -> None:
+def _render_overview_tab(
+    df: pd.DataFrame,
+    filtered_df: pd.DataFrame,
+    line_days: Optional[pd.DataFrame] = None,
+    line_trip_summary: Optional[pd.DataFrame] = None,
+    line_trip_metrics: Optional[pd.DataFrame] = None,
+) -> None:
     st.write(f"Showing {len(filtered_df)} of {len(df)} parsed lines.")
 
     # Format the display dataframe
@@ -1140,6 +1235,42 @@ def _render_overview_tab(df: pd.DataFrame, filtered_df: pd.DataFrame) -> None:
 
     right.markdown("**Most Days Off**")
     right.dataframe(most_days_off.sort_values(["DO", "CT"], ascending=[False, False]))
+
+    if line_days is not None and not line_days.empty:
+        subset = line_days[line_days["Line"].isin(filtered_df["Line"])]
+        if not subset.empty:
+            type_summary = summarize_day_types(subset)
+            if not type_summary.empty:
+                st.markdown("### Daily Assignment Breakdown")
+                pivot = type_summary.pivot_table(
+                    index="Line",
+                    columns="ValueType",
+                    values="Count",
+                    fill_value=0,
+                ).reset_index()
+                st.dataframe(pivot, use_container_width=True)
+
+    if line_trip_summary is not None and not line_trip_summary.empty:
+        relevant = line_trip_summary[line_trip_summary["Line"].isin(filtered_df["Line"])]
+        if not relevant.empty:
+            st.markdown("### Trip Mapping Snapshot")
+            display_cols = relevant.rename(
+                columns={
+                    "ScheduledTrips": "Trip Days",
+                    "UniqueTrips": "Unique Trips",
+                    "UnmatchedTokens": "Unmatched Tokens",
+                }
+            )
+            st.dataframe(display_cols, use_container_width=True)
+
+    if line_trip_metrics is not None and not line_trip_metrics.empty:
+        relevant_metrics = line_trip_metrics[line_trip_metrics["Line"].isin(filtered_df["Line"])]
+        if not relevant_metrics.empty:
+            st.markdown("### Trip Metrics (Matched Pairings)")
+            display_metrics = relevant_metrics.copy()
+            display_metrics["TotalTAFBHours"] = display_metrics["TotalTAFBHours"].round(1)
+            display_metrics["TotalDutyDays"] = display_metrics["TotalDutyDays"].round(1)
+            st.dataframe(display_metrics, use_container_width=True)
 
 
 def _render_summary_tab(filtered_df: pd.DataFrame, pay_periods: Optional[pd.DataFrame] = None, reserve_lines: Optional[pd.DataFrame] = None) -> None:

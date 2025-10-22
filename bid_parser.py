@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Iterable, IO, List, Optional, Sequence, Tuple, Dict, Any
 
@@ -46,6 +47,7 @@ class ParseDiagnostics:
     warnings: List[str]
     pay_periods: Optional[pd.DataFrame] = None
     reserve_lines: Optional[pd.DataFrame] = None  # DataFrame with columns: Line, IsReserve, CaptainSlots, FOSlots
+    line_day_assignments: Optional[pd.DataFrame] = None  # Per-day records extracted from comment blocks
 
 
 def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
@@ -146,6 +148,7 @@ def parse_bid_lines(
     table_records: List[dict] = []
     warnings: List[str] = []
     reserve_info: List[dict] = []  # Track reserve line information
+    comment_day_records: List[dict] = []
 
     with pdfplumber.open(pdf_file) as pdf:
         total_pages = len(pdf.pages)
@@ -154,11 +157,16 @@ def parse_bid_lines(
             if progress_callback:
                 progress_callback(index, total_pages)
 
-            records, block_warnings, page_reserve_info = _parse_line_blocks(page, index)
+            records, block_warnings, page_reserve_info, page_day_records = _parse_line_blocks(
+                page,
+                index,
+            )
             if records:
                 block_records.extend(records)
             if page_reserve_info:
                 reserve_info.extend(page_reserve_info)
+            if page_day_records:
+                comment_day_records.extend(page_day_records)
             warnings.extend(block_warnings)
 
             if not records:
@@ -204,12 +212,19 @@ def parse_bid_lines(
         # Remove duplicates (same line might appear on multiple pages)
         reserve_df = reserve_df.drop_duplicates(subset=["Line"]).reset_index(drop=True)
 
+    if comment_day_records:
+        line_days_df = pd.DataFrame(comment_day_records)
+        line_days_df = line_days_df.sort_values(["Line", "PayPeriod", "DayIndex"]).reset_index(drop=True)
+    else:
+        line_days_df = None
+
     diagnostics = ParseDiagnostics(
         used_text=bool(primary_records),
         used_tables=bool(table_records),
         warnings=warnings,
         pay_periods=pay_periods_output if not pay_periods_output.empty else None,
         reserve_lines=reserve_df,
+        line_day_assignments=line_days_df,
     )
     return df, diagnostics
 
@@ -255,29 +270,32 @@ def _detect_reserve_line(block: str) -> Tuple[bool, int, int]:
     return is_reserve, captain_slots, fo_slots
 
 
-def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[List[dict], List[str], List[dict]]:
+def _parse_line_blocks(
+    page: pdfplumber.page.Page,
+    page_number: int,
+) -> Tuple[List[dict], List[str], List[dict], List[dict]]:
     """Parse line blocks from a page.
 
     Returns:
-        Tuple of (records, warnings, reserve_info)
+        Tuple of (records, warnings, reserve_info, day_records)
         where reserve_info is a list of dicts with keys: Line, IsReserve, CaptainSlots, FOSlots
     """
     text = page.extract_text() or ""
     if not text:
-        return [], [f"No text extracted from page {page_number}."], []
+        return [], [f"No text extracted from page {page_number}."], [], []
 
     segments = _BLOCK_SEPARATOR_RE.split(text)
     if len(segments) <= 1:
-        return [], [], []
+        return [], [], [], []
 
     records: List[dict] = []
     warnings: List[str] = []
     reserve_info: List[dict] = []
+    day_records: List[dict] = []
 
     merged_segments = _merge_headerless_segments(segments[1:])
-
     for block in merged_segments:
-        block_records, block_warnings = _parse_block_text(block, page_number)
+        block_records, block_warnings, block_day_records = _parse_block_text(block, page_number)
         if block_records:
             records.extend(block_records)
 
@@ -290,9 +308,11 @@ def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[Li
                 "CaptainSlots": captain_slots,
                 "FOSlots": fo_slots,
             })
+            if block_day_records:
+                day_records.extend(block_day_records)
         warnings.extend(block_warnings)
 
-    return records, warnings, reserve_info
+    return records, warnings, reserve_info, day_records
 
 
 
@@ -322,20 +342,22 @@ def _merge_headerless_segments(segments: Sequence[str]) -> List[str]:
     return merged
 
 
-
-def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[str]]:
+def _parse_block_text(
+    block: str,
+    page_number: int,
+) -> Tuple[List[dict], List[str], List[dict]]:
     warnings: List[str] = []
 
     header_match = _BLOCK_HEADER_RE.search(block)
     if not header_match:
         warnings.append(_format_warning(page_number, block, "Missing line header"))
-        return [], warnings
+        return [], warnings, []
 
     line_id = int(header_match.group("line"))
 
     # Check if this is a VTO/VTOR/VOR line and skip it
     if _VTO_PATTERN_RE.search(block):
-        return [], []
+        return [], [], []
 
     period_records: List[dict] = []
     matches = list(PAY_PERIOD_RE.finditer(block))
@@ -381,7 +403,8 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
             )
 
     if period_records:
-        return period_records, warnings
+        day_records = _parse_comment_schedule(line_id, block)
+        return period_records, warnings, day_records
 
     # Fallback: treat block as a single-period entry
     ct_value = _extract_time_field(block, "CT")
@@ -405,7 +428,7 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
                 f"Missing fields: {', '.join(fields_missing)}",
             )
         )
-        return [], warnings
+        return [], warnings, []
 
     record = {
         "Line": line_id,
@@ -416,7 +439,8 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
         "DO": do_value,
         "DD": dd_value,
     }
-    return [record], warnings
+    day_records = _parse_comment_schedule(line_id, block)
+    return [record], warnings, day_records
 
 
 def _extract_time_field(block: str, label: str) -> Optional[float]:
@@ -702,3 +726,108 @@ def _merge_records(text_records: List[dict], table_records: List[dict], allowed_
         warnings.append("No line entries detected in the document.")
 
     return list(merged.values()), warnings
+
+
+_PAY_PERIOD_TOKEN_RE = re.compile(r"^PP\s*(\d)$", re.IGNORECASE)
+_PAY_PERIOD_CODE_RE = re.compile(r"^\(([^\)]+)\)$")
+_TRIP_TOKEN_RE = re.compile(r"^\d{3,4}[A-Z]?$")
+_NUMERIC_TOKEN_RE = re.compile(r"^\d+$")
+_OFF_TOKENS = {"OFF", "AL", "VAC", "VACATION", "HOL", "H", "RDO"}
+_RESERVE_TOKENS = {"RA", "RB", "RC", "RD", "SA", "SB", "SC", "SD"}
+_DEADHEAD_TOKENS = {"DH"}
+_GROUND_TOKENS = {"GT"}
+
+
+def _parse_comment_schedule(line_id: int, block_text: str) -> List[dict]:
+    """Parse the comment text into day assignments using token heuristics."""
+
+    if not block_text:
+        return []
+
+    lines = [line.strip() for line in block_text.splitlines() if line.strip()]
+    if not lines:
+        return []
+
+    period_day_counters: Dict[int, int] = defaultdict(int)
+    period_codes: Dict[int, Optional[str]] = {}
+    day_records: List[dict] = []
+    last_period: Optional[int] = None
+
+    for line in lines:
+        upper = line.upper()
+        if upper.startswith("CT:") or upper.startswith("BT:") or upper.startswith("DO:") or upper.startswith("DD:"):
+            continue
+        if upper.startswith("COMMENT:"):
+            continue
+        if line.startswith("1/1") or line.startswith("1/2"):
+            continue
+        if "BL" not in line:
+            continue
+
+        tokens = [token.strip().strip(",:") for token in re.split(r"\s+", line) if token.strip()]
+        if not tokens:
+            continue
+
+        current_period = last_period
+        idx = 0
+        while idx < len(tokens):
+            token = tokens[idx]
+            upper_token = token.upper()
+
+            if upper_token == "BL":
+                idx += 1
+                continue
+
+            period_match = _PAY_PERIOD_TOKEN_RE.match(upper_token)
+            if period_match:
+                current_period = int(period_match.group(1))
+                last_period = current_period
+                idx += 1
+                if idx < len(tokens) and _PAY_PERIOD_CODE_RE.match(tokens[idx]):
+                    period_codes[current_period] = _PAY_PERIOD_CODE_RE.match(tokens[idx]).group(1)
+                    idx += 1
+                continue
+
+            if token.startswith("(") and token.endswith(")") and token[1:-1].isdigit():
+                idx += 1
+                continue
+
+            if upper_token in {"CT", "BT", "DO", "DD"}:
+                break
+
+            if current_period is None:
+                idx += 1
+                continue
+
+            value = token
+            period_day_counters[current_period] += 1
+            day_records.append(
+                {
+                    "Line": line_id,
+                    "PayPeriod": current_period,
+                    "PayPeriodCode": period_codes.get(current_period),
+                    "DayIndex": period_day_counters[current_period],
+                    "Value": value,
+                    "ValueType": _classify_comment_token(value),
+                }
+            )
+            idx += 1
+
+    return day_records
+
+
+def _classify_comment_token(token: str) -> str:
+    cleaned = token.strip().upper()
+    if not cleaned:
+        return "unknown"
+    if cleaned in _OFF_TOKENS:
+        return "off"
+    if cleaned in _RESERVE_TOKENS:
+        return "reserve"
+    if cleaned in _DEADHEAD_TOKENS:
+        return "deadhead"
+    if cleaned in _GROUND_TOKENS:
+        return "ground"
+    if _TRIP_TOKEN_RE.match(cleaned) or _NUMERIC_TOKEN_RE.match(cleaned):
+        return "trip"
+    return "text"

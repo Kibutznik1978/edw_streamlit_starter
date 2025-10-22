@@ -8,7 +8,7 @@ matplotlib.use('Agg')  # Set backend for headless environments (Streamlit Cloud)
 import matplotlib.pyplot as plt
 from PIL import Image as PILImage
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from PyPDF2 import PdfReader
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -24,6 +24,7 @@ from reportlab.platypus import (
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.pdfgen import canvas
+from safte_model import run_safte_simulation
 
 
 # -------------------------------------------------------------------
@@ -1221,6 +1222,66 @@ def is_hot_standby(trip_text):
     return False
 
 
+def create_safte_schedule_from_trip(trip_details, bid_period_start_date):
+    """
+    Creates a schedule of duty periods for the SAFTE model from parsed trip details.
+
+    Args:
+        trip_details (dict): The output of parse_trip_for_table.
+        bid_period_start_date (datetime): The start date of the bid period.
+
+    Returns:
+        list: A list of tuples, where each tuple is a (start_time, end_time)
+              for a duty period. Returns an empty list if parsing fails.
+    """
+    duty_periods = []
+    if not trip_details or not trip_details.get('duty_days'):
+        return []
+
+    for duty_day in trip_details['duty_days']:
+        try:
+            # Extract day number from duty_start, e.g., "(01)14:30" -> 1
+            day_match = re.search(r'\((\d+)\)', duty_day['duty_start'])
+            if not day_match:
+                continue
+            
+            day_offset = int(day_match.group(1)) - 1 # Day 1 is offset 0
+            
+            # Extract time from duty_start, e.g., "(01)14:30" -> "14:30"
+            time_match = re.search(r'(\d{2}:\d{2})', duty_day['duty_start'])
+            if not time_match:
+                continue
+                
+            start_hour, start_minute = map(int, time_match.group(1).split(':'))
+            
+            duty_start_time = bid_period_start_date + timedelta(days=day_offset, hours=start_hour, minutes=start_minute)
+
+            # Calculate duty end time
+            duty_duration_str = duty_day.get('duty_time')
+            if not duty_duration_str:
+                continue
+            
+            duration_match = re.match(r'(\d+)h(\d+)', duty_duration_str)
+            if not duration_match:
+                continue
+                
+            duration_hours = int(duration_match.group(1))
+            duration_minutes = int(duration_match.group(2))
+            
+            duty_end_time = duty_start_time + timedelta(hours=duration_hours, minutes=duration_minutes)
+            
+            duty_periods.append((duty_start_time, duty_end_time))
+
+        except (AttributeError, TypeError, ValueError) as e:
+            # Skip this duty day if parsing fails
+            print(f"Could not parse duty day for SAFTE schedule: {e}")
+            continue
+            
+    return duty_periods
+
+
+
+
 # -------------------------------------------------------------------
 # Excel Utilities
 # -------------------------------------------------------------------
@@ -1243,6 +1304,13 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     if progress_callback:
         progress_callback(5, "Starting PDF parsing...")
 
+    header_info = extract_pdf_header_info(pdf_path)
+    try:
+        date_range_str = header_info.get('date_range', '').split('-')[0].strip()
+        bid_period_start_date = datetime.strptime(date_range_str, '%d%b%Y')
+    except (ValueError, IndexError):
+        bid_period_start_date = datetime.now() # Fallback
+
     trips = parse_pairings(pdf_path, progress_callback=progress_callback)
 
     if progress_callback:
@@ -1263,6 +1331,11 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         max_legs = parse_max_legs_per_duty_day(trip_text)
         duty_day_details = parse_duty_day_details(trip_text)
 
+        # SAFTE Analysis
+        trip_details_for_safte = parse_trip_for_table(trip_text)
+        safte_schedule = create_safte_schedule_from_trip(trip_details_for_safte, bid_period_start_date)
+        safte_results = run_safte_simulation(safte_schedule)
+
         trip_records.append({
             "Trip ID": trip_id,
             "Frequency": frequency,
@@ -1274,6 +1347,7 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
             "Max Legs/Duty": max_legs,
             "EDW": edw_flag,
             "Duty Day Details": duty_day_details,  # Store list of duty day info
+            "safte_results": safte_results,
         })
 
         # Store raw trip text indexed by Trip ID
@@ -1590,7 +1664,6 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         "hot_standby_summary": hot_standby_summary,
         "trip_text_map": trip_text_map,
     }
-
 
 
 
