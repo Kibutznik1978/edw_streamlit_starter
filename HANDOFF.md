@@ -1,6 +1,6 @@
 # EDW Pairing Analyzer - Handoff Document
 
-**Last Updated:** October 20, 2025
+**Last Updated:** October 22, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
 **Version:** 1.0 (Production Ready)
@@ -34,6 +34,7 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 - Distribution charts and summary tables
 - CSV and PDF export functionality
 - **Notes/comments support** for tracking data iterations
+- **Interactive line viewer** with calendar-style schedule, line metrics, and one-click pairing drill-down
 
 **Historical Trends (Tab 3):**
 - Placeholder for Supabase-powered trend analysis (coming soon)
@@ -41,11 +42,19 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 14)
+## Current Status (Session 15)
 
-✅ **Aero Crew Data Brand Fully Integrated** - Professional brand identity across all PDF exports
+✅ **Line Viewer & Bid Sorting Foundations Delivered** – Bid line schedules now connect directly to pairing analytics.
 
-### Latest Updates (October 21, 2025)
+### Latest Updates (October 22, 2025)
+
+**Session 15 – Bid Sorting Foundations & Line Viewer:**
+- Built end-to-end comment block parser that captures every day assignment (trip, off, reserve, DH/GT) for each line
+- Added reusable helpers (`line_schedule.py`, `bid_sorter.py`, `trip_catalog.py`) with day/night block-hour analytics
+- Surfaced a new **Line Viewer** tab showing calendar-style schedules, aggregate line metrics, and drill-down into pairing details
+- Linked bid lines to pairing data via configurable day/night thresholds and on-click trip renderings
+- Authored `docs/BID_SORTER_IMPLEMENTATION_PLAN.md` outlining the full roadmap to bid sorting
+- Refined EDW parser to support SAFTE scheduling (added missing `timedelta` import) and updated diagnostics in Streamlit sidebar
 
 **Session 14 - Brand Integration & PDF Layout Refinements:**
 - **Integrated:** Official Aero Crew Data brand palette (Navy, Teal, Sky, Gray)
@@ -114,6 +123,7 @@ The app will be available at `http://localhost:8501`
 3. Click "Run Analysis" and wait for processing
 4. Download Excel and PDF reports
 5. Explore interactive visualizations and trip details
+6. Switch to **Bid Line Analyzer → Line Viewer** (after parsing both PDFs) to see schedule grids and drill into trips
 
 ---
 
@@ -137,6 +147,7 @@ Detailed documentation for each development session:
 | Session 12 | Oct 20, 2025 | Professional PDF Report Export System | [session-12.md](handoff/sessions/session-12.md) |
 | Session 13 | Oct 20, 2025 | PDF Enhancements & Professional Integration | [session-13.md](handoff/sessions/session-13.md) |
 | Session 14 | Oct 21, 2025 | Brand Integration & PDF Layout Refinements | [session-14.md](handoff/sessions/session-14.md) |
+| Session 15 | Oct 22, 2025 | Bid Sorting Foundations & Line Viewer | *(current summary above)* |
 
 ---
 

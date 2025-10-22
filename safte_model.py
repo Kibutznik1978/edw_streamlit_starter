@@ -11,6 +11,7 @@ PERFORMANCE_USE_RATE = 0.5
 
 # Sleep Accumulation Rate (S) - This is variable, max 3.4 units/minute
 # This will be calculated dynamically.
+MAX_SLEEP_ACCUMULATION_RATE = 3.4
 
 # --- Circadian Oscillator Constants ---
 
@@ -38,7 +39,10 @@ PERFORMANCE_RHYTHM_AMPLITUDE_VARIABLE = 5.0
 SLEEP_INERTIA_MAX = 5.0
 
 # Time constant for sleep inertia (i)
-SLEEP_INERTIA_TIME_CONSTANT = 0.04
+# This controls the decay rate. Higher values = slower decay = longer-lasting sleep inertia
+# Adjusted to make sleep inertia last ~2 hours post-awakening as per SAFTE specification
+# With SI ~3, this gives a time constant of ~40-60 minutes
+SLEEP_INERTIA_TIME_CONSTANT = 15.0
 
 # --- Sleep Intensity Constants ---
 SLEEP_DEBT_FACTOR = 0.00312
@@ -80,22 +84,36 @@ def calculate_performance_rhythm(circadian_component, current_reservoir_level):
 def calculate_sleep_inertia(time_since_awakening_minutes, sleep_intensity):
     """
     Calculates the sleep inertia component (I).
+
+    Sleep inertia represents grogginess/impairment immediately after waking.
+    Returns a NEGATIVE value (0 to -5%) that reduces effectiveness temporarily.
+    Decays exponentially over ~2 hours post-awakening.
+
+    At awakening (ta=0): maximum impairment of -5%
+    As time passes: exponentially decays toward 0 (no impairment)
     """
-    # I = Imax * e^(-(ta/SI*i))
-    if time_since_awakening_minutes <= 0 or sleep_intensity <= 0:
-        return 0
-        
+    # I = -Imax * e^(-(ta/SI*i))
+    # Negative because it impairs performance
+    # At ta=0: e^0 = 1, so I = -5% (maximum grogginess)
+    # As ta increases: exponential decay brings I toward 0
+
+    if sleep_intensity <= 0:
+        return 0  # Only check sleep_intensity, not time_since_awakening
+
     exponent = - (time_since_awakening_minutes / (sleep_intensity * SLEEP_INERTIA_TIME_CONSTANT))
-    return SLEEP_INERTIA_MAX * math.exp(exponent)
+    return -SLEEP_INERTIA_MAX * math.exp(exponent)  # Negative: impairs performance
 
 def calculate_effectiveness(reservoir_level, performance_rhythm, sleep_inertia):
     """
     Calculates the final cognitive effectiveness percentage.
+
+    Note: SAFTE effectiveness can legitimately exceed 100% during peak circadian
+    performance when well-rested. We only clamp the lower bound at 0.
     """
     # E = 100(Rt/Rc) + C + I
     reservoir_component = 100 * (reservoir_level / RESERVOIR_CAPACITY)
     effectiveness = reservoir_component + performance_rhythm + sleep_inertia
-    return max(0, min(100, effectiveness)) # Clamp effectiveness between 0 and 100
+    return max(0, effectiveness)  # Only clamp lower bound
 
 from datetime import datetime, timedelta
 
@@ -234,7 +252,8 @@ def run_safte_simulation(duty_periods, initial_reservoir_level=RESERVOIR_CAPACIT
 
         if is_asleep:
             # Replenish reservoir
-            sleep_accumulation_rate = sleep_intensity
+            # Sleep intensity is capped at MAX_SLEEP_ACCUMULATION_RATE (3.4 units/min)
+            sleep_accumulation_rate = min(sleep_intensity, MAX_SLEEP_ACCUMULATION_RATE)
             reservoir_level = min(RESERVOIR_CAPACITY, reservoir_level + sleep_accumulation_rate)
             sleep_inertia_i = 0
         else:

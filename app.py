@@ -7,7 +7,7 @@ import io
 import math
 import tempfile
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 
 import numpy as np
 import pandas as pd
@@ -1090,7 +1090,7 @@ def render_bid_line_analyzer():
 
                 st.sidebar.caption(f"Last upload: {st.session_state['bidline_last_upload_name']}")
 
-                overview_tab, summary_tab, visuals_tab = st.tabs(["Overview", "Summary", "Visuals"])
+                overview_tab, summary_tab, visuals_tab, line_view_tab = st.tabs(["Overview", "Summary", "Visuals", "Line Viewer"])
                 with overview_tab:
                     _render_overview_tab(
                         df,
@@ -1103,6 +1103,15 @@ def render_bid_line_analyzer():
                     _render_summary_tab(filtered_df, pay_periods_df, reserve_lines_df)
                 with visuals_tab:
                     _render_visuals_tab(filtered_df, pay_periods_df)
+                with line_view_tab:
+                    _render_line_view_tab(
+                        filtered_df,
+                        line_days_df,
+                        line_trip_links,
+                        line_trip_metrics,
+                        st.session_state.get("trip_catalog_df"),
+                        st.session_state.get("edw_results", {}).get("trip_text_map", {}),
+                    )
     else:
         st.info("Upload a bid roster PDF to begin analysis.")
 
@@ -1322,6 +1331,248 @@ def _render_visuals_tab(filtered_df: pd.DataFrame, pay_periods: Optional[pd.Data
         tooltip=["DO", "Lines"]
     )
     st.altair_chart(do_chart, use_container_width=True)
+
+
+def _render_line_view_tab(
+    filtered_df: pd.DataFrame,
+    line_days: Optional[pd.DataFrame],
+    line_trip_links: Optional[pd.DataFrame],
+    line_trip_metrics: Optional[pd.DataFrame],
+    trip_catalog: Optional[pd.DataFrame],
+    trip_text_map: Optional[Dict],
+) -> None:
+    if filtered_df.empty:
+        st.info("Filter lines first to explore a schedule.")
+        return
+
+    if line_days is None or line_days.empty:
+        st.info("Parse a bid line PDF to view line schedules.")
+        return
+
+    line_options = sorted(filtered_df["Line"].unique())
+    selected_line = st.selectbox(
+        "Select a line to view its schedule:",
+        options=line_options,
+        format_func=lambda value: f"Line {int(value)}",
+        key="line_view_selector",
+    )
+
+    schedule_df = line_days[line_days["Line"] == selected_line].copy()
+    if schedule_df.empty:
+        st.warning("No schedule entries found for the selected line.")
+        return
+
+    if line_trip_links is not None and not line_trip_links.empty:
+        schedule_df = schedule_df.merge(
+            line_trip_links,
+            on=["Line", "PayPeriod", "DayIndex"],
+            how="left",
+            suffixes=("", "_trip"),
+        )
+    else:
+        schedule_df["TripID"] = None
+        schedule_df["Match"] = False
+
+    _render_schedule_html(schedule_df, selected_line)
+
+    if line_trip_metrics is not None and not line_trip_metrics.empty:
+        metrics_row = line_trip_metrics[line_trip_metrics["Line"] == selected_line]
+        if not metrics_row.empty:
+            row = metrics_row.iloc[0]
+            st.markdown("#### Line Metrics")
+            metric_cols = st.columns(4)
+            metric_cols[0].metric("Trip Days", int(row["MatchedTripOccurrences"]))
+            metric_cols[1].metric("Unique Trips", int(row["MatchedUniqueTrips"]))
+            metric_cols[2].metric("EDW Trips", int(row["EDWTrips"]))
+            metric_cols[3].metric("Hot Standby", int(row["HotStandbyTrips"]))
+
+            metric_cols = st.columns(3)
+            metric_cols[0].metric("TAFB Hours", f"{row['TotalTAFBHours']:.1f}")
+            metric_cols[1].metric("Duty Days", f"{row['TotalDutyDays']:.1f}")
+            metric_cols[2].metric(
+                "Day vs Night",
+                f"{row['DayBlockHours']:.1f}h / {row['NightBlockHours']:.1f}h",
+            )
+
+    trip_buttons: List[Tuple[str, int]] = []
+    if schedule_df["ValueType"].str.contains("trip").any():
+        st.markdown("#### Pairings On This Line")
+        trip_subset = schedule_df[schedule_df["ValueType"] == "trip"]
+        for _, record in trip_subset.sort_values(["PayPeriod", "DayIndex"]).iterrows():
+            trip_id = record.get("TripID")
+            if pd.isna(trip_id):
+                continue
+            trip_id = int(trip_id)
+            label = f"Trip {trip_id} (PP{int(record['PayPeriod'])} – Day {int(record['DayIndex'])})"
+            trip_buttons.append((label, trip_id))
+
+        if trip_buttons:
+            for idx, (label, trip_id) in enumerate(trip_buttons):
+                key = f"line_trip_{selected_line}_{idx}_{trip_id}"
+                if st.button(label, key=key):
+                    st.session_state["line_view_selected_trip"] = trip_id
+        else:
+            st.info("No matched pairings yet—upload the corresponding pairing PDF in the EDW tab.")
+    else:
+        st.info("This line has no trips—likely reserve or off days only.")
+
+    selected_trip = st.session_state.get("line_view_selected_trip")
+    if selected_trip is not None:
+        st.markdown("---")
+        _render_trip_detail(selected_trip, trip_text_map, trip_catalog)
+
+
+def _render_schedule_html(schedule_df: pd.DataFrame, line_id: int) -> None:
+    pay_periods = sorted(schedule_df["PayPeriod"].dropna().unique())
+    if not pay_periods:
+        st.info("No schedule data found for this line.")
+        return
+
+    st.markdown("#### Schedule Overview")
+    st.markdown(
+        """
+        <style>
+        .line-schedule {border-collapse: collapse; width: 100%; margin-bottom: 1rem; font-family: 'Inter', sans-serif;}
+        .line-schedule caption {text-align: left; font-weight: 600; padding: 0.25rem 0;}
+        .line-schedule th, .line-schedule td {border: 1px solid #d1d5db; padding: 0.35rem 0.4rem; text-align: center; font-size: 0.85rem;}
+        .line-schedule th {background-color: #f9fafb; font-weight: 600;}
+        .line-schedule td.trip {background-color: #e0f2fe; color: #0f172a; font-weight: 600;}
+        .line-schedule td.off {background-color: #fef3c7;}
+        .line-schedule td.reserve {background-color: #ede9fe;}
+        .line-schedule td.deadhead {background-color: #fce7f3;}
+        .line-schedule td.ground {background-color: #dcfce7;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    for period in pay_periods:
+        subset = schedule_df[schedule_df["PayPeriod"] == period]
+        if subset.empty:
+            continue
+        day_lookup = {
+            int(row["DayIndex"]): row
+            for _, row in subset.iterrows()
+        }
+        max_day = max(day_lookup.keys()) if day_lookup else 0
+        days = list(range(1, max_day + 1))
+        values = []
+        classes = []
+        for day in days:
+            entry = day_lookup.get(day)
+            if entry is None:
+                cell_value = "OFF"
+                cell_class = "off"
+            else:
+                cell_value = entry["Value"]
+                cell_class = entry.get("ValueType", "")
+                if cell_class == "trip" and not pd.isna(entry.get("TripID")):
+                    cell_value = f"Trip {int(entry['TripID'])}"
+            values.append(cell_value)
+            classes.append(cell_class)
+
+        header = "".join(f"<th>{day}</th>" for day in days)
+        body = "".join(
+            f"<td class='{cls}'>{val}</td>" for cls, val in zip(classes, values)
+        )
+
+        html = f"""
+        <table class='line-schedule'>
+            <caption>Pay Period {int(period)} – Line {int(line_id)}</caption>
+            <tr><th>Day</th>{header}</tr>
+            <tr><th>Assignment</th>{body}</tr>
+        </table>
+        """
+        st.markdown(html, unsafe_allow_html=True)
+
+
+def _render_trip_detail(trip_id: int, trip_text_map: Optional[Dict[int, str]], trip_catalog: Optional[pd.DataFrame]) -> None:
+    if not trip_text_map or trip_id not in trip_text_map:
+        st.warning("Trip details not available—run the EDW analyzer with the matching pairing PDF.")
+        return
+
+    trip_text = trip_text_map[trip_id]
+    trip_data = parse_trip_for_table(trip_text)
+
+    st.subheader(f"Trip {trip_id} Details")
+    if trip_data.get('date_freq'):
+        st.caption(trip_data['date_freq'])
+
+    trip_info_cols = st.columns(4)
+    catalog_row = None
+    if trip_catalog is not None and not trip_catalog.empty and "Trip ID" in trip_catalog.columns:
+        match = trip_catalog[trip_catalog["Trip ID"] == trip_id]
+        if not match.empty:
+            catalog_row = match.iloc[0]
+            trip_info_cols[0].metric("Frequency", int(catalog_row.get("Frequency", 0)))
+            trip_info_cols[1].metric("Duty Days", int(catalog_row.get("Duty Days", 0)))
+            trip_info_cols[2].metric("Max Duty", f"{catalog_row.get('Max Duty Length', 0.0):.1f}h")
+            trip_info_cols[3].metric("Max Legs", int(catalog_row.get("Max Legs", 0)))
+
+    _render_trip_html_table(trip_data)
+
+    with st.expander("View Raw Text", expanded=False):
+        st.text_area(
+            label="",
+            value=trip_text,
+            height=300,
+            label_visibility="collapsed",
+        )
+
+
+def _render_trip_html_table(trip_data: Dict) -> None:
+    st.markdown(
+        """
+        <style>
+        .trip-detail-container {max-width: 820px; margin: 0 auto;}
+        .trip-table {width: 100%; border-collapse: collapse; font-family: 'Courier New', monospace; font-size: 12px;}
+        .trip-table th {background-color: #f3f4f6; padding: 6px 4px; text-align: left; border: 1px solid #d1d5db; font-weight: 600;}
+        .trip-table td {padding: 4px 6px; border: 1px solid #e5e7eb;}
+        .trip-table .subtotal-row {background-color: #f9fafb; font-weight: 600;}
+        .trip-table .summary-row {background-color: #e0f2fe; font-weight: 600;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    table_html = [
+        "<div class='trip-detail-container'>",
+        "<table class='trip-table'>",
+        "<thead><tr><th>Day</th><th>Flight</th><th>Route</th><th>Depart (L) Z</th><th>Arrive (L) Z</th><th>Blk</th><th>Cxn</th><th>Duty</th><th>Cr</th><th>L/O</th></tr></thead>",
+        "<tbody>",
+    ]
+
+    for duty in trip_data.get('duty_days', []):
+        flights = duty.get('flights', [])
+        for idx, flight in enumerate(flights):
+            row = ["<tr>"]
+            row.append(f"<td>{flight.get('day', '')}</td>")
+            row.append(f"<td>{flight.get('flight', '')}</td>")
+            row.append(f"<td>{flight.get('route', '')}</td>")
+            row.append(f"<td>{flight.get('depart', '')}</td>")
+            row.append(f"<td>{flight.get('arrive', '')}</td>")
+            row.append(f"<td>{flight.get('block', '')}</td>")
+            row.append(f"<td>{flight.get('connection', '')}</td>")
+            if idx == 0:
+                row.append(f"<td rowspan='{len(flights)}'>{duty.get('duty_time', '')}</td>")
+                row.append(f"<td rowspan='{len(flights)}'>{duty.get('credit', '')}</td>")
+                row.append(f"<td rowspan='{len(flights)}'>{duty.get('rest', '')}</td>")
+            row.append("</tr>")
+            table_html.extend(row)
+
+        table_html.append(
+            "<tr class='subtotal-row'><td colspan='5' style='text-align:right;'>Duty Day Subtotal:</td>"
+            f"<td>{duty.get('block_total', '')}</td><td></td><td>{duty.get('duty_time', '')}</td><td>{duty.get('credit', '')}</td><td>{duty.get('rest', '')}</td></tr>"
+        )
+
+    summary = trip_data.get('trip_summary', {})
+    if summary:
+        table_html.append("<tr class='summary-row'><td colspan='10'><strong>Trip Summary</strong>: " + ", ".join(
+            f"{key} {value}" for key, value in summary.items()
+        ) + "</td></tr>")
+
+    table_html.extend(["</tbody>", "</table>", "</div>"])
+    st.markdown("".join(table_html), unsafe_allow_html=True)
 
 
 #==============================================================================
