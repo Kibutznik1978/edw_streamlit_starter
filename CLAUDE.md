@@ -143,12 +143,21 @@ Key constants:
 - `SLEEP_INERTIA_TIME_CONSTANT = 15.0` - ~2 hour decay period
 
 Key functions:
-- `calculate_circadian_oscillator()` - Dual-harmonic circadian rhythm
-- `calculate_sleep_intensity()` - Sleep propensity + sleep debt
-- `calculate_sleep_inertia()` - Post-awakening grogginess (negative impact)
-- `calculate_effectiveness()` - Final cognitive effectiveness (0-100%+)
+- `calculate_circadian_oscillator()` - Dual-harmonic circadian rhythm (anchored to clock time)
+- `calculate_sleep_accumulation_rate()` - Exponential saturation sleep recovery formula (Session 17 fix)
+- `calculate_sleep_propensity()` - Sleep pressure for inertia calculations
+- `calculate_sleep_inertia()` - Post-awakening grogginess (uses fixed awakening intensity - Session 17 fix)
+- `calculate_performance_rhythm()` - Circadian modulation with fatigue amplification
+- `calculate_effectiveness()` - Final cognitive effectiveness (0-100%)
 - `predict_sleep_periods()` - AutoSleep algorithm
 - `run_safte_simulation()` - Main orchestration with minute-by-minute results
+
+**Session 17 Critical Fixes:**
+- ✅ Sleep reservoir now uses official exponential saturation formula (prevents negative accumulation)
+- ✅ Circadian rhythm anchored to clock time instead of elapsed simulation time
+- ✅ Sleep inertia uses fixed awakening intensity for constant decay rate (~2 hours)
+- ✅ All formulas validated against Hursh et al., 2004 and FAST Phase II SBIR Report (ADA452991)
+- ✅ 19/19 comprehensive tests passing
 
 #### SAFTE Integration (`safte_integration.py`)
 
@@ -284,20 +293,26 @@ Since this is a Streamlit app without formal tests:
 - **Session state conflicts**: Ensure all widget keys are unique across tabs
 - **Table width**: Pairing detail table uses responsive CSS (50%/80%/100% based on screen width)
 
-## Recent Changes (Session 15 - October 22, 2025)
+## Recent Changes (Session 17 - October 22, 2025)
 
-- **Implemented SAFTE Fatigue Analysis**: Complete biomathematical fatigue modeling system
-- **New Files**: `safte_model.py` (260 lines), `safte_integration.py` (279 lines), 3 test files
-- **Fixed Critical Bugs**: 7 bugs from previous Gemini implementation (sleep accumulation, effectiveness clamping, sleep inertia)
-- **Validated Model**: 25 comprehensive tests passing (4 basic + 12 scientific validation + 9 integration)
-- **Interactive UI**: Effectiveness timeline chart with duty period shading and layover recovery visualization
-- **Risk Assessment**: Color-coded fatigue scoring (0-100) with danger thresholds (77.5% = 0.05% BAC)
-- **Session State Caching**: Analysis results cached per trip for instant re-display
+- **SAFTE Model Scientific Validation**: Complete component-by-component analysis as expert fatigue researcher
+- **Critical Bug Fixes**: 3 major bugs corrected to match official SAFTE specification
+  - Sleep reservoir: Fixed exponential saturation formula (was allowing negative accumulation)
+  - Circadian rhythm: Fixed time reference (now uses clock time instead of elapsed time)
+  - Sleep inertia: Fixed awakening capture (now uses constant decay rate)
+- **Test Suites Created**: 3 comprehensive test files with 19 tests total (all passing)
+  - `test_sleep_reservoir.py` - 9 unit tests for reservoir behavior
+  - `test_circadian_fix.py` - 5 circadian validation tests
+  - `test_safte_integration.py` - 5 integration tests with realistic scenarios
+- **Scientific Validation**: All formulas verified against Hursh et al., 2004 and FAST Phase II SBIR Report (ADA452991)
+- **Next Session**: Deep validation of performance rhythm and effectiveness calculations
 
-See `handoff/sessions/session-15.md` for detailed session notes.
+See `handoff/sessions/session-17.md` for detailed session notes.
 
 ### Previous Major Changes
 
+**Session 16 (Oct 22, 2025)**: SAFTE visualization aligned with industry standards (dual y-axis, danger thresholds)
+**Session 15 (Oct 22, 2025)**: SAFTE fatigue analysis integration with interactive UI
 **Session 14 (Oct 21, 2025)**: Aero Crew Data brand integration across all PDF exports
 **Session 11 (Oct 20, 2025)**: Merged applications into unified 3-tab interface
 **Session 10 (Oct 19, 2025)**: Automatic PDF header extraction

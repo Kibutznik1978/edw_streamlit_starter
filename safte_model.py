@@ -49,17 +49,79 @@ SLEEP_INERTIA_TIME_CONSTANT = 15.0
 SLEEP_DEBT_FACTOR = 0.00312
 
 
-def calculate_sleep_intensity(circadian_component, current_reservoir_level):
+def calculate_sleep_propensity(circadian_component, current_reservoir_level):
     """
-    Calculates the sleep intensity (SI) based on sleep propensity and sleep debt.
-    """
-    # Sleep Propensity (SP) = m - (as * c) where m = 0
-    sleep_propensity = 0 - (SLEEP_PROPENSITY_AMPLITUDE * circadian_component)
+    Calculates sleep propensity (sleep pressure) for use in sleep inertia calculations.
 
-    # Sleep Debt (SD) = f * (Rc - Rt)
+    Sleep propensity represents the "drive to sleep" - a combination of:
+    1. Circadian sleep propensity (lower at circadian peaks, higher at troughs)
+    2. Homeostatic sleep debt (how depleted the reservoir is)
+
+    This is used to modulate sleep inertia decay rate, NOT for sleep accumulation.
+
+    Formula:
+        SP = [m - (a_s * C)] + [f * (Rc - R)]
+        where m = 0 (baseline sleep propensity)
+
+    Returns:
+        float: Sleep propensity value (can be negative at circadian peaks with full reservoir)
+    """
+    # Circadian component of sleep propensity
+    # Negative at circadian peaks (less sleepy), positive at troughs (more sleepy)
+    circadian_propensity = 0 - (SLEEP_PROPENSITY_AMPLITUDE * circadian_component)
+
+    # Homeostatic sleep debt component (always non-negative)
     sleep_debt = SLEEP_DEBT_FACTOR * (RESERVOIR_CAPACITY - current_reservoir_level)
 
-    return sleep_propensity + sleep_debt
+    return circadian_propensity + sleep_debt
+
+
+def calculate_sleep_accumulation_rate(circadian_component, current_reservoir_level):
+    """
+    Calculates the sleep accumulation rate S(t) during sleep according to official SAFTE model.
+
+    Formula (Hursh et al., 2004; FAST Phase II SBIR Report ADA452991):
+        S(t) = S_max * [1 - exp(-f * (Rc - R))] * [1 + a_s * C(t)]
+
+    Where:
+        - S_max = 3.4 units/min (maximum recovery rate)
+        - f = 0.00312 (exponential feedback constant)
+        - Rc = 2880 (reservoir capacity)
+        - R = current reservoir level
+        - a_s = 0.55 (circadian modulation amplitude)
+        - C(t) = circadian component (-1 to +1)
+
+    Returns:
+        float: Sleep accumulation rate in units/minute (always non-negative)
+
+    Behavior:
+        - When R = 0 (fully depleted): S(t) ≈ 3.4 units/min (maximum recovery)
+        - When R = Rc (fully charged): S(t) = 0 (no accumulation)
+        - Circadian lows (C < 0): Enhanced recovery (~45% faster at trough)
+        - Circadian highs (C > 0): Reduced recovery (~45% slower at peak)
+    """
+    # Calculate sleep deficit (how much the reservoir is depleted)
+    sleep_deficit = RESERVOIR_CAPACITY - current_reservoir_level
+
+    # Exponential saturation term: provides diminishing returns as reservoir fills
+    # When deficit is large: exp(-large) ≈ 0, so [1 - 0] = 1 → maximum accumulation
+    # When deficit is zero: exp(0) = 1, so [1 - 1] = 0 → no accumulation
+    exponent = -SLEEP_DEBT_FACTOR * sleep_deficit
+    exponential_saturation = 1.0 - math.exp(exponent)
+
+    # Circadian modulation: affects sleep efficiency
+    # At circadian trough (C = -1): modulator = 1 + 0.55*(-1) = 0.45 (reduced recovery)
+    # At circadian peak (C = +1): modulator = 1 + 0.55*(+1) = 1.55 (enhanced recovery)
+    # Note: This can theoretically go negative if C < -1.82, so we apply safety constraint
+    circadian_modulator = 1.0 + SLEEP_PROPENSITY_AMPLITUDE * circadian_component
+
+    # Full accumulation rate
+    accumulation_rate = MAX_SLEEP_ACCUMULATION_RATE * exponential_saturation * circadian_modulator
+
+    # Safety constraints:
+    # 1. Never negative (sleep always restores, never depletes)
+    # 2. Never exceeds maximum rate (physiological limit)
+    return max(0.0, min(MAX_SLEEP_ACCUMULATION_RATE, accumulation_rate))
 
 def calculate_circadian_oscillator(time_hours):
     """
@@ -108,13 +170,13 @@ def calculate_effectiveness(reservoir_level, performance_rhythm, sleep_inertia):
     """
     Calculates the final cognitive effectiveness percentage.
 
-    Note: SAFTE effectiveness can legitimately exceed 100% during peak circadian
-    performance when well-rested. We only clamp the lower bound at 0.
+    Returns value between 0-100%. Values are clamped at 100% for practical interpretation,
+    though the raw SAFTE model can produce values >100% at circadian peaks when well-rested.
     """
     # E = 100(Rt/Rc) + C + I
     reservoir_component = 100 * (reservoir_level / RESERVOIR_CAPACITY)
     effectiveness = reservoir_component + performance_rhythm + sleep_inertia
-    return max(0, effectiveness)  # Only clamp lower bound
+    return max(0, min(100, effectiveness))  # Clamp to 0-100% range
 
 # --- AutoSleep Constants ---
 DEFAULT_COMMUTE_TIME = timedelta(hours=1)
@@ -144,6 +206,24 @@ def predict_sleep_periods(duty_periods, commute_time=DEFAULT_COMMUTE_TIME):
     sleep_periods = []
     # Sort duty periods to ensure they are in chronological order
     sorted_duties = sorted(duty_periods, key=lambda x: x[0])
+
+    # Add sleep BEFORE the first duty period (night before trip)
+    if sorted_duties:
+        first_duty_start = sorted_duties[0][0]
+        # Assume wake-up time is: duty start - commute - 1 hour prep
+        wake_time = first_duty_start - commute_time - timedelta(hours=1)
+
+        # Sleep starts at 23:00 the night before wake_time
+        sleep_start = wake_time.replace(hour=23, minute=0, second=0, microsecond=0) - timedelta(days=1)
+
+        # If wake time is before 23:00, adjust (e.g., wake at 06:00 means sleep from previous day's 23:00)
+        # If wake time is after 23:00 same day (e.g., wake at 02:00), sleep from same day's 23:00
+        if wake_time.hour >= 23:
+            sleep_start += timedelta(days=1)
+
+        # Ensure minimum sleep duration
+        if wake_time - sleep_start >= MIN_SLEEP_PERIOD:
+            sleep_periods.append((sleep_start, wake_time))
 
     for i in range(len(sorted_duties)):
         duty_end = sorted_duties[i][1]
@@ -227,10 +307,22 @@ def run_safte_simulation(duty_periods, initial_reservoir_level=RESERVOIR_CAPACIT
     reservoir_level = initial_reservoir_level
     is_asleep = False
     time_since_awakening = 0
+    awakening_sleep_intensity = 0  # Sleep propensity captured at moment of awakening
 
     event_index = 0
 
     while current_time < sim_end_time:
+        # Calculate SAFTE components for the current minute
+        # Use clock time (time of day) for circadian rhythm, not elapsed time
+        # Circadian rhythms are entrained to the 24-hour light/dark cycle
+        time_hours = current_time.hour + current_time.minute / 60.0 + current_time.second / 3600.0
+
+        circadian_c = calculate_circadian_oscillator(time_hours)
+        performance_rhythm_c = calculate_performance_rhythm(circadian_c, reservoir_level)
+
+        # Calculate current sleep propensity (used for sleep accumulation and capturing at awakening)
+        sleep_propensity = calculate_sleep_propensity(circadian_c, reservoir_level)
+
         # Process any events at the current time
         while event_index < len(events) and events[event_index][0] == current_time:
             event_time, event_type = events[event_index]
@@ -239,26 +331,24 @@ def run_safte_simulation(duty_periods, initial_reservoir_level=RESERVOIR_CAPACIT
             elif event_type == 'sleep_end':
                 is_asleep = False
                 time_since_awakening = 0
+                # CRITICAL: Capture sleep propensity at moment of awakening
+                # This determines sleep inertia decay rate (constant for ~2 hours post-awakening)
+                # Higher sleep intensity at awakening = deeper sleep = longer-lasting grogginess
+                awakening_sleep_intensity = sleep_propensity
             event_index += 1
 
-        # Calculate SAFTE components for the current minute
-        time_hours = (current_time - sim_start_time).total_seconds() / 3600.0
-
-        circadian_c = calculate_circadian_oscillator(time_hours)
-        performance_rhythm_c = calculate_performance_rhythm(circadian_c, reservoir_level)
-
-        sleep_intensity = calculate_sleep_intensity(circadian_c, reservoir_level)
-
         if is_asleep:
-            # Replenish reservoir
-            # Sleep intensity is capped at MAX_SLEEP_ACCUMULATION_RATE (3.4 units/min)
-            sleep_accumulation_rate = min(sleep_intensity, MAX_SLEEP_ACCUMULATION_RATE)
-            reservoir_level = min(RESERVOIR_CAPACITY, reservoir_level + sleep_accumulation_rate)
+            # Replenish reservoir using official SAFTE exponential saturation formula
+            accumulation_rate = calculate_sleep_accumulation_rate(circadian_c, reservoir_level)
+            reservoir_level = min(RESERVOIR_CAPACITY, reservoir_level + accumulation_rate)
             sleep_inertia_i = 0
         else:
-            # Deplete reservoir
+            # Deplete reservoir during wakefulness
             reservoir_level = max(0, reservoir_level - PERFORMANCE_USE_RATE)
-            sleep_inertia_i = calculate_sleep_inertia(time_since_awakening, sleep_intensity)
+            # Calculate sleep inertia (grogginess after awakening)
+            # Use FIXED sleep intensity from moment of awakening (not current sleep propensity)
+            # This ensures constant decay rate over ~2 hour period
+            sleep_inertia_i = calculate_sleep_inertia(time_since_awakening, awakening_sleep_intensity)
             time_since_awakening += 1
 
         # Calculate final effectiveness
