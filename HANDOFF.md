@@ -1,6 +1,6 @@
 # EDW Pairing Analyzer - Handoff Document
 
-**Last Updated:** October 22, 2025
+**Last Updated:** October 24, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
 **Version:** 1.1 (SAFTE Fatigue Analysis)
@@ -49,11 +49,24 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 17)
+## Current Status (Session 18)
 
-✅ **SAFTE Model Scientifically Validated** - Complete analysis and correction of all SAFTE model components to match official specification (Hursh et al., 2004; FAST Phase II SBIR Report ADA452991)
+✅ **Critical SAFTE Bugs Fixed** - Corrected time parsing, AutoSleep prediction, and date advancement bugs. Enhanced PDF exports with hot standby metrics and interactive tooltips.
 
-### Latest Updates (October 22, 2025)
+### Latest Updates (October 24, 2025)
+
+**Session 18 - PDF Export Enhancements & SAFTE Model Fixes:**
+- **Fixed:** Critical time parsing bug in `parse_local_time()` - was parsing (LOCAL_HH)ZULU_HH:ZULU_MM as (LOCAL_HH)MM:SS
+- **Fixed:** AutoSleep rigid night-time restrictions - removed forced 23:00 bedtime, allows daytime sleep after red-eyes
+- **Fixed:** Date advancement bug - multiple duties on same day now handled correctly (was skipping Oct 26 duty)
+- **Fixed:** Trip length table percentages - now matches chart by excluding hot standby from total
+- **Fixed:** PDF header extraction - handles cover pages by checking first 3 pages instead of just page 0
+- **Enhanced:** PDF exports with 5th KPI card showing hot standby trips
+- **Enhanced:** Total Trips KPI with "Non-HSBY: XXX" subtitle
+- **Added:** Interactive tooltips to SAFTE chart - hover over duty/layover/sleep bars for details
+- **Added:** Flight routes in tooltips (e.g., "ONT-PHL, PHL-CAE") extracted from duty day structure
+- **Attempted:** Pan/zoom functionality (rolled back due to poor UX)
+- **Result:** SAFTE model now correctly predicts sleep after every duty period with realistic reservoir recovery
 
 **Session 17 - SAFTE Model Scientific Validation & Core Algorithm Fixes:**
 - **Analyzed:** Complete component-by-component analysis as expert fatigue researcher
@@ -181,6 +194,7 @@ Detailed documentation for each development session:
 | Session 15 | Oct 22, 2025 | SAFTE Fatigue Analysis Integration | [session-15.md](handoff/sessions/session-15.md) |
 | Session 16 | Oct 22, 2025 | SAFTE Visualization Alignment with Industry Standards | [session-16.md](handoff/sessions/session-16.md) |
 | Session 17 | Oct 22, 2025 | SAFTE Model Scientific Validation & Core Algorithm Fixes | [session-17.md](handoff/sessions/session-17.md) |
+| Session 18 | Oct 24, 2025 | PDF Export Enhancements & SAFTE Model Fixes | [session-18.md](handoff/sessions/session-18.md) |
 
 ---
 
@@ -349,6 +363,6 @@ For questions or issues, please open an issue on GitHub.
 
 ---
 
-**Last Updated:** October 22, 2025
-**Status:** ✅ SAFTE Model Scientifically Validated - All core algorithms corrected to match official specification (3 critical bugs fixed, 19/19 tests passing)
-**Next Session:** Deep validation of performance rhythm and effectiveness calculations, consider transmeridian time zone adjustments, potential Supabase integration (Tab 3)
+**Last Updated:** October 24, 2025
+**Status:** ✅ SAFTE Model Critical Bugs Fixed - Time parsing, AutoSleep, and date advancement corrected. PDF exports enhanced with hot standby metrics and interactive tooltips.
+**Next Session:** Test with real multi-day trips, commit critical bug fixes, consider SAFTE PDF export integration, deep validation of transmeridian adjustments

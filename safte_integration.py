@@ -12,29 +12,35 @@ from typing import List, Tuple, Dict, Optional
 
 def parse_local_time(time_str: str) -> Optional[Tuple[int, int, int]]:
     """
-    Parse a time string in format "(HH)MM:SS" where HH is local hour.
+    Parse a time string in format "(LOCAL_HH)ZULU_HH:ZULU_MM".
+
+    The format combines local and zulu times where:
+    - (LOCAL_HH) is the local hour in parentheses
+    - ZULU_HH:ZULU_MM is the UTC/Zulu time
+    - Local minutes = Zulu minutes (timezone offset only affects hours)
 
     Args:
-        time_str: Time string like "(08)13:30" or "(23)05:15"
+        time_str: Time string like "(03)08:28" or "(14)19:40"
 
     Returns:
-        Tuple of (local_hour, minute, second) or None if parsing fails
+        Tuple of (local_hour, local_minute, local_second) or None if parsing fails
 
     Examples:
-        "(08)13:30" -> (8, 13, 30)
-        "(23)05:15" -> (23, 5, 15)
+        "(03)08:28" -> (3, 28, 0)  # Local time is 03:28, Zulu is 08:28
+        "(14)19:40" -> (14, 40, 0)  # Local time is 14:40, Zulu is 19:40
     """
     if not time_str:
         return None
 
-    # Pattern: (HH)MM:SS
+    # Pattern: (LOCAL_HH)ZULU_HH:ZULU_MM
     match = re.match(r'\((\d+)\)(\d{2}):(\d{2})', time_str)
     if not match:
         return None
 
-    local_hour = int(match.group(1))
-    minute = int(match.group(2))
-    second = int(match.group(3))
+    local_hour = int(match.group(1))    # Local hour from parentheses
+    zulu_hour = int(match.group(2))     # Zulu hour (not used for local time)
+    minute = int(match.group(3))        # Minutes (same for local and zulu)
+    second = 0                           # Seconds not provided in this format
 
     return (local_hour, minute, second)
 
@@ -67,6 +73,8 @@ def trip_to_duty_periods(
     duty_days = parsed_trip.get('duty_days', [])
     duty_periods = []
 
+    # Track the last duty end time to determine when next duty should start
+    last_duty_end = None
     current_date = reference_date
 
     for duty_day in duty_days:
@@ -89,7 +97,7 @@ def trip_to_duty_periods(
             continue
         end_hour, end_min, end_sec = end_parts
 
-        # Create duty start datetime
+        # Create duty start datetime on current_date
         duty_start = current_date.replace(
             hour=start_hour,
             minute=start_min,
@@ -97,8 +105,20 @@ def trip_to_duty_periods(
             microsecond=0
         )
 
+        # If we have a previous duty, check if this start time makes sense
+        if last_duty_end is not None:
+            # If duty_start would be before or too close to last_duty_end, advance to next day
+            # (Minimum 2 hours between duties for rest/commute)
+            if duty_start <= last_duty_end + timedelta(hours=2):
+                current_date += timedelta(days=1)
+                duty_start = current_date.replace(
+                    hour=start_hour,
+                    minute=start_min,
+                    second=start_sec,
+                    microsecond=0
+                )
+
         # Create duty end datetime
-        # If end hour is less than start hour, duty spans midnight
         duty_end = current_date.replace(
             hour=end_hour,
             minute=end_min,
@@ -106,20 +126,12 @@ def trip_to_duty_periods(
             microsecond=0
         )
 
-        if end_hour < start_hour:
-            # Duty spans midnight - add one day to end time
+        # If end time is before start time, duty spans midnight
+        if duty_end <= duty_start:
             duty_end += timedelta(days=1)
 
         duty_periods.append((duty_start, duty_end))
-
-        # Advance current_date for next duty day
-        # Move to the day after this duty ended
-        if end_hour < start_hour:
-            # Already advanced by 1 day due to midnight crossing
-            current_date = duty_end.replace(hour=0, minute=0, second=0, microsecond=0)
-        else:
-            # Move to next calendar day
-            current_date += timedelta(days=1)
+        last_duty_end = duty_end
 
     return duty_periods
 
@@ -167,8 +179,13 @@ def analyze_trip_fatigue(
     # Calculate fatigue metrics
     fatigue_metrics = calculate_fatigue_metrics(safte_results, duty_periods)
 
+    # Also extract the predicted sleep periods from SAFTE model
+    from safte_model import predict_sleep_periods
+    sleep_periods = predict_sleep_periods(duty_periods)
+
     return {
         'duty_periods': duty_periods,
+        'sleep_periods': sleep_periods,
         'safte_results': safte_results,
         'fatigue_metrics': fatigue_metrics,
         'trip_id': parsed_trip.get('trip_id')
@@ -213,9 +230,9 @@ def calculate_fatigue_metrics(safte_results: List[Dict], duty_periods: List[Tupl
     lowest_effectiveness = lowest_result['effectiveness']
     lowest_effectiveness_time = lowest_result['timestamp']
 
-    # Calculate time below thresholds
-    danger_threshold = 77.5  # Equivalent to 0.05% BAC
-    warning_threshold = 85.0  # Warning level
+    # Calculate time below thresholds (industry standard from SAFTE-FAST)
+    danger_threshold = 70.0  # Danger: significant impairment
+    warning_threshold = 82.0  # Warning: entering impairment zone
 
     time_below_danger = sum(1 for r in duty_results if r['effectiveness'] < danger_threshold)
     time_below_warning = sum(1 for r in duty_results if r['effectiveness'] < warning_threshold)
@@ -225,16 +242,16 @@ def calculate_fatigue_metrics(safte_results: List[Dict], duty_periods: List[Tupl
 
     # Overall fatigue score (0-100, higher = worse)
     # Based on: lowest effectiveness, time in danger zone, average effectiveness
-    # Scoring logic:
-    #   - If lowest < 70: very high risk (80-100 score)
-    #   - If lowest < 77.5: high risk (60-80 score)
-    #   - If lowest < 85: moderate risk (40-60 score)
-    #   - If lowest >= 85: low risk (0-40 score)
-    if lowest_effectiveness < 70:
+    # Scoring logic aligned with industry thresholds:
+    #   - If lowest < 60: very high risk (80-100 score) - severe impairment
+    #   - If lowest < 70: high risk (60-80 score) - significant impairment
+    #   - If lowest < 82: moderate risk (40-60 score) - entering impairment
+    #   - If lowest >= 82: low risk (0-40 score) - optimal performance
+    if lowest_effectiveness < 60:
         base_score = 80
-    elif lowest_effectiveness < 77.5:
+    elif lowest_effectiveness < 70:
         base_score = 60
-    elif lowest_effectiveness < 85:
+    elif lowest_effectiveness < 82:
         base_score = 40
     else:
         base_score = 20

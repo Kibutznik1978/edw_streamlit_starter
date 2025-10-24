@@ -103,10 +103,11 @@ def _draw_footer(canvas: canvas.Canvas, doc) -> None:
 class KPIBadge(Flowable):
     """Custom flowable for KPI card display."""
 
-    def __init__(self, label: str, value: str, branding: Dict[str, Any], width: float = 120):
+    def __init__(self, label: str, value: str, branding: Dict[str, Any], width: float = 120, subtitle: str = None):
         Flowable.__init__(self)
         self.label = label
         self.value = value
+        self.subtitle = subtitle  # Optional second line (e.g., "Non-HSBY: 174")
         self.branding = branding
         self.width = width
         self.height = 60
@@ -129,21 +130,43 @@ class KPIBadge(Flowable):
 
         # Value (bold, dark)
         canvas.setFillColor(colors.HexColor("#111827"))
-        canvas.setFont('Helvetica-Bold', 16)
-        canvas.drawCentredString(self.width / 2, self.height - 45, str(self.value))
+        if self.subtitle:
+            # If subtitle exists, shift main value up slightly
+            canvas.setFont('Helvetica-Bold', 16)
+            canvas.drawCentredString(self.width / 2, self.height - 38, str(self.value))
+
+            # Subtitle (smaller, muted)
+            canvas.setFillColor(muted_color)
+            canvas.setFont('Helvetica', 8)
+            canvas.drawCentredString(self.width / 2, self.height - 52, self.subtitle)
+        else:
+            # Standard single-value display
+            canvas.setFont('Helvetica-Bold', 16)
+            canvas.drawCentredString(self.width / 2, self.height - 45, str(self.value))
 
 
 def _make_kpi_row(trip_summary: Dict[str, Any], branding: Dict[str, Any]) -> Table:
     """Create a row of KPI badges."""
-    # Extract KPI values (first 4 items)
-    kpis = list(trip_summary.items())[:4]
+    # Extract KPI values (now supports up to 5 items)
+    kpis = list(trip_summary.items())[:5]
 
     # Create KPI badges
-    badges = [KPIBadge(label, str(value), branding, width=120) for label, value in kpis]
+    # Values can be either simple (str/int) or dict with 'value' and 'subtitle' keys
+    badges = []
+    for label, value_data in kpis:
+        if isinstance(value_data, dict):
+            # Value is a dict with 'value' and optional 'subtitle'
+            value = str(value_data.get('value', ''))
+            subtitle = value_data.get('subtitle', None)
+            badges.append(KPIBadge(label, value, branding, width=120, subtitle=subtitle))
+        else:
+            # Value is simple string/int
+            badges.append(KPIBadge(label, str(value_data), branding, width=120))
 
-    # Create table to hold badges
+    # Create table to hold badges (adjust column widths based on number of badges)
+    col_width = 130 if len(badges) <= 4 else 105  # Narrower columns for 5 badges
     table_data = [[badge for badge in badges]]
-    table = Table(table_data, colWidths=[130] * len(badges))
+    table = Table(table_data, colWidths=[col_width] * len(badges))
     table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -228,12 +251,16 @@ def _make_trip_length_table(
     branding: Dict[str, Any]
 ) -> Table:
     """Create trip length distribution table with percentages."""
+    # Calculate total from trip_length_distribution (excludes hot standby)
+    # This matches the chart calculation and the "(Hot Standby excluded)" subtitle
+    total_trips_excluding_hot_standby = sum(item["trips"] for item in trip_length_distribution)
+
     # Build table data
     data = [["Duty Days", "Trips", "Percent"]]
     for item in trip_length_distribution:
         duty_days = item["duty_days"]
         trips = item["trips"]
-        percent = f"{(trips / total_trips * 100):.1f}%" if total_trips > 0 else "0%"
+        percent = f"{(trips / total_trips_excluding_hot_standby * 100):.1f}%" if total_trips_excluding_hot_standby > 0 else "0%"
         data.append([str(duty_days), str(trips), percent])
 
     # Create table
@@ -744,7 +771,14 @@ def create_pdf_report(
 
         # Create charts
         edw_trips = data["trip_summary"].get("EDW Trips", 0)
-        total_trips = data["trip_summary"].get("Total Trips", 0)
+
+        # Handle case where Total Trips might be a dict with 'value' key
+        total_trips_data = data["trip_summary"].get("Total Trips", 0)
+        if isinstance(total_trips_data, dict):
+            total_trips = total_trips_data.get("value", 0)
+        else:
+            total_trips = total_trips_data
+
         non_edw_trips = total_trips - edw_trips
 
         donut_path = _save_donut_png(edw_trips, non_edw_trips)

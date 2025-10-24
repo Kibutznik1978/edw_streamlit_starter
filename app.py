@@ -703,7 +703,7 @@ def display_edw_results(result_data: Dict):
                                     "Lowest Effectiveness",
                                     f"{metrics['lowest_effectiveness']:.1f}%",
                                     delta=None,
-                                    help="Minimum cognitive effectiveness during duty period. Below 77.5% indicates impairment equivalent to 0.05% BAC."
+                                    help="Minimum cognitive effectiveness during duty period. Below 70% indicates significant impairment."
                                 )
 
                             with metric_cols[1]:
@@ -712,7 +712,7 @@ def display_edw_results(result_data: Dict):
                                     "Time in Danger Zone",
                                     f"{danger_hours:.1f} hrs",
                                     delta=None,
-                                    help="Time spent below 77.5% effectiveness (danger threshold)"
+                                    help="Time spent below 70% effectiveness (danger threshold)"
                                 )
 
                             with metric_cols[2]:
@@ -753,11 +753,60 @@ def display_edw_results(result_data: Dict):
                             trip_start = min(dp[0] for dp in duty_periods)
                             trip_end = max(dp[1] for dp in duty_periods)
 
-                            # Include all results within the trip timeframe
+                            # Trip overview stats
+                            st.caption(f"📅 Trip span: {trip_start.strftime('%a %m/%d')} to {trip_end.strftime('%a %m/%d')} • "
+                                      f"{len(duty_periods)} duty periods • "
+                                      f"{(trip_end - trip_start).total_seconds() / 3600:.0f} hours total")
+
+                            # DEBUG: Verify sleep replenishment
+                            sleep_periods_debug = analysis.get('sleep_periods', [])
+                            with st.expander("🔬 DEBUG: Sleep Replenishment Verification", expanded=False):
+                                st.write(f"**Sleep periods predicted:** {len(sleep_periods_debug)}")
+                                for i, (sleep_start, sleep_end) in enumerate(sleep_periods_debug, 1):
+                                    duration = (sleep_end - sleep_start).total_seconds() / 3600
+                                    st.write(f"  - Sleep {i}: {sleep_start.strftime('%m/%d %H:%M')} to {sleep_end.strftime('%m/%d %H:%M')} ({duration:.1f}h)")
+
+                                if safte_results:
+                                    initial_res = safte_results[0]['reservoir_level']
+                                    final_res = safte_results[-1]['reservoir_level']
+                                    min_res = min(r['reservoir_level'] for r in safte_results)
+                                    max_res = max(r['reservoir_level'] for r in safte_results)
+
+                                    st.write(f"**Reservoir Stats:**")
+                                    st.write(f"  - Initial: {initial_res:.0f} ({initial_res/28.8:.0f}%)")
+                                    st.write(f"  - Final: {final_res:.0f} ({final_res/28.8:.0f}%)")
+                                    st.write(f"  - Min: {min_res:.0f} ({min_res/28.8:.0f}%)")
+                                    st.write(f"  - Max: {max_res:.0f} ({max_res/28.8:.0f}%)")
+
+                                    # Check if any sleep actually happened
+                                    sleep_count = sum(1 for r in safte_results if r['is_asleep'])
+                                    total_count = len(safte_results)
+                                    st.write(f"**Minutes asleep:** {sleep_count} / {total_count} ({sleep_count/total_count*100:.1f}%)")
+
+                                    # Verify reservoir actually increased during sleep
+                                    reservoir_increases = 0
+                                    prev_res = None
+                                    for r in safte_results:
+                                        if r['is_asleep'] and prev_res is not None:
+                                            if r['reservoir_level'] > prev_res:
+                                                reservoir_increases += 1
+                                        prev_res = r['reservoir_level']
+
+                                    st.write(f"**Reservoir increases during sleep:** {reservoir_increases} minutes")
+                                    if sleep_count > 0 and reservoir_increases == 0:
+                                        st.error("⚠️ WARNING: Sleep periods detected but reservoir not increasing!")
+
+                            # Include all results within the trip timeframe with ALL SAFTE data
+                            # Add buffer to show context before/after trip
+                            from datetime import timedelta
+                            buffer = timedelta(hours=6)
+                            chart_start = trip_start - buffer
+                            chart_end = trip_end + buffer
+
                             trip_results = []
                             for result in safte_results:
                                 timestamp = result['timestamp']
-                                if trip_start <= timestamp <= trip_end:
+                                if chart_start <= timestamp <= chart_end:
                                     # Determine if this timestamp is during a duty period
                                     on_duty = any(duty_start <= timestamp <= duty_end
                                                  for duty_start, duty_end in duty_periods)
@@ -765,6 +814,8 @@ def display_edw_results(result_data: Dict):
                                     trip_results.append({
                                         'timestamp': timestamp,
                                         'effectiveness': result['effectiveness'],
+                                        'reservoir_level': result['reservoir_level'],
+                                        'circadian_rhythm': result['circadian_rhythm'],
                                         'is_asleep': result['is_asleep'],
                                         'on_duty': on_duty
                                     })
@@ -772,61 +823,319 @@ def display_edw_results(result_data: Dict):
                             if trip_results:
                                 chart_df = pd.DataFrame(trip_results)
 
-                                # Create duty period rectangles for visual reference
-                                duty_rects = []
-                                for duty_start, duty_end in duty_periods:
-                                    duty_rects.append({
-                                        'start': duty_start,
-                                        'end': duty_end,
-                                        'label': 'On Duty'
-                                    })
-                                duty_rect_df = pd.DataFrame(duty_rects)
-
-                                # Shaded rectangles for duty periods
-                                duty_background = alt.Chart(duty_rect_df).mark_rect(
-                                    opacity=0.15,
-                                    color='lightblue'
+                                # === BACKGROUND ZONES (color-coded effectiveness ranges) ===
+                                # Industry standard thresholds from SAFTE-FAST
+                                # Pink zone: 0-60% (severe impairment)
+                                pink_zone = alt.Chart(pd.DataFrame({
+                                    'y1': [0], 'y2': [60]
+                                })).mark_rect(
+                                    color='#FFB6C1',
+                                    opacity=0.3
                                 ).encode(
-                                    x='start:T',
-                                    x2='end:T',
-                                    y=alt.value(0),
-                                    y2=alt.value(350)
+                                    y='y1:Q',
+                                    y2='y2:Q'
                                 )
 
-                                # Base line chart
-                                line = alt.Chart(chart_df).mark_line(
-                                    color='steelblue',
-                                    strokeWidth=2
+                                # Orange zone: 60-70% (danger - significant impairment)
+                                orange_zone = alt.Chart(pd.DataFrame({
+                                    'y1': [60], 'y2': [70]
+                                })).mark_rect(
+                                    color='#FFD580',
+                                    opacity=0.3
                                 ).encode(
-                                    x=alt.X('timestamp:T', title='Time (Date Hour:Min)', axis=alt.Axis(format='%m/%d %H:%M')),
-                                    y=alt.Y('effectiveness:Q', title='Effectiveness (%)', scale=alt.Scale(domain=[0, 120])),
+                                    y='y1:Q',
+                                    y2='y2:Q'
+                                )
+
+                                # Yellow zone: 70-82% (caution - moderate impairment)
+                                yellow_zone = alt.Chart(pd.DataFrame({
+                                    'y1': [70], 'y2': [82]
+                                })).mark_rect(
+                                    color='#FFFF99',
+                                    opacity=0.3
+                                ).encode(
+                                    y='y1:Q',
+                                    y2='y2:Q'
+                                )
+
+                                # Green zone: 82-105% (optimal performance)
+                                green_zone = alt.Chart(pd.DataFrame({
+                                    'y1': [82], 'y2': [105]
+                                })).mark_rect(
+                                    color='#90EE90',
+                                    opacity=0.3
+                                ).encode(
+                                    y='y1:Q',
+                                    y2='y2:Q'
+                                )
+
+                                # === THREE LINES: Effectiveness (black), Reservoir (orange), Circadian (blue) ===
+                                # Effectiveness line (black/dark gray)
+                                effectiveness_line = alt.Chart(chart_df).mark_line(
+                                    color='#333333',
+                                    strokeWidth=2.5
+                                ).encode(
+                                    x=alt.X('timestamp:T', title='Date/Time',
+                                           axis=alt.Axis(format='%m/%d %H:%M', labelAngle=-45)),
+                                    y=alt.Y('effectiveness:Q', title='Effectiveness (%)',
+                                           scale=alt.Scale(domain=[0, 105])),
                                     tooltip=[
-                                        alt.Tooltip('timestamp:T', title='Time', format='%Y-%m-%d %H:%M'),
+                                        alt.Tooltip('timestamp:T', title='Time', format='%a %m/%d %H:%M'),
                                         alt.Tooltip('effectiveness:Q', title='Effectiveness', format='.1f'),
+                                        alt.Tooltip('reservoir_level:Q', title='Sleep Reservoir', format='.1f'),
+                                        alt.Tooltip('circadian_rhythm:Q', title='Circadian Rhythm', format='.3f'),
                                         alt.Tooltip('on_duty:N', title='Status'),
                                         alt.Tooltip('is_asleep:N', title='Sleeping')
                                     ]
-                                ).properties(
-                                    width='container',
-                                    height=350
                                 )
 
-                                # Add danger threshold line (77.5%)
-                                danger_line = alt.Chart(pd.DataFrame({'y': [77.5]})).mark_rule(
+                                # Sleep Reservoir line (orange) - use actual reservoir values for dual y-axis
+                                # Scale reservoir to 0-100 range for right y-axis (50-100 visible range like SAFTE-FAST)
+                                chart_df['reservoir_scaled'] = (chart_df['reservoir_level'] / 2880.0) * 100
+                                reservoir_line = alt.Chart(chart_df).mark_line(
+                                    color='#FF6347',  # Tomato red (distinct from orange threshold)
+                                    strokeWidth=3,  # Thick
+                                    opacity=1.0,  # Fully opaque
+                                    strokeDash=[6, 3]  # Dashed pattern
+                                ).encode(
+                                    x='timestamp:T',
+                                    y=alt.Y('reservoir_scaled:Q',
+                                           title='Sleep Reservoir (%)',
+                                           scale=alt.Scale(domain=[50, 105]),  # Focus on 50-105% range like SAFTE-FAST
+                                           axis=alt.Axis(titleColor='#FF6347', labelColor='#FF6347', orient='right'))
+                                )
+
+                                # Circadian Rhythm line (blue) - scale from ~0.5-1.5 to 0-100 range
+                                # Make it highly visible to show daily oscillation pattern
+                                # Circadian oscillates around 1.0, range roughly 0.7-1.3
+                                # Scale: ((value - 0.5) / 1.0) * 100 to get 0-100 range
+                                chart_df['circadian_scaled'] = ((chart_df['circadian_rhythm'] - 0.5) / 1.0) * 100
+                                chart_df['circadian_scaled'] = chart_df['circadian_scaled'].clip(0, 105)
+
+                                # Area fill under circadian line for visibility
+                                circadian_area = alt.Chart(chart_df).mark_area(
+                                    color='#87CEEB',  # Sky blue
+                                    opacity=0.15
+                                ).encode(
+                                    x='timestamp:T',
+                                    y=alt.Y('circadian_scaled:Q', scale=alt.Scale(domain=[0, 105]))
+                                )
+
+                                # Circadian line on top of area
+                                circadian_line = alt.Chart(chart_df).mark_line(
+                                    color='#1E90FF',  # Dodger blue (brighter)
+                                    strokeWidth=2.5,  # Thicker
+                                    opacity=0.9,  # More visible
+                                    strokeDash=[4, 2]  # Subtle dash
+                                ).encode(
+                                    x='timestamp:T',
+                                    y=alt.Y('circadian_scaled:Q', scale=alt.Scale(domain=[0, 105]))
+                                )
+
+                                # === THRESHOLD LINES ===
+                                # Danger threshold line (70% - industry standard)
+                                danger_line = alt.Chart(pd.DataFrame({'y': [70]})).mark_rule(
                                     color='red',
                                     strokeDash=[5, 5],
                                     strokeWidth=2
                                 ).encode(y='y:Q')
 
-                                # Add warning threshold line (85%)
-                                warning_line = alt.Chart(pd.DataFrame({'y': [85]})).mark_rule(
+                                # Warning threshold line (82% - industry standard)
+                                warning_line = alt.Chart(pd.DataFrame({'y': [82]})).mark_rule(
                                     color='orange',
                                     strokeDash=[3, 3],
-                                    strokeWidth=1
+                                    strokeWidth=1.5
                                 ).encode(y='y:Q')
 
-                                # Combine chart (background duty periods + line + thresholds)
-                                combined_chart = (duty_background + line + danger_line + warning_line).configure_axis(
+                                # === WORK/LAYOVER/SLEEP/FLIGHT MARKERS AT BOTTOM ===
+                                # Get sleep periods from SAFTE analysis
+                                sleep_periods = analysis.get('sleep_periods', [])
+
+                                # Extract flight markers with routes and times
+                                flight_markers = []
+                                for duty_day in trip_data.get('duty_days', []):
+                                    for flight in duty_day.get('flights', []):
+                                        route = flight.get('route', '')
+                                        depart_time_str = flight.get('depart', '')
+                                        if route and depart_time_str:
+                                            # Parse departure time to datetime
+                                            from safte_integration import parse_local_time
+                                            time_parts = parse_local_time(depart_time_str)
+                                            if time_parts:
+                                                hour, minute, second = time_parts
+                                                # Use same reference date as duty periods
+                                                # Find which duty period this belongs to and use its date
+                                                for dp_start, dp_end in duty_periods:
+                                                    # Check if this time could belong to this duty period
+                                                    flight_time = dp_start.replace(hour=hour, minute=minute, second=second)
+                                                    if dp_start <= flight_time <= dp_end:
+                                                        flight_markers.append({
+                                                            'time': flight_time,
+                                                            'route': route,
+                                                            'y': -40  # Position below sleep bars with more spacing
+                                                        })
+                                                        break
+
+                                # Create work period bars at bottom (y: -10 to -5) with tooltip data
+                                work_bars = []
+                                for idx, (duty_start, duty_end) in enumerate(duty_periods, 1):
+                                    duration_hours = (duty_end - duty_start).total_seconds() / 3600
+
+                                    # Extract flight routes for this duty period
+                                    routes_list = []
+                                    duty_day_data = trip_data.get('duty_days', [])
+                                    if idx - 1 < len(duty_day_data):
+                                        flights = duty_day_data[idx - 1].get('flights', [])
+                                        for flight in flights:
+                                            route = flight.get('route', '')
+                                            if route:
+                                                routes_list.append(route)
+
+                                    # Format routes as comma-separated string, or show count if no routes
+                                    if routes_list:
+                                        routes_display = ', '.join(routes_list)
+                                    else:
+                                        routes_display = f'{len(routes_list)} legs' if routes_list else 'No flights'
+
+                                    work_bars.append({
+                                        'start': duty_start,
+                                        'end': duty_end,
+                                        'y1': -10,
+                                        'y2': -5,
+                                        'type': 'Duty',
+                                        'duty_num': f'Duty {idx}',
+                                        'start_time': duty_start.strftime('%a %m/%d %H:%M'),
+                                        'end_time': duty_end.strftime('%a %m/%d %H:%M'),
+                                        'duration': f'{duration_hours:.1f}h',
+                                        'routes': routes_display
+                                    })
+
+                                work_periods_chart = alt.Chart(pd.DataFrame(work_bars)).mark_rect(
+                                    color='#333333',  # Dark gray
+                                    opacity=0.9
+                                ).encode(
+                                    x='start:T',
+                                    x2='end:T',
+                                    y='y1:Q',
+                                    y2='y2:Q',
+                                    tooltip=[
+                                        alt.Tooltip('duty_num:N', title='Duty Period'),
+                                        alt.Tooltip('start_time:N', title='Start'),
+                                        alt.Tooltip('end_time:N', title='End'),
+                                        alt.Tooltip('duration:N', title='Duration'),
+                                        alt.Tooltip('routes:N', title='Routes')
+                                    ]
+                                ) if work_bars else alt.Chart(pd.DataFrame()).mark_point()
+
+                                # Calculate layover periods (gaps between duty periods, within trip timeframe)
+                                layover_bars = []
+                                sorted_duties = sorted(duty_periods, key=lambda x: x[0])
+                                for i in range(len(sorted_duties) - 1):
+                                    layover_start = sorted_duties[i][1]
+                                    layover_end = sorted_duties[i + 1][0]
+                                    # Only show layovers that are within the trip window and meaningful (>30 min)
+                                    if layover_end > layover_start and (layover_end - layover_start).total_seconds() > 1800:
+                                        duration_hours = (layover_end - layover_start).total_seconds() / 3600
+                                        layover_bars.append({
+                                            'start': layover_start,
+                                            'end': layover_end,
+                                            'y1': -18,
+                                            'y2': -13,
+                                            'type': 'Layover',
+                                            'layover_num': f'Layover {i+1}',
+                                            'start_time': layover_start.strftime('%a %m/%d %H:%M'),
+                                            'end_time': layover_end.strftime('%a %m/%d %H:%M'),
+                                            'duration': f'{duration_hours:.1f}h'
+                                        })
+
+                                layover_periods_chart = alt.Chart(pd.DataFrame(layover_bars)).mark_rect(
+                                    color='#D3D3D3',  # Light gray
+                                    opacity=0.7
+                                ).encode(
+                                    x='start:T',
+                                    x2='end:T',
+                                    y='y1:Q',
+                                    y2='y2:Q',
+                                    tooltip=[
+                                        alt.Tooltip('layover_num:N', title='Rest Period'),
+                                        alt.Tooltip('start_time:N', title='Start'),
+                                        alt.Tooltip('end_time:N', title='End'),
+                                        alt.Tooltip('duration:N', title='Duration')
+                                    ]
+                                ) if layover_bars else alt.Chart(pd.DataFrame()).mark_point()
+
+                                # Create sleep period bars from SAFTE predictions (y: -26 to -21)
+                                sleep_bars = []
+                                for idx, (sleep_start, sleep_end) in enumerate(sleep_periods, 1):
+                                    # Only show sleep within chart window
+                                    if chart_start <= sleep_start <= chart_end or chart_start <= sleep_end <= chart_end:
+                                        actual_start = max(sleep_start, chart_start)
+                                        actual_end = min(sleep_end, chart_end)
+                                        duration_hours = (sleep_end - sleep_start).total_seconds() / 3600
+                                        sleep_bars.append({
+                                            'start': actual_start,
+                                            'end': actual_end,
+                                            'y1': -26,
+                                            'y2': -21,
+                                            'type': 'Sleep',
+                                            'sleep_num': f'Sleep {idx}',
+                                            'start_time': sleep_start.strftime('%a %m/%d %H:%M'),
+                                            'end_time': sleep_end.strftime('%a %m/%d %H:%M'),
+                                            'duration': f'{duration_hours:.1f}h'
+                                        })
+
+                                sleep_periods_chart = alt.Chart(pd.DataFrame(sleep_bars)).mark_rect(
+                                    color='#4169E1',  # Royal blue
+                                    opacity=0.9
+                                ).encode(
+                                    x='start:T',
+                                    x2='end:T',
+                                    y='y1:Q',
+                                    y2='y2:Q',
+                                    tooltip=[
+                                        alt.Tooltip('sleep_num:N', title='Sleep Period'),
+                                        alt.Tooltip('start_time:N', title='Start'),
+                                        alt.Tooltip('end_time:N', title='End'),
+                                        alt.Tooltip('duration:N', title='Duration')
+                                    ]
+                                ) if sleep_bars else alt.Chart(pd.DataFrame()).mark_point()
+
+                                # Flight route markers as text labels
+                                flight_markers_chart = alt.Chart(pd.DataFrame(flight_markers)).mark_text(
+                                    fontSize=8,  # Slightly smaller to reduce overlap
+                                    dx=0,  # Centered on departure time
+                                    dy=0,  # No offset - position directly at y
+                                    color='#555555',
+                                    fontWeight=500
+                                ).encode(
+                                    x='time:T',
+                                    y=alt.Y('y:Q'),
+                                    text='route:N',
+                                    angle=alt.value(315)  # 315 degrees = -45 degrees (angled like SAFTE-FAST)
+                                ) if flight_markers else alt.Chart(pd.DataFrame()).mark_point()
+
+                                # === COMBINE ALL LAYERS ===
+                                # Layer background zones and bars with effectiveness line (left y-axis)
+                                left_axis_chart = (
+                                    pink_zone + orange_zone + yellow_zone + green_zone +
+                                    circadian_area + circadian_line +  # Circadian area + line for visibility
+                                    effectiveness_line +
+                                    danger_line + warning_line +
+                                    work_periods_chart + layover_periods_chart + sleep_periods_chart +
+                                    flight_markers_chart  # Flight route labels
+                                )
+
+                                # Combine with reservoir line (right y-axis) using independent scales
+                                combined_chart = alt.layer(
+                                    left_axis_chart,
+                                    reservoir_line
+                                ).resolve_scale(
+                                    y='independent'  # Allow independent y-axes
+                                ).properties(
+                                    width='container',
+                                    height=500,  # Increased from 400 to give more vertical space
+                                    padding={'bottom': 80}  # Extra bottom padding for flight labels
+                                ).configure_axis(
                                     labelFontSize=11,
                                     titleFontSize=12
                                 ).configure_view(
@@ -835,8 +1144,14 @@ def display_edw_results(result_data: Dict):
 
                                 st.altair_chart(combined_chart, use_container_width=True)
 
-                                # Add legend
-                                st.caption("🔵 Blue shaded areas: On Duty | White areas: Layover/Sleep (recovery) | 🔴 Red line: Danger (77.5%) | 🟠 Orange line: Warning (85%)")
+                                # Enhanced legend with all elements
+                                st.caption(
+                                    "**Lines:** ⬛ Black solid: Effectiveness (left axis) | 🔴 Red dashed: Sleep Reservoir % (right axis) | 🔵 Blue: Circadian Rhythm | "
+                                    "🔴 Red line: Danger (70%) | 🟧 Orange line: Warning (82%)  \n"
+                                    "**Bottom Bars:** ⬛ Duty (Work) | ◻️ Layover (Rest) | 🔵 Sleep (Predicted) — *Hover for details*  \n"
+                                    "**Background Zones:** 🟩 Green: >82% (Optimal) | 🟨 Yellow: 70-82% (Caution) | "
+                                    "🟧 Orange: 60-70% (Danger) | 🟥 Pink: <60% (Severe)"
+                                )
 
                                 # Additional details in expander
                                 with st.expander("📊 Detailed Fatigue Statistics", expanded=False):
@@ -854,8 +1169,34 @@ def display_edw_results(result_data: Dict):
                                         st.write(f"• Below 85%: {metrics['time_below_warning_threshold_minutes']} min")
                                         st.write(f"• Duty periods: {len(duty_periods)}")
 
-                                    st.info("💡 **Note:** SAFTE model uses predicted sleep periods based on duty schedule. "
-                                           "Actual fatigue may vary based on individual sleep patterns and commute times.")
+                                    # Add layover and sleep statistics
+                                    st.divider()
+                                    rest_cols = st.columns(2)
+
+                                    with rest_cols[0]:
+                                        st.markdown("**Layover Periods:**")
+                                        if layover_bars:
+                                            total_layover_hours = sum((bar['end'] - bar['start']).total_seconds() / 3600 for bar in layover_bars)
+                                            st.write(f"• Count: {len(layover_bars)}")
+                                            st.write(f"• Total: {total_layover_hours:.1f} hrs")
+                                            avg_layover = total_layover_hours / len(layover_bars)
+                                            st.write(f"• Average: {avg_layover:.1f} hrs")
+                                        else:
+                                            st.write("• No layovers in trip")
+
+                                    with rest_cols[1]:
+                                        st.markdown("**Predicted Sleep Periods:**")
+                                        if sleep_bars:
+                                            total_sleep_hours = sum((bar['end'] - bar['start']).total_seconds() / 3600 for bar in sleep_bars)
+                                            st.write(f"• Count: {len(sleep_bars)}")
+                                            st.write(f"• Total: {total_sleep_hours:.1f} hrs")
+                                            avg_sleep = total_sleep_hours / len(sleep_bars)
+                                            st.write(f"• Average: {avg_sleep:.1f} hrs/period")
+                                        else:
+                                            st.write("• No sleep periods predicted")
+
+                                    st.info("💡 **Note:** SAFTE model uses predicted sleep periods based on duty schedule and circadian rhythm. "
+                                           "Actual fatigue may vary based on individual sleep patterns, commute times, and personal factors.")
                             else:
                                 st.warning("No duty period data available for charting.")
             else:
@@ -886,15 +1227,24 @@ def display_edw_results(result_data: Dict):
     with col2:
         # Professional Executive PDF Report
         try:
+            # Extract values for calculations
+            total_trips = result_data["res"]["trip_summary"].loc[1, "Value"]
+            hot_standby_trips = result_data["res"]["hot_standby_summary"].loc[1, "Value"]
+            non_hot_standby_trips = total_trips - hot_standby_trips
+
             # Prepare data for professional PDF
             pdf_data = {
                 "title": f"{dom} {ac} – Bid {bid}",
                 "subtitle": "Executive Dashboard • Pairing Breakdown & Duty-Day Metrics",
                 "trip_summary": {
                     "Unique Pairings": result_data["res"]["trip_summary"].loc[0, "Value"],
-                    "Total Trips": result_data["res"]["trip_summary"].loc[1, "Value"],
+                    "Total Trips": {
+                        "value": total_trips,
+                        "subtitle": f"Non-HSBY: {non_hot_standby_trips}"
+                    },
                     "EDW Trips": result_data["res"]["trip_summary"].loc[2, "Value"],
                     "Day Trips": result_data["res"]["trip_summary"].loc[3, "Value"],
+                    "Hot Standby Trips": hot_standby_trips,
                 },
                 "weighted_summary": {
                     "Trip-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[0, "Value"],

@@ -227,44 +227,26 @@ def predict_sleep_periods(duty_periods, commute_time=DEFAULT_COMMUTE_TIME):
 
     for i in range(len(sorted_duties)):
         duty_end = sorted_duties[i][1]
-        layover_start = duty_end + commute_time
+
+        # Allow wind-down time after duty ends (commute + 1 hour to decompress)
+        wind_down_buffer = commute_time + timedelta(hours=1)
+        sleep_start = duty_end + wind_down_buffer
 
         # Determine the start of the next duty period
         next_duty_start = None
         if i + 1 < len(sorted_duties):
-            next_duty_start = sorted_duties[i+1][0] - commute_time
+            next_duty_start = sorted_duties[i+1][0] - commute_time - timedelta(hours=1)  # Wake time before next duty
 
-        # Rule 1: Work ends between 00:00 and 11:59
-        if 0 <= duty_end.hour < 12:
-            sleep_start = layover_start
-            sleep_end = sleep_start + MAX_SLEEP_PER_DAY
+        # Sleep for up to 8 hours, or until next duty wake time, whichever is shorter
+        sleep_end = sleep_start + MAX_SLEEP_PER_DAY
 
-            # Ensure sleep doesn't overlap with the next duty
-            if next_duty_start and sleep_end > next_duty_start:
-                sleep_end = next_duty_start
+        # Ensure sleep doesn't overlap with the next duty wake time
+        if next_duty_start and sleep_end > next_duty_start:
+            sleep_end = next_duty_start
 
-            # Ensure sleep period is of a minimum duration
-            if sleep_end - sleep_start >= MIN_SLEEP_PERIOD:
-                sleep_periods.append((sleep_start, sleep_end))
-
-        # Rule 2: Work ends between 12:00 and 23:59
-        else:
-            # Delay sleep until after the forbidden zone
-            potential_sleep_start = duty_end.replace(hour=NORMAL_BEDTIME_HOUR, minute=0, second=0)
-
-            # If bedtime has already passed for that day, move to the next day
-            if potential_sleep_start < layover_start:
-                potential_sleep_start += timedelta(days=1)
-
-            sleep_start = max(layover_start, potential_sleep_start)
-            sleep_end = sleep_start + MAX_SLEEP_PER_DAY
-
-            # Ensure sleep doesn't overlap with the next duty
-            if next_duty_start and sleep_end > next_duty_start:
-                sleep_end = next_duty_start
-
-            if sleep_end - sleep_start >= MIN_SLEEP_PERIOD:
-                sleep_periods.append((sleep_start, sleep_end))
+        # Only add sleep period if it meets minimum duration (2 hours)
+        if sleep_end - sleep_start >= MIN_SLEEP_PERIOD:
+            sleep_periods.append((sleep_start, sleep_end))
 
     return sleep_periods
 

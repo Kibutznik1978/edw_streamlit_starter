@@ -120,6 +120,7 @@ def _make_professional_table(data, col_widths=None):
 def extract_pdf_header_info(pdf_path: Path):
     """
     Extract bid period, domicile, fleet type, and date range from PDF header.
+    Handles PDFs with cover pages by searching first 3 pages.
     Returns a dictionary with the extracted information.
     """
     reader = PdfReader(str(pdf_path))
@@ -132,9 +133,6 @@ def extract_pdf_header_info(pdf_path: Path):
             'report_date': 'Unknown'
         }
 
-    # Extract text from first page to get header info
-    first_page_text = reader.pages[0].extract_text()
-
     # Initialize results
     result = {
         'bid_period': 'Unknown',
@@ -144,30 +142,47 @@ def extract_pdf_header_info(pdf_path: Path):
         'report_date': 'Unknown'
     }
 
-    # Extract Bid Period (e.g., "Bid Period : 2601")
-    bid_period_match = re.search(r"Bid\s+Period\s*:\s*(\d+)", first_page_text, re.IGNORECASE)
-    if bid_period_match:
-        result['bid_period'] = bid_period_match.group(1)
+    # Try first 3 pages to handle cover pages
+    max_pages_to_check = min(3, len(reader.pages))
 
-    # Extract Domicile (e.g., "Domicile: ONT")
-    domicile_match = re.search(r"Domicile\s*:\s*([A-Z]{3})", first_page_text, re.IGNORECASE)
-    if domicile_match:
-        result['domicile'] = domicile_match.group(1)
+    for page_num in range(max_pages_to_check):
+        page_text = reader.pages[page_num].extract_text()
 
-    # Extract Fleet Type (e.g., "Fleet Type: 757")
-    fleet_match = re.search(r"Fleet\s+Type\s*:\s*([A-Z0-9\-]+)", first_page_text, re.IGNORECASE)
-    if fleet_match:
-        result['fleet_type'] = fleet_match.group(1)
+        # Extract Bid Period (e.g., "Bid Period : 2601")
+        if result['bid_period'] == 'Unknown':
+            bid_period_match = re.search(r"Bid\s+Period\s*:\s*(\d+)", page_text, re.IGNORECASE)
+            if bid_period_match:
+                result['bid_period'] = bid_period_match.group(1)
 
-    # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 30Nov2025 - 25Jan2026")
-    date_range_match = re.search(r"Bid\s+Period\s+Date\s+Range\s*:\s*(.+?)(?:\n|Date/Time)", first_page_text, re.IGNORECASE)
-    if date_range_match:
-        result['date_range'] = date_range_match.group(1).strip()
+        # Extract Domicile (e.g., "Domicile: ONT")
+        if result['domicile'] == 'Unknown':
+            domicile_match = re.search(r"Domicile\s*:\s*([A-Z]{3})", page_text, re.IGNORECASE)
+            if domicile_match:
+                result['domicile'] = domicile_match.group(1)
 
-    # Extract Date/Time (e.g., "Date/Time: 16Oct2025 16:32")
-    report_date_match = re.search(r"Date/Time\s*:\s*(.+?)(?:\n|$)", first_page_text, re.IGNORECASE)
-    if report_date_match:
-        result['report_date'] = report_date_match.group(1).strip()
+        # Extract Fleet Type (e.g., "Fleet Type: 757")
+        if result['fleet_type'] == 'Unknown':
+            fleet_match = re.search(r"Fleet\s+Type\s*:\s*([A-Z0-9\-]+)", page_text, re.IGNORECASE)
+            if fleet_match:
+                result['fleet_type'] = fleet_match.group(1)
+
+        # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 30Nov2025 - 25Jan2026")
+        if result['date_range'] == 'Unknown':
+            date_range_match = re.search(r"Bid\s+Period\s+Date\s+Range\s*:\s*(.+?)(?:\n|Date/Time)", page_text, re.IGNORECASE)
+            if date_range_match:
+                result['date_range'] = date_range_match.group(1).strip()
+
+        # Extract Date/Time (e.g., "Date/Time: 16Oct2025 16:32")
+        if result['report_date'] == 'Unknown':
+            report_date_match = re.search(r"Date/Time\s*:\s*(.+?)(?:\n|$)", page_text, re.IGNORECASE)
+            if report_date_match:
+                result['report_date'] = report_date_match.group(1).strip()
+
+        # If we found all required fields, no need to check more pages
+        if (result['bid_period'] != 'Unknown' and
+            result['domicile'] != 'Unknown' and
+            result['fleet_type'] != 'Unknown'):
+            break
 
     return result
 
@@ -635,6 +650,14 @@ def parse_trip_for_table(trip_text):
 
         if is_briefing or is_fallback_duty_start:
             if current_duty:
+                # FALLBACK: If duty_end wasn't captured, try to extract from last flight's arrival
+                if not current_duty.get('duty_end') and current_duty.get('flights'):
+                    last_flight = current_duty['flights'][-1]
+                    arrive_time = last_flight.get('arrive', '')
+                    # Check if it matches the (HH)MM:SS pattern
+                    if re.match(r'\(\d+\)\d{2}:\d{2}', arrive_time):
+                        current_duty['duty_end'] = arrive_time
+
                 duty_days.append(current_duty)
 
             # Capture briefing time and duty time from the line
@@ -954,6 +977,14 @@ def parse_trip_for_table(trip_text):
 
     # Append last duty day
     if current_duty:
+        # FALLBACK: If duty_end wasn't captured, try to extract from last flight's arrival
+        if not current_duty.get('duty_end') and current_duty.get('flights'):
+            last_flight = current_duty['flights'][-1]
+            arrive_time = last_flight.get('arrive', '')
+            # Check if it matches the (HH)MM:SS pattern
+            if re.match(r'\(\d+\)\d{2}:\d{2}', arrive_time):
+                current_duty['duty_end'] = arrive_time
+
         duty_days.append(current_duty)
 
     # Parse trip summary
