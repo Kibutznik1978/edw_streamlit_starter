@@ -135,6 +135,7 @@ This module implements the SAFTE (Sleep, Activity, Fatigue, Task Effectiveness) 
 - **AutoSleep Algorithm**: Rule-based prediction of sleep periods from duty schedules
 - **Minute-by-Minute Simulation**: Temporal resolution for accurate fatigue tracking
 - **Scientific Validation**: Based on Federal Railroad Administration studies
+- **Aviation Standard Initial Conditions**: Default 90% reservoir (2592 units) per AvORM aviation standards - pilots typically don't start trips fully rested
 
 Key constants:
 - `RESERVOIR_CAPACITY = 2880.0` - 4 days without sleep
@@ -148,9 +149,9 @@ Key functions:
 - `calculate_sleep_propensity()` - Sleep pressure for inertia calculations
 - `calculate_sleep_inertia()` - Post-awakening grogginess (uses fixed awakening intensity - Session 17 fix)
 - `calculate_performance_rhythm()` - Circadian modulation with fatigue amplification
-- `calculate_effectiveness()` - Final cognitive effectiveness (0-100%)
+- `calculate_effectiveness()` - Final cognitive effectiveness (0-100%, clamped per aviation standards)
 - `predict_sleep_periods()` - AutoSleep algorithm
-- `run_safte_simulation()` - Main orchestration with minute-by-minute results
+- `run_safte_simulation()` - Main orchestration with minute-by-minute results (defaults to 90% initial reservoir)
 
 **Session 17 Critical Fixes:**
 - ✅ Sleep reservoir now uses official exponential saturation formula (prevents negative accumulation)
@@ -293,24 +294,25 @@ Since this is a Streamlit app without formal tests:
 - **Session state conflicts**: Ensure all widget keys are unique across tabs
 - **Table width**: Pairing detail table uses responsive CSS (50%/80%/100% based on screen width)
 
-## Recent Changes (Session 17 - October 22, 2025)
+## Recent Changes (Session 20 - October 24, 2025)
 
-- **SAFTE Model Scientific Validation**: Complete component-by-component analysis as expert fatigue researcher
-- **Critical Bug Fixes**: 3 major bugs corrected to match official SAFTE specification
-  - Sleep reservoir: Fixed exponential saturation formula (was allowing negative accumulation)
-  - Circadian rhythm: Fixed time reference (now uses clock time instead of elapsed time)
-  - Sleep inertia: Fixed awakening capture (now uses constant decay rate)
-- **Test Suites Created**: 3 comprehensive test files with 19 tests total (all passing)
-  - `test_sleep_reservoir.py` - 9 unit tests for reservoir behavior
-  - `test_circadian_fix.py` - 5 circadian validation tests
-  - `test_safte_integration.py` - 5 integration tests with realistic scenarios
-- **Scientific Validation**: All formulas verified against Hursh et al., 2004 and FAST Phase II SBIR Report (ADA452991)
-- **Next Session**: Deep validation of performance rhythm and effectiveness calculations
+- **Critical PDF Parsing Bug Fixes**: Fixed all debrief completion times, L/O fields, and duty day boundaries
+  - **Debrief Completion**: Extended look-ahead to 15 lines, continues past Rest/Credit markers without breaking
+  - **Duty Day Boundaries**: Connection time lookup now stops at duty start patterns (time + duration + "Duty")
+  - **L/O Field Parsing**: Continues past Rest marker to find debrief time without advancing offset
+  - **Impact**: All 7 duty days in Trip 204 properly separated (was incorrectly showing 6)
+  - **Impact**: All L/O fields captured including critical 50h39 layover for SAFTE multi-day analysis
+  - **Impact**: All debrief times show arrival + 15min correctly in pairing table
+  - **Result**: SAFTE fatigue analysis now works correctly for trips with multi-day layovers (50+ hours)
+  - **Test Case**: Trip 204 - 7 duty days, 50-hour layover between Duty Days 5 and 6
 
-See `handoff/sessions/session-17.md` for detailed session notes.
+See `handoff/sessions/session-20.md` for detailed session notes.
 
 ### Previous Major Changes
 
+**Session 19 (Oct 24, 2025)**: SAFTE initial conditions fix - 90% aviation standard (10% more conservative)
+**Session 18 (Oct 24, 2025)**: PDF export enhancements & SAFTE fixes (time parsing, AutoSleep, date advancement)
+**Session 17 (Oct 22, 2025)**: SAFTE scientific validation (sleep reservoir, circadian rhythm, sleep inertia fixes)
 **Session 16 (Oct 22, 2025)**: SAFTE visualization aligned with industry standards (dual y-axis, danger thresholds)
 **Session 15 (Oct 22, 2025)**: SAFTE fatigue analysis integration with interactive UI
 **Session 14 (Oct 21, 2025)**: Aero Crew Data brand integration across all PDF exports

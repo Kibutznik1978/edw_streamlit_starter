@@ -650,12 +650,16 @@ def parse_trip_for_table(trip_text):
 
         if is_briefing or is_fallback_duty_start:
             if current_duty:
-                # FALLBACK: If duty_end wasn't captured, try to extract from last flight's arrival
+                # FALLBACK: If duty_end wasn't captured, extract from last flight
                 if not current_duty.get('duty_end') and current_duty.get('flights'):
                     last_flight = current_duty['flights'][-1]
+                    # Prefer debrief_completion time if available, otherwise use arrival time
+                    debrief_time = last_flight.get('debrief_completion', '')
                     arrive_time = last_flight.get('arrive', '')
-                    # Check if it matches the (HH)MM:SS pattern
-                    if re.match(r'\(\d+\)\d{2}:\d{2}', arrive_time):
+
+                    if debrief_time and re.match(r'\(\d+\)\d{2}:\d{2}', debrief_time):
+                        current_duty['duty_end'] = debrief_time
+                    elif arrive_time and re.match(r'\(\d+\)\d{2}:\d{2}', arrive_time):
                         current_duty['duty_end'] = arrive_time
 
                 duty_days.append(current_duty)
@@ -715,13 +719,18 @@ def parse_trip_for_table(trip_text):
         if current_duty and (is_debriefing or is_fallback_duty_end):
             # Capture debriefing time and credit from the line
             # Multi-line format: "Debriefing" on one line, time on next
-            # Single-line format: "Debriefing (16)22:52 0h15 Credit 6h19L ..."
+            # Single-line format: "Debriefing (16)22:10 (16)22:25 0h15 Credit 6h19L ..."
+            #                     The line shows: arrival_time actual_debrief_time debrief_duration
             # Fallback format: "Duty Time:" followed by duration, then time
 
             # Try to extract from same line (single-line format)
-            time_match = re.search(r'\((\d+)\)(\d{2}:\d{2})', line)
-            if time_match:
-                current_duty['duty_end'] = f"({time_match.group(1)}){time_match.group(2)}"
+            # Look for ALL time patterns - the LAST one is the actual duty end (after debrief period)
+            time_matches = re.findall(r'\((\d+)\)(\d{2}:\d{2})', line)
+            if time_matches:
+                # If there are multiple times, take the last one (actual debrief time)
+                # If only one time, use it (older format without separate arrival/debrief times)
+                last_time = time_matches[-1]
+                current_duty['duty_end'] = f"({last_time[0]}){last_time[1]}"
 
             # Fallback: For "Duty Time:" pattern, duty end time is 2 lines down
             if is_fallback_duty_end and i + 2 < len(lines):
@@ -825,12 +834,15 @@ def parse_trip_for_table(trip_text):
                     if route_match:
                         flight_data['route'] = route_match.group(1)
 
-                    # Extract times (depart and arrive)
+                    # Extract times (depart, arrive, and possibly debrief_completion)
                     time_matches = re.findall(r'\((\d+)\)(\d{2}:\d{2})', line)
                     if len(time_matches) >= 1:
                         flight_data['depart'] = f"({time_matches[0][0]}){time_matches[0][1]}"
                     if len(time_matches) >= 2:
                         flight_data['arrive'] = f"({time_matches[1][0]}){time_matches[1][1]}"
+                    if len(time_matches) >= 3:
+                        # Third time is debrief completion (for last flight of duty day)
+                        flight_data['debrief_completion'] = f"({time_matches[2][0]}){time_matches[2][1]}"
 
                     # Extract block time (first time duration after times)
                     block_match = re.search(r'(\d+h\d+)', line)
@@ -890,6 +902,44 @@ def parse_trip_for_table(trip_text):
                             flight_data['arrive'] = potential_arrive
                             offset += 1
 
+                            # Check for debrief completion time in the next few lines
+                            # For the last flight of a duty day, there's a line with debrief completion
+                            # Format can be either:
+                            #   - Same line: "(04)10:43 0h15" or "(04)10:43   0h15"
+                            #   - Next line: "(04)10:43" followed by "0h15" on next line
+                            # This might not be immediately after arrive - could be after block, A/C, crew, credit, etc.
+                            # The debrief time appears AFTER Rest marker, so we need to continue past it
+                            for look_ahead in range(min(15, len(lines) - i - offset)):
+                                if i + offset + look_ahead >= len(lines):
+                                    break
+                                current_line = lines[i + offset + look_ahead].strip()
+                                next_line = lines[i + offset + look_ahead + 1].strip() if i + offset + look_ahead + 1 < len(lines) else ''
+
+                                # Skip past duty summary markers (Rest, Block, Credit) without breaking
+                                # because debrief completion appears AFTER the Rest field
+                                if current_line in ['Rest', 'Block', 'Credit', 'Duty', 'Premium', 'per Diem']:
+                                    continue
+
+                                # Skip past layover values (e.g., "14h21 S1", "0.0", "599.08")
+                                if re.match(r'^\d+h\d+', current_line) or re.match(r'^\d+\.\d+$', current_line):
+                                    continue
+
+                                # Check if current line is a time pattern
+                                time_match = re.match(r'^\((\d+)\)(\d{2}:\d{2})(.*)$', current_line)
+                                if time_match:
+                                    # Check if it has 0h15/0h30 on same line OR on next line
+                                    remainder = time_match.group(3)
+                                    if re.search(r'0h1[05]|0h30', remainder):
+                                        # Debrief duration on same line - DON'T advance offset
+                                        # Let the main loop handle Rest/Credit fields naturally
+                                        flight_data['debrief_completion'] = f"({time_match.group(1)}){time_match.group(2)}"
+                                        break
+                                    elif re.match(r'^0h1[05]|0h30', next_line):
+                                        # Debrief duration on next line - DON'T advance offset
+                                        # Let the main loop handle Rest/Credit fields naturally
+                                        flight_data['debrief_completion'] = f"({time_match.group(1)}){time_match.group(2)}"
+                                        break
+
                     # Block time
                     if i + offset < len(lines):
                         potential_block = lines[i + offset].strip()
@@ -905,10 +955,25 @@ def parse_trip_for_table(trip_text):
                             offset += 1
 
                     # Connection time (look ahead a bit if needed)
+                    # BUT: Don't advance past a duty start pattern (time + duration + "Duty")
                     max_look_ahead = 3
                     for look in range(max_look_ahead):
                         if i + offset + look >= len(lines):
                             break
+
+                        # Check if this looks like the start of a new duty day
+                        # Pattern: (HH)MM:SS followed by duration followed by "Duty"
+                        curr_line = lines[i + offset + look].strip()
+                        next_next_line = lines[i + offset + look + 1].strip() if i + offset + look + 1 < len(lines) else ''
+                        next_next_next_line = lines[i + offset + look + 2].strip() if i + offset + look + 2 < len(lines) else ''
+
+                        # If current line is a time pattern, next is duration, and next+1 is "Duty", stop here
+                        if (re.match(r'\((\d+)\)(\d{2}:\d{2})', curr_line) and
+                            re.match(r'(\d+)h(\d+)', next_next_line) and
+                            next_next_next_line == 'Duty'):
+                            # This is a new duty start - don't advance past it
+                            break
+
                         potential_conn = lines[i + offset + look].strip()
                         if re.match(r'^\d+h\d+$', potential_conn):
                             flight_data['connection'] = potential_conn
@@ -977,12 +1042,16 @@ def parse_trip_for_table(trip_text):
 
     # Append last duty day
     if current_duty:
-        # FALLBACK: If duty_end wasn't captured, try to extract from last flight's arrival
+        # FALLBACK: If duty_end wasn't captured, extract from last flight
         if not current_duty.get('duty_end') and current_duty.get('flights'):
             last_flight = current_duty['flights'][-1]
+            # Prefer debrief_completion time if available, otherwise use arrival time
+            debrief_time = last_flight.get('debrief_completion', '')
             arrive_time = last_flight.get('arrive', '')
-            # Check if it matches the (HH)MM:SS pattern
-            if re.match(r'\(\d+\)\d{2}:\d{2}', arrive_time):
+
+            if debrief_time and re.match(r'\(\d+\)\d{2}:\d{2}', debrief_time):
+                current_duty['duty_end'] = debrief_time
+            elif arrive_time and re.match(r'\(\d+\)\d{2}:\d{2}', arrive_time):
                 current_duty['duty_end'] = arrive_time
 
         duty_days.append(current_duty)

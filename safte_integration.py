@@ -8,6 +8,7 @@ Converts duty day schedules into the format required by run_safte_simulation().
 from datetime import datetime, timedelta
 import re
 from typing import List, Tuple, Dict, Optional
+from dateutil import parser as date_parser
 
 
 def parse_local_time(time_str: str) -> Optional[Tuple[int, int, int]]:
@@ -45,6 +46,35 @@ def parse_local_time(time_str: str) -> Optional[Tuple[int, int, int]]:
     return (local_hour, minute, second)
 
 
+def parse_layover_duration(layover_str: str) -> Optional[float]:
+    """
+    Parse layover duration string from L/O field.
+
+    Args:
+        layover_str: Layover string like "50h39 S1" or "12h30"
+
+    Returns:
+        Duration in hours (float) or None if parsing fails
+
+    Examples:
+        "50h39 S1" -> 50.65 (50 hours + 39/60 hours)
+        "12h30" -> 12.5
+        "24h00" -> 24.0
+    """
+    if not layover_str:
+        return None
+
+    # Pattern: {hours}h{minutes} followed by optional rest type code
+    match = re.match(r'(\d+)h(\d+)', layover_str.strip())
+    if not match:
+        return None
+
+    hours = int(match.group(1))
+    minutes = int(match.group(2))
+
+    return hours + (minutes / 60.0)
+
+
 def trip_to_duty_periods(
     parsed_trip: Dict,
     reference_date: Optional[datetime] = None
@@ -55,7 +85,7 @@ def trip_to_duty_periods(
     Args:
         parsed_trip: Trip structure from parse_trip_for_table()
                     Expected keys: 'trip_id', 'duty_days', 'date_freq', 'trip_summary'
-                    Each duty_day has: 'duty_start', 'duty_end', 'flights', etc.
+                    Each duty_day has: 'duty_start', 'duty_end', 'rest' (L/O), etc.
         reference_date: Starting date for the trip. If None, uses current date.
 
     Returns:
@@ -63,9 +93,9 @@ def trip_to_duty_periods(
 
     Notes:
         - Uses local times from the parsed trip data
-        - Assumes duty days are sequential (day 1, day 2, etc.)
+        - Uses L/O (layover) field from previous duty day to determine exact dates
         - If duty spans midnight, automatically handles date rollover
-        - Time zone information is implicit in the local hour notation (HH)
+        - Fallback to heuristic date advancement if L/O field is missing
     """
     if reference_date is None:
         reference_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -73,11 +103,11 @@ def trip_to_duty_periods(
     duty_days = parsed_trip.get('duty_days', [])
     duty_periods = []
 
-    # Track the last duty end time to determine when next duty should start
+    # Track the last duty end time and use layover duration for accurate date calculation
     last_duty_end = None
     current_date = reference_date
 
-    for duty_day in duty_days:
+    for duty_idx, duty_day in enumerate(duty_days):
         duty_start_str = duty_day.get('duty_start')
         duty_end_str = duty_day.get('duty_end')
 
@@ -97,6 +127,55 @@ def trip_to_duty_periods(
             continue
         end_hour, end_min, end_sec = end_parts
 
+        # For duty days after the first, use the L/O field from the PREVIOUS duty day
+        if last_duty_end is not None and duty_idx > 0:
+            # Get the rest (L/O) field from the previous duty day
+            prev_duty_day = duty_days[duty_idx - 1]
+            layover_str = prev_duty_day.get('rest')
+            layover_duration = parse_layover_duration(layover_str)
+
+            if layover_duration is not None:
+                # Use actual layover duration from PDF
+                # The layover duration gives us the time from debriefing to briefing
+                # Calculate expected briefing time
+                calculated_briefing = last_duty_end + timedelta(hours=layover_duration)
+
+                # Extract just the date portion for finding which day the duty starts on
+                # We'll use the parsed time (start_hour:start_min) for the actual time
+                # First, try using the same date as calculated_briefing
+                current_date = calculated_briefing.replace(hour=0, minute=0, second=0, microsecond=0)
+
+                # Create candidate duty start with the parsed local time
+                duty_start_candidate = current_date.replace(
+                    hour=start_hour,
+                    minute=start_min,
+                    second=start_sec,
+                    microsecond=0
+                )
+
+                # If the candidate is before the calculated briefing time,
+                # it means the briefing happens the next day (e.g., layover ends at 18:49,
+                # but briefing is at 05:15, so it must be the next day)
+                if duty_start_candidate < calculated_briefing:
+                    current_date += timedelta(days=1)
+            else:
+                # Fallback: If L/O field is missing, calculate the time difference
+                # Advance date until duty_start time makes sense
+                duty_start_candidate = current_date.replace(
+                    hour=start_hour,
+                    minute=start_min,
+                    second=start_sec,
+                    microsecond=0
+                )
+                while duty_start_candidate <= last_duty_end + timedelta(hours=2):
+                    current_date += timedelta(days=1)
+                    duty_start_candidate = current_date.replace(
+                        hour=start_hour,
+                        minute=start_min,
+                        second=start_sec,
+                        microsecond=0
+                    )
+
         # Create duty start datetime on current_date
         duty_start = current_date.replace(
             hour=start_hour,
@@ -104,19 +183,6 @@ def trip_to_duty_periods(
             second=start_sec,
             microsecond=0
         )
-
-        # If we have a previous duty, check if this start time makes sense
-        if last_duty_end is not None:
-            # If duty_start would be before or too close to last_duty_end, advance to next day
-            # (Minimum 2 hours between duties for rest/commute)
-            if duty_start <= last_duty_end + timedelta(hours=2):
-                current_date += timedelta(days=1)
-                duty_start = current_date.replace(
-                    hour=start_hour,
-                    minute=start_min,
-                    second=start_sec,
-                    microsecond=0
-                )
 
         # Create duty end datetime
         duty_end = current_date.replace(
@@ -136,6 +202,42 @@ def trip_to_duty_periods(
     return duty_periods
 
 
+def extract_trip_start_date(parsed_trip: Dict) -> Optional[datetime]:
+    """
+    Extract the actual trip start date from the parsed trip data.
+
+    Parses the 'date_freq' field which contains strings like:
+    - "Only on Mon 10Nov2025"
+    - "01May2025, 02May2025, ..."
+    - "15 trips"
+
+    Returns:
+        datetime object for the trip start date, or None if not found
+    """
+    date_freq = parsed_trip.get('date_freq', '')
+
+    if not date_freq:
+        return None
+
+    # Try to parse "Only on Mon 10Nov2025" format
+    only_on_match = re.search(r'Only on \w+ (\d{2}\w{3}\d{4})', date_freq, re.IGNORECASE)
+    if only_on_match:
+        try:
+            return date_parser.parse(only_on_match.group(1))
+        except:
+            pass
+
+    # Try to parse "01May2025" format (first date in comma-separated list)
+    date_match = re.search(r'(\d{2}\w{3}\d{4})', date_freq)
+    if date_match:
+        try:
+            return date_parser.parse(date_match.group(1))
+        except:
+            pass
+
+    return None
+
+
 def analyze_trip_fatigue(
     parsed_trip: Dict,
     reference_date: Optional[datetime] = None,
@@ -146,8 +248,9 @@ def analyze_trip_fatigue(
 
     Args:
         parsed_trip: Trip structure from parse_trip_for_table()
-        reference_date: Starting date for the trip simulation
-        initial_reservoir_level: Starting reservoir level (defaults to full: 2880)
+        reference_date: Starting date for the trip simulation.
+                       If None, attempts to extract from trip date_freq field.
+        initial_reservoir_level: Starting reservoir level (defaults to 90% per aviation standard)
 
     Returns:
         Dictionary containing:
@@ -156,7 +259,14 @@ def analyze_trip_fatigue(
             - 'fatigue_metrics': Summary metrics (lowest effectiveness, time in danger, etc.)
             - 'trip_id': Trip identifier
     """
-    from safte_model import run_safte_simulation, RESERVOIR_CAPACITY
+    from safte_model import run_safte_simulation
+
+    # If no reference date provided, try to extract from trip data
+    if reference_date is None:
+        reference_date = extract_trip_start_date(parsed_trip)
+        if reference_date is None:
+            # Fall back to current date if can't extract
+            reference_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Convert trip to duty periods
     duty_periods = trip_to_duty_periods(parsed_trip, reference_date)
@@ -170,10 +280,7 @@ def analyze_trip_fatigue(
             'error': 'No valid duty periods found in trip'
         }
 
-    # Run SAFTE simulation
-    if initial_reservoir_level is None:
-        initial_reservoir_level = RESERVOIR_CAPACITY
-
+    # Run SAFTE simulation (will use 90% default if initial_reservoir_level is None)
     safte_results = run_safte_simulation(duty_periods, initial_reservoir_level)
 
     # Calculate fatigue metrics

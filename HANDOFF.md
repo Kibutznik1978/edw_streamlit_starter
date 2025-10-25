@@ -49,11 +49,30 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 18)
+## Current Status (Session 20)
 
-✅ **Critical SAFTE Bugs Fixed** - Corrected time parsing, AutoSleep prediction, and date advancement bugs. Enhanced PDF exports with hot standby metrics and interactive tooltips.
+✅ **Critical PDF Parsing Bugs Fixed** - All debrief completion times, L/O fields, and duty day boundaries now parse correctly. Multi-day layovers (50+ hours) work properly for SAFTE analysis.
 
 ### Latest Updates (October 24, 2025)
+
+**Session 20 - Critical PDF Parsing Bug Fixes:**
+- **Fixed:** Debrief completion time capture - extended look-ahead to 15 lines, skips Rest/Credit markers without breaking
+- **Fixed:** Duty day boundary detection - connection time lookup now stops at duty start patterns
+- **Fixed:** L/O field parsing - continues past Rest marker to find debrief time without advancing offset
+- **Impact:** All 7 duty days in Trip 204 now properly separated (was incorrectly showing 6)
+- **Impact:** All L/O fields captured including critical 50h39 layover for SAFTE multi-day analysis
+- **Impact:** All debrief times show arrival + 15min correctly in pairing table
+- **Result:** SAFTE fatigue analysis now works correctly for trips with multi-day layovers
+- **Test Case:** Trip 204 - 7 duty days, 50-hour layover between Duty Days 5 and 6
+
+**Session 19 - SAFTE Model Initial Conditions Fix:**
+- **Fixed:** Unrealistic 100% initial reservoir - now uses 90% aviation standard per AvORM
+- **Impact:** 10% more conservative effectiveness estimates, properly identifies VERY HIGH RISK scenarios (< 70%)
+- **Documented:** Circadian compensation effect that can mask reservoir depletion in effectiveness score
+- **Validated:** All integration tests pass with 90% default, more realistic fatigue levels
+- **Created:** Debug analysis scripts comparing 100% vs 90% initial conditions
+- **Result:** Aviation industry standard implementation - pilots typically don't start trips fully rested
+- **Risk Change:** Example trip now shows min 69.52% (VERY HIGH) vs 75.04% (HIGH) - 5.52% difference
 
 **Session 18 - PDF Export Enhancements & SAFTE Model Fixes:**
 - **Fixed:** Critical time parsing bug in `parse_local_time()` - was parsing (LOCAL_HH)ZULU_HH:ZULU_MM as (LOCAL_HH)MM:SS
@@ -195,6 +214,8 @@ Detailed documentation for each development session:
 | Session 16 | Oct 22, 2025 | SAFTE Visualization Alignment with Industry Standards | [session-16.md](handoff/sessions/session-16.md) |
 | Session 17 | Oct 22, 2025 | SAFTE Model Scientific Validation & Core Algorithm Fixes | [session-17.md](handoff/sessions/session-17.md) |
 | Session 18 | Oct 24, 2025 | PDF Export Enhancements & SAFTE Model Fixes | [session-18.md](handoff/sessions/session-18.md) |
+| Session 19 | Oct 24, 2025 | SAFTE Model Initial Conditions Fix - Aviation Standard | [session-19.md](handoff/sessions/session-19.md) |
+| Session 20 | Oct 24, 2025 | Critical PDF Parsing Bug Fixes - Debrief Times & Multi-Day Layovers | [session-20.md](handoff/sessions/session-20.md) |
 
 ---
 
@@ -364,5 +385,5 @@ For questions or issues, please open an issue on GitHub.
 ---
 
 **Last Updated:** October 24, 2025
-**Status:** ✅ SAFTE Model Critical Bugs Fixed - Time parsing, AutoSleep, and date advancement corrected. PDF exports enhanced with hot standby metrics and interactive tooltips.
-**Next Session:** Test with real multi-day trips, commit critical bug fixes, consider SAFTE PDF export integration, deep validation of transmeridian adjustments
+**Status:** ✅ Aviation Standard Implemented - SAFTE model now uses 90% initial reservoir per AvORM aviation standards. Provides realistic, conservative fatigue estimates.
+**Next Session:** Test updated model with real trip data, document circadian compensation in UI, review other SAFTE parameters for aviation standards

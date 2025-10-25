@@ -680,9 +680,9 @@ def display_edw_results(result_data: Dict):
                         # Run analysis if button was clicked
                         if fatigue_button:
                             with st.spinner("Running SAFTE simulation..."):
-                                # Use current date as reference
-                                reference_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-                                analysis = analyze_trip_fatigue(trip_data, reference_date)
+                                # Let analyze_trip_fatigue extract the actual trip start date
+                                # from the trip data (from date_freq field like "Only on Mon 10Nov2025")
+                                analysis = analyze_trip_fatigue(trip_data)
                                 st.session_state[f"fatigue_analysis_{selected_trip_id}"] = analysis
                         else:
                             # Load cached analysis

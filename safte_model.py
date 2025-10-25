@@ -250,7 +250,7 @@ def predict_sleep_periods(duty_periods, commute_time=DEFAULT_COMMUTE_TIME):
 
     return sleep_periods
 
-def run_safte_simulation(duty_periods, initial_reservoir_level=RESERVOIR_CAPACITY):
+def run_safte_simulation(duty_periods, initial_reservoir_level=None):
     """
     Runs the full SAFTE simulation over a series of duty periods.
 
@@ -258,11 +258,17 @@ def run_safte_simulation(duty_periods, initial_reservoir_level=RESERVOIR_CAPACIT
         duty_periods (list): A list of tuples, each representing a duty
                              period with a start and end datetime object.
         initial_reservoir_level (float): The starting level of the sleep reservoir.
+                             Default is 90% of capacity (0.9 * 2880 = 2592),
+                             which is the aviation industry standard per AvORM.
+                             Pilots typically do not start missions fully rested.
 
     Returns:
         list: A list of dictionaries, where each dictionary contains the
               timestamp, effectiveness, and other SAFTE components.
     """
+    # Use 90% reservoir as default (aviation standard per AvORM)
+    if initial_reservoir_level is None:
+        initial_reservoir_level = 0.9 * RESERVOIR_CAPACITY
     if not duty_periods:
         return []
 
