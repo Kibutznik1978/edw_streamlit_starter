@@ -872,6 +872,17 @@ def render_bid_line_analyzer():
         else:
             df = parsed_df.copy()
 
+            # Store original parsed data if not already stored
+            if "bidline_original_df" not in st.session_state or st.session_state.get("bidline_last_upload_name") != file_name:
+                st.session_state["bidline_original_df"] = df.copy()
+                # Clear any previous edits when new file is uploaded
+                if "bidline_edited_df" in st.session_state:
+                    del st.session_state["bidline_edited_df"]
+
+            # Use edited data if it exists, otherwise use original
+            if "bidline_edited_df" in st.session_state:
+                df = st.session_state["bidline_edited_df"].copy()
+
             # Convert dict entries to DataFrames as needed
             pay_periods_df = _get_dataframe_from_dict(diagnostics_dict, 'pay_periods')
             reserve_lines_df = _get_dataframe_from_dict(diagnostics_dict, 'reserve_lines')
@@ -1130,22 +1141,247 @@ def _apply_filters(df: pd.DataFrame, filters: Dict[str, Tuple], reserve_lines_df
 
 
 def _render_overview_tab(df: pd.DataFrame, filtered_df: pd.DataFrame) -> None:
-    st.write(f"Showing {len(filtered_df)} of {len(df)} parsed lines.")
+    # Editable Data Section
+    st.markdown("### 📊 View & Edit Bid Line Data")
+    st.caption(f"Showing all {len(df)} parsed lines (filters apply to Summary and Visuals tabs)")
 
-    # Format the display dataframe
-    display_df = filtered_df.copy()
+    # Get original data for comparison
+    original_df = st.session_state.get("bidline_original_df", df)
+
+    # Format the display dataframe for editing - ALWAYS show all lines, not just filtered
+    display_df = df.copy()  # Changed from filtered_df to df
     display_df["CT"] = display_df["CT"].round(2)
     display_df["BT"] = display_df["BT"].round(2)
     display_df["DO"] = display_df["DO"].astype(int)
     display_df["DD"] = display_df["DD"].astype(int)
-    st.dataframe(display_df)
+
+    # Create editable data editor
+    # Build column config dynamically to handle pay period columns
+    column_config = {
+        "Line": st.column_config.NumberColumn(
+            "Line",
+            help="Bid line number (read-only)",
+            disabled=True,
+            width="small"
+        ),
+        "CT": st.column_config.NumberColumn(
+            "CT",
+            help="Credit Time (hours) - editable",
+            format="%.1f",
+            min_value=0.0,
+            max_value=200.0,
+            width="small"
+        ),
+        "BT": st.column_config.NumberColumn(
+            "BT",
+            help="Block Time (hours) - editable",
+            format="%.1f",
+            min_value=0.0,
+            max_value=200.0,
+            width="small"
+        ),
+        "DO": st.column_config.NumberColumn(
+            "DO",
+            help="Days Off - editable",
+            format="%d",
+            min_value=0,
+            max_value=31,
+            width="small"
+        ),
+        "DD": st.column_config.NumberColumn(
+            "DD",
+            help="Duty Days - editable",
+            format="%d",
+            min_value=0,
+            max_value=31,
+            width="small"
+        ),
+    }
+
+    # Add config for PayPeriodCode columns if they exist
+    if "PayPeriodCode_PP1" in display_df.columns:
+        column_config["PayPeriodCode_PP1"] = st.column_config.TextColumn(
+            "PayPeriodCode_PP1",
+            help="Pay Period 1 Code",
+            width="small"
+        )
+    if "PayPeriodCode_PP2" in display_df.columns:
+        column_config["PayPeriodCode_PP2"] = st.column_config.TextColumn(
+            "PayPeriodCode_PP2",
+            help="Pay Period 2 Code",
+            width="small"
+        )
+
+    edited_df = st.data_editor(
+        display_df,
+        key="bid_data_editor",
+        hide_index=True,
+        column_config=column_config,
+        use_container_width=True
+    )
+
+    # Check if data was edited (compare against original data)
+    data_changed = False
+    edited_cells = []
+    validation_warnings = []
+    changes_in_this_interaction = []
+
+    # Detect changes made in THIS interaction
+    if not edited_df.equals(display_df):
+        data_changed = True
+        for idx in edited_df.index:
+            line_num = edited_df.loc[idx, 'Line']
+            for col in ['CT', 'BT', 'DO', 'DD']:
+                old_val = display_df.loc[idx, col]
+                new_val = edited_df.loc[idx, col]
+                if old_val != new_val:
+                    changes_in_this_interaction.append({
+                        'Line': line_num,
+                        'Column': col,
+                        'Old': old_val,
+                        'New': new_val
+                    })
+
+    # Always compare against ORIGINAL data to show cumulative edits
+    if original_df is not None:
+        for idx in edited_df.index:
+            line_num = edited_df.loc[idx, 'Line']
+            # Find corresponding line in original data
+            orig_rows = original_df[original_df['Line'] == line_num]
+            if len(orig_rows) > 0:
+                orig_row = orig_rows.iloc[0]
+                for col in ['CT', 'BT', 'DO', 'DD']:
+                    if col in orig_row.index:
+                        # Handle NaN/None values in original data
+                        orig_val_raw = orig_row[col]
+                        curr_val = edited_df.loc[idx, col]
+
+                        # Convert to comparable format
+                        if pd.isna(orig_val_raw):
+                            orig_val = None
+                        else:
+                            orig_val = round(orig_val_raw, 2) if col in ['CT', 'BT'] else int(orig_val_raw)
+
+                        # Compare values (handle None/NaN)
+                        values_differ = False
+                        if orig_val is None and not pd.isna(curr_val):
+                            values_differ = True
+                        elif orig_val is not None and pd.isna(curr_val):
+                            values_differ = True
+                        elif orig_val is not None and not pd.isna(curr_val) and orig_val != curr_val:
+                            values_differ = True
+
+                        if values_differ:
+                            edited_cells.append({
+                                'Line': int(line_num),
+                                'Column': col,
+                                'Original': 'None' if orig_val is None else orig_val,
+                                'Current': 'None' if pd.isna(curr_val) else curr_val
+                            })
+
+        # Validation checks for unusual values
+        for idx in edited_df.index:
+            line_num = edited_df.loc[idx, 'Line']
+            ct = edited_df.loc[idx, 'CT']
+            bt = edited_df.loc[idx, 'BT']
+            do = edited_df.loc[idx, 'DO']
+            dd = edited_df.loc[idx, 'DD']
+
+            # Validation rules
+            if ct > 150:
+                validation_warnings.append(f"Line {line_num}: CT ({ct:.1f}) is unusually high (> 150 hours)")
+            if bt > 150:
+                validation_warnings.append(f"Line {line_num}: BT ({bt:.1f}) is unusually high (> 150 hours)")
+            if bt > ct and bt > 0:
+                validation_warnings.append(f"Line {line_num}: BT ({bt:.1f}) exceeds CT ({ct:.1f})")
+            if do > 20:
+                validation_warnings.append(f"Line {line_num}: DO ({do}) is unusually high (> 20 days)")
+            if dd > 20:
+                validation_warnings.append(f"Line {line_num}: DD ({dd}) is unusually high (> 20 days)")
+            if do + dd > 31:
+                validation_warnings.append(f"Line {line_num}: DO ({do}) + DD ({dd}) = {do + dd} exceeds month length")
+
+        # Update the full dataset with edits
+        # Use the current df parameter which contains all lines (not just filtered)
+        full_df = df.copy()
+        for idx in edited_df.index:
+            line_num = edited_df.loc[idx, 'Line']
+            # Find this line in the full dataset and update it
+            full_df_idx = full_df[full_df['Line'] == line_num].index
+            if len(full_df_idx) > 0:
+                full_df.loc[full_df_idx[0], 'CT'] = edited_df.loc[idx, 'CT']
+                full_df.loc[full_df_idx[0], 'BT'] = edited_df.loc[idx, 'BT']
+                full_df.loc[full_df_idx[0], 'DO'] = edited_df.loc[idx, 'DO']
+                full_df.loc[full_df_idx[0], 'DD'] = edited_df.loc[idx, 'DD']
+
+        # Save edited data to session state
+        st.session_state["bidline_edited_df"] = full_df
+
+    # Display edit indicators and controls
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        if len(edited_cells) > 0:
+            if data_changed:
+                st.success(f"✏️ **Data has been manually edited** ({len(edited_cells)} total change{'s' if len(edited_cells) != 1 else ''} from original)")
+            else:
+                st.info(f"✏️ **Using edited data** ({len(edited_cells)} change{'s' if len(edited_cells) != 1 else ''} from original)")
+
+            # Show edited cells in an expander
+            with st.expander("View edited cells", expanded=False):
+                if edited_cells:
+                    edit_df = pd.DataFrame(edited_cells)
+                    # Sort by Line number for easier viewing
+                    edit_df = edit_df.sort_values(['Line', 'Column']).reset_index(drop=True)
+                    st.dataframe(edit_df, hide_index=True, use_container_width=True)
+
+    with col2:
+        if "bidline_edited_df" in st.session_state:
+            if st.button("🔄 Reset to Original Data", use_container_width=True):
+                del st.session_state["bidline_edited_df"]
+                st.rerun()
+
+    with col3:
+        pass  # Reserved for future features
+
+    # Display validation warnings
+    if validation_warnings:
+        st.warning("⚠️ **Validation Warnings:**")
+        for warning in validation_warnings[:10]:  # Limit to first 10 warnings
+            st.caption(f"• {warning}")
+        if len(validation_warnings) > 10:
+            st.caption(f"• ... and {len(validation_warnings) - 10} more warnings")
+
+    st.divider()
+
+    # Summary statistics section
+    st.markdown("### 📊 Quick Stats (based on current filters)")
+    st.caption(f"Showing statistics for {len(filtered_df)} filtered lines")
 
     if filtered_df.empty:
+        st.info("No lines match current filters. Adjust filters to see statistics.")
         return
 
     left, right = st.columns(2)
-    top_credit = filtered_df.nlargest(5, "CT")[["Line", "CT", "BT", "DO", "DD"]].copy()
-    most_days_off = filtered_df.nlargest(5, "DO")[["Line", "CT", "BT", "DO", "DD"]].copy()
+
+    # Get the current full dataset (with any edits applied)
+    current_full_df = st.session_state.get("bidline_edited_df", df).copy()
+
+    # Re-apply filters to the current data to get updated filtered view
+    # This ensures we're using edited values in the statistics
+    filters = st.session_state.get("bidline_filters", {})
+    if filters:
+        stats_filtered = current_full_df[
+            (current_full_df["CT"].between(filters["ct_range"][0], filters["ct_range"][1]))
+            & (current_full_df["BT"].between(filters["bt_range"][0], filters["bt_range"][1]))
+            & (current_full_df["DO"].isin(filters["do_values"]))
+            & (current_full_df["DD"].isin(filters["dd_values"]))
+        ]
+    else:
+        stats_filtered = current_full_df
+
+    top_credit = stats_filtered.nlargest(5, "CT")[["Line", "CT", "BT", "DO", "DD"]].copy()
+    most_days_off = stats_filtered.nlargest(5, "DO")[["Line", "CT", "BT", "DO", "DD"]].copy()
 
     for df_subset in [top_credit, most_days_off]:
         df_subset["CT"] = df_subset["CT"].round(2)

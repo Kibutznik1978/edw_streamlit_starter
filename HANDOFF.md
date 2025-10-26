@@ -3,7 +3,7 @@
 **Last Updated:** October 26, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
-**Version:** 1.1 (Production Ready)
+**Version:** 1.2 (Production Ready)
 
 ---
 
@@ -14,7 +14,7 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 ### Key Features
 
 **EDW Pairing Analyzer (Tab 1):**
-- Automatic PDF header extraction (bid period, domicile, fleet type)
+- **Automatic PDF header extraction** (bid period, domicile, fleet type) - checks page 2 if needed
 - Parse airline pairings PDF documents (supports 757, MD-11, and other formats)
 - Identify EDW trips (any duty day touching 02:30-05:00 local time)
 - Track trip frequencies and Hot Standby assignments
@@ -22,18 +22,25 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 - Interactive trip details viewer with formatted pairing display
 - **Professional 5-page executive PDF reports** with KPI cards and 13 charts
 - Duty day statistics (average legs, duty length, block time, credit time)
+- **Helpful error messages** when wrong PDF type is uploaded
 
 **Bid Line Analyzer (Tab 2):**
-- **Automatic PDF header extraction** (bid period, domicile, fleet type, date range)
+- **Automatic PDF header extraction** (bid period, domicile, fleet type, date range) - checks page 2 if needed
 - Parse bid line PDFs for scheduling metrics (CT, BT, DO, DD)
+- **Crew composition parsing** (Captain/FO slot detection from x/x/x pattern)
+- **Split VTO/VTOR/VOR line support** - Regular pay period data included in calculations
+- **Manual data editing** - Interactive grid to correct missing/incorrect parsed values
+- **Smart validation** - Warnings for unusual values (BT > CT, values > 150, etc.)
+- **Change tracking** - View all edits with original vs. current values
 - Filter by Credit Time, Block Time, Days Off, Duty Days ranges
 - Pay period comparison analysis (PP1 vs PP2)
 - Reserve line detection and statistics (Captain/FO slots)
 - Buy-up line identification (CT < 75 hours)
 - **Professional 3-page PDF reports** with KPI cards showing ranges
 - Distribution charts and summary tables
-- CSV and PDF export functionality
+- CSV and PDF export functionality (includes manual corrections)
 - **Notes/comments support** for tracking data iterations
+- **Helpful error messages** when wrong PDF type is uploaded
 
 **Historical Trends (Tab 3):**
 - Placeholder for Supabase-powered trend analysis (coming soon)
@@ -41,11 +48,38 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 15)
+## Current Status (Session 17)
 
-✅ **Reserve Line Filtering & Enhanced Distribution Charts** - Accurate averages and comprehensive visualizations
+✅ **Cover Page Support, VTO Split Lines, and Crew Composition Parsing** - Enhanced PDF parsing and crew position detection
 
 ### Latest Updates (October 26, 2025)
+
+**Session 17 - Cover Page Support, VTO Split Lines & Crew Composition:**
+- **Implemented:** PDF header extraction now checks page 2 if page 1 is a cover page (both tabs)
+- **Added:** Split VTO/VTOR/VOR line detection and parsing (one period regular, one VTO)
+  - Regular pay period data is included in calculations
+  - VTO pay period is automatically excluded
+  - VTOType and VTOPeriod fields added to parsed data
+- **Implemented:** Crew composition parsing from x/x/x pattern (Captain/FO slots)
+  - CaptainSlots and FOSlots columns added to all parsed lines
+  - Supports regular lines, split VTO lines, and reserve lines
+- **Added:** Helpful error messages when wrong PDF type is uploaded
+  - Tab 1 detects bid line PDFs and suggests Tab 2
+  - Tab 2 detects pairing PDFs and suggests Tab 1
+- **Updated:** Documentation (CLAUDE.md, HANDOFF.md) with new features
+
+**Session 16 - Manual Data Editing Feature:**
+- **Implemented:** Interactive data editor in Overview tab using `st.data_editor()`
+- **Added:** Inline editing for CT, BT, DO, DD columns (fills in missing parsed values)
+- **Built:** Dual dataset system (original + edited) with session state management
+- **Added:** Visual indicators for edited cells with detailed change log
+- **Implemented:** Smart validation warnings (BT > CT, values > 150, DO + DD > 31, etc.)
+- **Added:** "Reset to Original Data" button to restore parsed values
+- **Fixed:** Data loss bug when editing with filters active
+- **Fixed:** Data editor now shows ALL lines regardless of filters
+- **Optimized:** Column widths (CT, BT, PayPeriodCode to "small")
+- **Ensured:** All calculations, charts, and exports automatically use edited data
+- **Completed:** CSV and PDF exports include all manual corrections
 
 **Session 15 - Reserve Line Logic & Distribution Enhancements:**
 - **Implemented:** Smart reserve line filtering (regular reserve excluded, HSBY kept for CT/DO/DD)
@@ -149,6 +183,8 @@ Detailed documentation for each development session:
 | Session 13 | Oct 20, 2025 | PDF Enhancements & Professional Integration | [session-13.md](handoff/sessions/session-13.md) |
 | Session 14 | Oct 21, 2025 | Brand Integration & PDF Layout Refinements | [session-14.md](handoff/sessions/session-14.md) |
 | Session 15 | Oct 26, 2025 | Reserve Line Logic & Distribution Enhancements | [session-15.md](handoff/sessions/session-15.md) |
+| Session 16 | Oct 26, 2025 | Manual Data Editing Feature | [session-16.md](handoff/sessions/session-16.md) |
+| Session 17 | Oct 26, 2025 | Cover Page Support, VTO Split Lines & Crew Composition | [session-17.md](handoff/sessions/session-17.md) |
 
 ---
 
@@ -312,6 +348,6 @@ For questions or issues, please open an issue on GitHub.
 
 ---
 
-**Last Updated:** October 21, 2025
-**Status:** ✅ Aero Crew Data Brand Fully Integrated - Professional brand identity across all PDF exports
-**Next Session:** Consider logo conversion to PNG, test with various data sizes, potential Supabase integration (Tab 3)
+**Last Updated:** October 26, 2025
+**Status:** ✅ Cover Page Support, VTO Split Lines & Crew Composition Parsing Complete - Enhanced PDF parsing with crew position detection
+**Next Session:** Implement Captain/FO filtering UI, separate statistics views, and distribution charts by crew position

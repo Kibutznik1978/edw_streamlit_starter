@@ -59,13 +59,14 @@ The main application file contains a **3-tab interface** (~650+ lines):
 - Excel and PDF report downloads
 - Uses `edw_reporter.py` for core logic
 
-**Tab 2: Bid Line Analyzer** (lines 351-656)
+**Tab 2: Bid Line Analyzer** (lines 351-1750+)
 - PDF upload with progress bar
+- **Manual data editing** (Overview tab) - Interactive `st.data_editor()` for correcting parsed values
 - Filter sidebar (CT, BT, DO, DD ranges)
 - Three sub-tabs: Overview, Summary, Visuals
 - Pay period comparison (PP1 vs PP2)
 - Reserve line statistics (Captain/FO slots)
-- CSV and PDF export
+- CSV and PDF export (includes manual edits)
 - Uses `bid_parser.py` and `report_builder.py`
 
 **Tab 3: Historical Trends** (lines 657-680)
@@ -85,7 +86,8 @@ This module contains the main business logic for EDW trip analysis:
 
 - **PDF Parsing**: Uses `PyPDF2.PdfReader` to extract text from bid packet PDFs
 - **Header Extraction**: Automatic extraction of bid period, domicile, fleet type from PDF header
-  - Function: `extract_pdf_header_info()` (lines 41-93)
+  - Function: `extract_pdf_header_info()` (lines 120-192)
+  - Checks first page, then second page if needed (handles cover pages)
 - **Trip Identification**: Splits extracted text into individual trips by looking for "Trip Id" markers
 - **EDW Detection Logic**: A trip is flagged as EDW if any duty day touches 02:30-05:00 local time (inclusive)
   - Local time is extracted from pattern `(HH)MM:SS` where HH is local hour
@@ -109,16 +111,27 @@ Key functions:
 This module handles parsing of bid line PDFs:
 
 - **PDF Parsing**: Uses `pdfplumber` library to extract text and tables
+- **Header Extraction**: Automatic extraction of bid period, domicile, fleet type, date range
+  - Function: `extract_bid_line_header_info()` (lines 52-147)
+  - Checks first page, then second page if needed (handles cover pages)
 - **Line Detection**: Parses bid line data including CT, BT, DO, DD metrics
 - **Pay Period Analysis**: Separates data by pay period (PP1 vs PP2)
+- **VTO/VTOR/VOR Split Line Handling**: Detects and includes split lines (one period regular, one VTO)
+  - Function: `_detect_split_vto_line()` (lines 280-334)
+  - Split lines are included in parsed data with VTOType and VTOPeriod fields
+  - Regular pay period data is included in averages and distributions
+  - VTO pay period is automatically excluded from calculations
+  - Non-split VTO lines (both periods VTO) are skipped entirely
 - **Reserve Line Detection**: Identifies reserve lines and counts Captain/FO slots
 - **Diagnostics**: Returns parsing diagnostics for debugging
 
 Key functions:
+- `extract_bid_line_header_info()` - Extracts header metadata with cover page fallback
 - `parse_bid_lines()` - Main entry point for bid line parsing
 - `_detect_reserve_line()` - Detects and parses reserve line slots
+- `_detect_split_vto_line()` - Detects split VTO/VTOR/VOR lines
 - `_parse_line_blocks()` - Parses individual line blocks from pages
-- `_aggregate_pay_periods()` - Aggregates data by pay period
+- `_aggregate_pay_periods()` - Aggregates data by pay period, excludes VTO periods from calculations
 
 #### Report Builder (`report_builder.py`)
 
@@ -221,12 +234,72 @@ Since this is a Streamlit app without formal tests:
 
 - **Virtual Environment**: Always activate `.venv` before running app or installing dependencies
 - **Port Conflicts**: If port 8501 is in use, Streamlit will auto-increment (8502, 8503, etc.)
+- **Wrong PDF Upload**: Both analyzers now provide helpful error messages if the wrong PDF type is uploaded:
+  - **Tab 1 (EDW Pairing Analyzer)**: Detects bid line PDFs and suggests uploading to Tab 2
+  - **Tab 2 (Bid Line Analyzer)**: Detects pairing PDFs and suggests uploading to Tab 1
 - **Chart memory management**: Charts are saved to BytesIO, converted to PIL Image before PDF embedding
 - **Unicode handling**: Always use `clean_text()` when preparing text for ReportLab or Excel
 - **Session state conflicts**: Ensure all widget keys are unique across tabs
 - **Table width**: Pairing detail table uses responsive CSS (50%/80%/100% based on screen width)
 
-## Recent Changes (Session 11 - October 20, 2025)
+## Manual Data Editing Feature (Session 16)
+
+The Bid Line Analyzer now supports inline data editing to fix missing or incorrect parsed values.
+
+### Key Components:
+
+**Data Editor (`_render_overview_tab()` in `app.py` lines 1143-1380)**
+- Uses `st.data_editor()` for interactive editing
+- Editable columns: CT, BT, DO, DD (Line number is read-only)
+- Always shows ALL parsed lines (filters don't affect editor)
+- Column validation: CT/BT (0.0-200.0), DO/DD (0-31)
+- Compact column widths for better UX
+
+**Session State Management (lines 875-884)**
+- `bidline_original_df`: Original parsed data (never modified)
+- `bidline_edited_df`: User-corrected data (contains edits)
+- Data flow: All tabs, charts, and exports use edited data automatically
+
+**Change Tracking (lines 1223-1327)**
+- Compares edited data against original
+- Visual indicators: ✏️ "Data has been manually edited (N changes)"
+- "View edited cells" expander shows Line, Column, Original, Current
+- Handles NaN/None values properly
+
+**Validation Warnings (lines 1266-1286)**
+- CT or BT > 150 hours
+- BT > CT (block time exceeds credit time)
+- DO or DD > 20 days
+- DO + DD > 31 (exceeds month length)
+
+**Reset Functionality (lines 1304-1322)**
+- "Reset to Original Data" button
+- Deletes edited data and restores parsed values
+- Simple one-click operation
+
+### Important Implementation Details:
+
+1. **Data editor always uses `df` (all lines), never `filtered_df`** (line 1152)
+2. **When saving edits, use `df.copy()` as base, not parsed data** (line 1290)
+3. **All calculations automatically use edited data** - no manual updates needed
+4. **CSV/PDF exports include edits** - filtered_df already contains edited values
+
+### Testing:
+- Upload PDF, parse, edit a value in Overview tab
+- Switch to Summary/Visuals tabs → should see updated calculations
+- Download CSV/PDF → should include edits
+- Click Reset → should restore original parsed data
+
+## Recent Changes
+
+**Session 16 (October 26, 2025) - Manual Data Editing:**
+- Implemented interactive data editor with `st.data_editor()`
+- Added session state management for original vs. edited data
+- Built change tracking and validation system
+- Fixed data loss bugs when editing with filters
+- Ensured all tabs and exports use edited data automatically
+
+**Session 11 (October 20, 2025) - Multi-App Merger:**
 
 - **Merged Applications**: Combined separate EDW and Bid Line analyzers into unified 3-tab interface
 - **New Files**: `bid_parser.py`, `report_builder.py`, `.env.example`
@@ -235,7 +308,7 @@ Since this is a Streamlit app without formal tests:
 - **Fixed**: Pairing detail table width constraint with responsive CSS
 - **Dependencies**: Added numpy, pdfplumber, altair, fpdf2, supabase, python-dotenv, plotly
 
-See `handoff/sessions/session-11.md` for detailed session notes.
+See `handoff/sessions/session-16.md` for the latest session notes, or `handoff/sessions/session-11.md` for the multi-app merger details.
 
 ## Documentation
 

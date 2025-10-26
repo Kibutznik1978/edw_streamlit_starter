@@ -36,6 +36,7 @@ _RESERVE_DAY_PATTERN_RE = re.compile(r"\b(RA|SA|RB|SB|RC|SC|RD|SD)\b", re.IGNORE
 _SHIFTABLE_RESERVE_RE = re.compile(r"SHIFTABLE\s+RESERVE", re.IGNORECASE)
 _HOT_STANDBY_RE = re.compile(r"\b(HSBY|HOT\s*STANDBY|HOTSTANDBY)\b", re.IGNORECASE)
 _AVAILABILITY_PATTERN_RE = re.compile(r"(\d+)/(\d+)/(\d+)")
+_CREW_COMPOSITION_RE = re.compile(r"^[A-Z]{2,}\s+\d{1,4}\s+(\d+)/(\d+)/(\d+)/?", re.MULTILINE)
 
 
 @dataclass
@@ -52,6 +53,7 @@ class ParseDiagnostics:
 def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
     """
     Extract header information from a bid line PDF.
+    Checks the first page, and if header info is not found, checks the second page.
 
     Extracts:
     - Bid Period (e.g., "2507")
@@ -77,50 +79,67 @@ def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
         "date_time": None
     }
 
-    try:
-        with pdfplumber.open(pdf_file) as pdf:
-            if not pdf.pages:
-                return result
+    # Helper function to extract header info from page text
+    def extract_from_text(text, current_result):
+        extracted = current_result.copy()
 
-            # Extract text from first page
-            first_page = pdf.pages[0]
-            text = first_page.extract_text()
-
-            if not text:
-                return result
-
-            # Extract Bid Period (e.g., "Bid Period : 2507")
+        # Extract Bid Period (e.g., "Bid Period : 2507")
+        if extracted["bid_period"] is None:
             bid_period_match = re.search(r"Bid\s+Period\s*:?\s*(\d{4})", text, re.IGNORECASE)
             if bid_period_match:
-                result["bid_period"] = bid_period_match.group(1)
+                extracted["bid_period"] = bid_period_match.group(1)
 
-            # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 02Nov2025 - 30Nov2025")
+        # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 02Nov2025 - 30Nov2025")
+        if extracted["bid_period_date_range"] is None:
             date_range_match = re.search(
                 r"Bid\s+Period\s+Date\s+Range\s*:?\s*(\d{2}[A-Za-z]{3}\d{4}\s*-\s*\d{2}[A-Za-z]{3}\d{4})",
                 text,
                 re.IGNORECASE
             )
             if date_range_match:
-                result["bid_period_date_range"] = date_range_match.group(1)
+                extracted["bid_period_date_range"] = date_range_match.group(1)
 
-            # Extract Domicile (e.g., "Domicile: ONT")
+        # Extract Domicile (e.g., "Domicile: ONT")
+        if extracted["domicile"] is None:
             domicile_match = re.search(r"Domicile\s*:?\s*([A-Z]{3})", text, re.IGNORECASE)
             if domicile_match:
-                result["domicile"] = domicile_match.group(1).upper()
+                extracted["domicile"] = domicile_match.group(1).upper()
 
-            # Extract Fleet Type (e.g., "Fleet Type: 757")
+        # Extract Fleet Type (e.g., "Fleet Type: 757")
+        if extracted["fleet_type"] is None:
             fleet_match = re.search(r"Fleet\s+Type\s*:?\s*([\w\-]+)", text, re.IGNORECASE)
             if fleet_match:
-                result["fleet_type"] = fleet_match.group(1)
+                extracted["fleet_type"] = fleet_match.group(1)
 
-            # Extract Date/Time (e.g., "Date/Time: 26Sep2025 11:35")
+        # Extract Date/Time (e.g., "Date/Time: 26Sep2025 11:35")
+        if extracted["date_time"] is None:
             datetime_match = re.search(
                 r"Date/Time\s*:?\s*(\d{2}[A-Za-z]{3}\d{4}\s+\d{1,2}:\d{2})",
                 text,
                 re.IGNORECASE
             )
             if datetime_match:
-                result["date_time"] = datetime_match.group(1)
+                extracted["date_time"] = datetime_match.group(1)
+
+        return extracted
+
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            if not pdf.pages:
+                return result
+
+            # Try extracting from first page
+            first_page_text = pdf.pages[0].extract_text()
+            if first_page_text:
+                result = extract_from_text(first_page_text, result)
+
+            # If any critical fields are still None, try second page
+            if (result["bid_period"] is None or
+                result["domicile"] is None or
+                result["fleet_type"] is None) and len(pdf.pages) >= 2:
+                second_page_text = pdf.pages[1].extract_text()
+                if second_page_text:
+                    result = extract_from_text(second_page_text, result)
 
     except Exception:
         # Silently return partial results if extraction fails
@@ -185,8 +204,16 @@ def parse_bid_lines(
     warnings.extend(diag_warnings)
 
     if not merged_records:
-        df = pd.DataFrame(columns=["Line", "CT", "BT", "DO", "DD"])
-        pay_periods_output = pd.DataFrame(columns=["Line", "Period", "PayPeriodCode", "CT", "BT", "DO", "DD"])
+        # Provide helpful error message for wrong PDF type
+        raise ValueError(
+            "❌ No valid bid lines found in PDF.\n\n"
+            "**Possible causes:**\n"
+            "- This might be a **Pairing PDF** (should be uploaded to Tab 1: EDW Pairing Analyzer)\n"
+            "- The PDF format may not be supported\n"
+            "- The PDF may be corrupted or empty\n\n"
+            "**Expected format:** Bid Line PDF with Line numbers, CT, BT, DO, DD values"
+        )
+
     else:
         raw_df = pd.DataFrame(merged_records)
         if "Period" in raw_df.columns and raw_df["Period"].notna().any():
@@ -257,6 +284,100 @@ def _detect_reserve_line(block: str) -> Tuple[bool, bool, int, int]:
             pass
 
     return is_reserve, is_hot_standby, captain_slots, fo_slots
+
+
+def _extract_crew_composition(block: str) -> Tuple[int, int]:
+    """Extract crew composition (captain/FO slots) from a line block.
+
+    Looks for the pattern x/x/x/ after the line header (e.g., "ONT 40 1/1/0/")
+    where first number = captain slots, second = FO slots, third = ignored
+
+    Args:
+        block: The text block containing the line data
+
+    Returns:
+        Tuple of (captain_slots, fo_slots) where values are 0 or 1 for regular lines
+    """
+    # Try the more specific crew composition pattern first (right after line header)
+    crew_match = _CREW_COMPOSITION_RE.search(block)
+    if crew_match:
+        try:
+            captain_slots = int(crew_match.group(1))
+            fo_slots = int(crew_match.group(2))
+            # Third group is ignored (old F/E position, no longer used)
+            return captain_slots, fo_slots
+        except (ValueError, IndexError):
+            pass
+
+    # Fallback to general availability pattern (used for reserve lines)
+    availability_match = _AVAILABILITY_PATTERN_RE.search(block)
+    if availability_match:
+        try:
+            captain_slots = int(availability_match.group(1))
+            fo_slots = int(availability_match.group(2))
+            return captain_slots, fo_slots
+        except (ValueError, IndexError):
+            pass
+
+    # Default: if not found, assume available to both (1/1)
+    return 0, 0
+
+
+def _detect_split_vto_line(block: str, period_records: List[dict]) -> Tuple[bool, Optional[str], Optional[int]]:
+    """Detect if a line is a split VTO/VTOR/VOR line (one period regular, one period VTO).
+
+    Args:
+        block: The text block containing the line data
+        period_records: List of pay period records parsed from the block
+
+    Returns:
+        Tuple of (is_split, vto_type, vto_period) where:
+        - is_split: True if one period has data and one is all zeros
+        - vto_type: "VTO", "VTOR", or "VOR" (or None if not split)
+        - vto_period: 1 or 2 indicating which period is VTO (or None if not split)
+    """
+    # Check if block mentions VTO/VTOR/VOR
+    vto_match = _VTO_PATTERN_RE.search(block)
+    if not vto_match:
+        return False, None, None
+
+    vto_type = vto_match.group(1).upper()  # VTO, VTOR, or VOR
+
+    # If we don't have exactly 2 pay periods, it's not a split line
+    if len(period_records) != 2:
+        return False, None, None
+
+    # Check each period to see if one is all zeros
+    period_1 = period_records[0]
+    period_2 = period_records[1]
+
+    # Helper to check if a period has all zero values
+    def is_zero_period(record):
+        ct = record.get("CT", 0) or 0
+        bt = record.get("BT", 0) or 0
+        do = record.get("DO", 0) or 0
+        dd = record.get("DD", 0) or 0
+        return ct == 0 and bt == 0 and do == 0 and dd == 0
+
+    # Helper to check if a period has actual data
+    def has_data(record):
+        ct = record.get("CT", 0) or 0
+        bt = record.get("BT", 0) or 0
+        return ct > 0 or bt > 0
+
+    period_1_zero = is_zero_period(period_1)
+    period_2_zero = is_zero_period(period_2)
+    period_1_has_data = has_data(period_1)
+    period_2_has_data = has_data(period_2)
+
+    # Split line: one period has data, the other is all zeros
+    if period_1_has_data and period_2_zero:
+        return True, vto_type, 2
+    elif period_2_has_data and period_1_zero:
+        return True, vto_type, 1
+
+    # Not a split line (either both have data or both are zero)
+    return False, None, None
 
 
 def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[List[dict], List[str], List[dict]]:
@@ -338,9 +459,8 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
 
     line_id = int(header_match.group("line"))
 
-    # Check if this is a VTO/VTOR/VOR line and skip it
-    if _VTO_PATTERN_RE.search(block):
-        return [], []
+    # Extract crew composition (Captain/FO slots) for this line
+    captain_slots, fo_slots = _extract_crew_composition(block)
 
     period_records: List[dict] = []
     matches = list(PAY_PERIOD_RE.finditer(block))
@@ -382,13 +502,37 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
                     "BT": bt_value,
                     "DO": do_value,
                     "DD": dd_value,
+                    "CaptainSlots": captain_slots,
+                    "FOSlots": fo_slots,
                 }
             )
 
     if period_records:
-        return period_records, warnings
+        # Check if this is a split VTO/VTOR/VOR line
+        is_split, vto_type, vto_period = _detect_split_vto_line(block, period_records)
+
+        if is_split:
+            # This is a split line - add VTO metadata to all records
+            for record in period_records:
+                record["VTOType"] = vto_type
+                record["VTOPeriod"] = vto_period
+            return period_records, warnings
+        elif _VTO_PATTERN_RE.search(block):
+            # This is a VTO line but not split (both periods are VTO) - skip it
+            return [], []
+        else:
+            # Regular line with no VTO
+            for record in period_records:
+                record["VTOType"] = None
+                record["VTOPeriod"] = None
+            return period_records, warnings
 
     # Fallback: treat block as a single-period entry
+
+    # Skip VTO/VTOR/VOR lines in fallback (single-period VTO lines)
+    if _VTO_PATTERN_RE.search(block):
+        return [], []
+
     ct_value = _extract_time_field(block, "CT")
     bt_value = _extract_time_field(block, "BT")
     do_value = _extract_int_field(block, "DO")
@@ -420,6 +564,10 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
         "BT": bt_value,
         "DO": do_value,
         "DD": dd_value,
+        "CaptainSlots": captain_slots,
+        "FOSlots": fo_slots,
+        "VTOType": None,
+        "VTOPeriod": None,
     }
     return [record], warnings
 
@@ -574,7 +722,26 @@ def _aggregate_pay_periods(pay_period_df: pd.DataFrame) -> Tuple[pd.DataFrame, p
             for period in code_pivot.columns:
                 aggregated[f"PayPeriodCode_PP{int(period)}"] = code_pivot[period]
 
+    # Convert Line from index to column
     aggregated = aggregated.reset_index()
+
+    # Add crew composition if present (CaptainSlots and FOSlots should be same for all periods of a line)
+    if "CaptainSlots" in tidy.columns and "FOSlots" in tidy.columns:
+        crew_info = tidy.groupby("Line").agg({
+            "CaptainSlots": "first",
+            "FOSlots": "first"
+        }).reset_index()
+        aggregated = aggregated.merge(crew_info, on="Line", how="left")
+
+    # Add VTO metadata if present (using original tidy data which includes VTO periods)
+    if "VTOType" in tidy.columns:
+        # Get VTO info from the original data (before filtering)
+        vto_info = tidy.groupby("Line").agg({
+            "VTOType": "first",
+            "VTOPeriod": "first"
+        }).reset_index()
+        aggregated = aggregated.merge(vto_info, on="Line", how="left")
+
     column_order = ["Line", "CT", "BT", "DO", "DD"] + [
         col for col in aggregated.columns if col not in {"Line", "CT", "BT", "DO", "DD"}
     ]
@@ -636,6 +803,8 @@ def _match_to_record(match: re.Match) -> dict:
         "BT": float(match.group("bt")),
         "DO": int(match.group("do")),
         "DD": int(match.group("dd")),
+        "CaptainSlots": 0,
+        "FOSlots": 0,
     }
 
 
@@ -674,6 +843,8 @@ def _cells_to_record(cells: Sequence[str]) -> Optional[dict]:
         "BT": bt_val,
         "DO": do_val,
         "DD": dd_val,
+        "CaptainSlots": 0,
+        "FOSlots": 0,
     }
 
 

@@ -120,6 +120,7 @@ def _make_professional_table(data, col_widths=None):
 def extract_pdf_header_info(pdf_path: Path):
     """
     Extract bid period, domicile, fleet type, and date range from PDF header.
+    Checks the first page, and if header info is not found, checks the second page.
     Returns a dictionary with the extracted information.
     """
     reader = PdfReader(str(pdf_path))
@@ -132,9 +133,6 @@ def extract_pdf_header_info(pdf_path: Path):
             'report_date': 'Unknown'
         }
 
-    # Extract text from first page to get header info
-    first_page_text = reader.pages[0].extract_text()
-
     # Initialize results
     result = {
         'bid_period': 'Unknown',
@@ -144,30 +142,52 @@ def extract_pdf_header_info(pdf_path: Path):
         'report_date': 'Unknown'
     }
 
-    # Extract Bid Period (e.g., "Bid Period : 2601")
-    bid_period_match = re.search(r"Bid\s+Period\s*:\s*(\d+)", first_page_text, re.IGNORECASE)
-    if bid_period_match:
-        result['bid_period'] = bid_period_match.group(1)
+    # Helper function to extract header info from page text
+    def extract_from_text(text, current_result):
+        extracted = current_result.copy()
 
-    # Extract Domicile (e.g., "Domicile: ONT")
-    domicile_match = re.search(r"Domicile\s*:\s*([A-Z]{3})", first_page_text, re.IGNORECASE)
-    if domicile_match:
-        result['domicile'] = domicile_match.group(1)
+        # Extract Bid Period (e.g., "Bid Period : 2601")
+        if extracted['bid_period'] == 'Unknown':
+            bid_period_match = re.search(r"Bid\s+Period\s*:\s*(\d+)", text, re.IGNORECASE)
+            if bid_period_match:
+                extracted['bid_period'] = bid_period_match.group(1)
 
-    # Extract Fleet Type (e.g., "Fleet Type: 757")
-    fleet_match = re.search(r"Fleet\s+Type\s*:\s*([A-Z0-9\-]+)", first_page_text, re.IGNORECASE)
-    if fleet_match:
-        result['fleet_type'] = fleet_match.group(1)
+        # Extract Domicile (e.g., "Domicile: ONT")
+        if extracted['domicile'] == 'Unknown':
+            domicile_match = re.search(r"Domicile\s*:\s*([A-Z]{3})", text, re.IGNORECASE)
+            if domicile_match:
+                extracted['domicile'] = domicile_match.group(1)
 
-    # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 30Nov2025 - 25Jan2026")
-    date_range_match = re.search(r"Bid\s+Period\s+Date\s+Range\s*:\s*(.+?)(?:\n|Date/Time)", first_page_text, re.IGNORECASE)
-    if date_range_match:
-        result['date_range'] = date_range_match.group(1).strip()
+        # Extract Fleet Type (e.g., "Fleet Type: 757")
+        if extracted['fleet_type'] == 'Unknown':
+            fleet_match = re.search(r"Fleet\s+Type\s*:\s*([A-Z0-9\-]+)", text, re.IGNORECASE)
+            if fleet_match:
+                extracted['fleet_type'] = fleet_match.group(1)
 
-    # Extract Date/Time (e.g., "Date/Time: 16Oct2025 16:32")
-    report_date_match = re.search(r"Date/Time\s*:\s*(.+?)(?:\n|$)", first_page_text, re.IGNORECASE)
-    if report_date_match:
-        result['report_date'] = report_date_match.group(1).strip()
+        # Extract Bid Period Date Range (e.g., "Bid Period Date Range: 30Nov2025 - 25Jan2026")
+        if extracted['date_range'] == 'Unknown':
+            date_range_match = re.search(r"Bid\s+Period\s+Date\s+Range\s*:\s*(.+?)(?:\n|Date/Time)", text, re.IGNORECASE)
+            if date_range_match:
+                extracted['date_range'] = date_range_match.group(1).strip()
+
+        # Extract Date/Time (e.g., "Date/Time: 16Oct2025 16:32")
+        if extracted['report_date'] == 'Unknown':
+            report_date_match = re.search(r"Date/Time\s*:\s*(.+?)(?:\n|$)", text, re.IGNORECASE)
+            if report_date_match:
+                extracted['report_date'] = report_date_match.group(1).strip()
+
+        return extracted
+
+    # Try extracting from first page
+    first_page_text = reader.pages[0].extract_text()
+    result = extract_from_text(first_page_text, result)
+
+    # If any critical fields are still Unknown, try second page
+    if (result['bid_period'] == 'Unknown' or
+        result['domicile'] == 'Unknown' or
+        result['fleet_type'] == 'Unknown') and len(reader.pages) >= 2:
+        second_page_text = reader.pages[1].extract_text()
+        result = extract_from_text(second_page_text, result)
 
     return result
 
@@ -1286,6 +1306,20 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
             progress_callback(progress, f"Analyzing pairings... ({idx}/{total_trips})")
 
     df_trips = pd.DataFrame(trip_records)
+
+    # Handle empty or malformed dataframe
+    if df_trips.empty:
+        raise ValueError(
+            "❌ No valid pairings found in PDF.\n\n"
+            "**Possible causes:**\n"
+            "- This might be a **Bid Line PDF** (should be uploaded to Tab 2: Bid Line Analyzer)\n"
+            "- The PDF format may not be supported\n"
+            "- The PDF may be corrupted or empty\n\n"
+            "**Expected format:** Pairing PDF with Trip IDs and duty day information"
+        )
+
+    if "Hot Standby" not in df_trips.columns:
+        raise ValueError("No valid trips parsed from PDF. Please check PDF format.")
 
     if progress_callback:
         progress_callback(60, "Calculating statistics...")
