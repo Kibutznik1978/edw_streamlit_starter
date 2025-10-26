@@ -1,9 +1,9 @@
 # EDW Pairing Analyzer - Handoff Document
 
-**Last Updated:** October 20, 2025
+**Last Updated:** October 26, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
-**Version:** 1.0 (Production Ready)
+**Version:** 1.1 (Production Ready)
 
 ---
 
@@ -41,11 +41,22 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 14)
+## Current Status (Session 15)
 
-✅ **Aero Crew Data Brand Fully Integrated** - Professional brand identity across all PDF exports
+✅ **Reserve Line Filtering & Enhanced Distribution Charts** - Accurate averages and comprehensive visualizations
 
-### Latest Updates (October 21, 2025)
+### Latest Updates (October 26, 2025)
+
+**Session 15 - Reserve Line Logic & Distribution Enhancements:**
+- **Implemented:** Smart reserve line filtering (regular reserve excluded, HSBY kept for CT/DO/DD)
+- **Added:** Hot Standby detection (`IsHotStandby` column in reserve_lines DataFrame)
+- **Fixed:** Average CT/BT/DO/DD now exclude reserve lines appropriately
+- **Enhanced:** Distribution charts with angled labels and automatic binning
+- **Added:** CT, BT, DD, DO distribution charts to Visuals tab (4 charts with count + percentage views)
+- **Improved:** Clear captions on KPI cards ("*Reserve lines excluded" / "*Reserve/HSBY excluded")
+- **Updated:** Both UI (Summary/Visuals tabs) and PDF reports use consistent logic
+- **Completed:** Reserve lines excluded from "Credit and Block by Line" line chart
+- **Completed:** Percentage charts added alongside count charts for all 4 distributions (side-by-side layout)
 
 **Session 14 - Brand Integration & PDF Layout Refinements:**
 - **Integrated:** Official Aero Crew Data brand palette (Navy, Teal, Sky, Gray)
@@ -137,6 +148,7 @@ Detailed documentation for each development session:
 | Session 12 | Oct 20, 2025 | Professional PDF Report Export System | [session-12.md](handoff/sessions/session-12.md) |
 | Session 13 | Oct 20, 2025 | PDF Enhancements & Professional Integration | [session-13.md](handoff/sessions/session-13.md) |
 | Session 14 | Oct 21, 2025 | Brand Integration & PDF Layout Refinements | [session-14.md](handoff/sessions/session-14.md) |
+| Session 15 | Oct 26, 2025 | Reserve Line Logic & Distribution Enhancements | [session-15.md](handoff/sessions/session-15.md) |
 
 ---
 

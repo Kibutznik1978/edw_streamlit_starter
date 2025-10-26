@@ -34,6 +34,7 @@ _BLOCK_HEADER_RE = re.compile(r"^[A-Z]{2,}\s+(?P<line>\d{1,4})\b", re.MULTILINE)
 _VTO_PATTERN_RE = re.compile(r"\b(VTOR|VTO|VOR)\b", re.IGNORECASE)
 _RESERVE_DAY_PATTERN_RE = re.compile(r"\b(RA|SA|RB|SB|RC|SC|RD|SD)\b", re.IGNORECASE)
 _SHIFTABLE_RESERVE_RE = re.compile(r"SHIFTABLE\s+RESERVE", re.IGNORECASE)
+_HOT_STANDBY_RE = re.compile(r"\b(HSBY|HOT\s*STANDBY|HOTSTANDBY)\b", re.IGNORECASE)
 _AVAILABILITY_PATTERN_RE = re.compile(r"(\d+)/(\d+)/(\d+)")
 
 
@@ -45,7 +46,7 @@ class ParseDiagnostics:
     used_tables: bool
     warnings: List[str]
     pay_periods: Optional[pd.DataFrame] = None
-    reserve_lines: Optional[pd.DataFrame] = None  # DataFrame with columns: Line, IsReserve, CaptainSlots, FOSlots
+    reserve_lines: Optional[pd.DataFrame] = None  # DataFrame with columns: Line, IsReserve, IsHotStandby, CaptainSlots, FOSlots
 
 
 def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
@@ -214,12 +215,15 @@ def parse_bid_lines(
     return df, diagnostics
 
 
-def _detect_reserve_line(block: str) -> Tuple[bool, int, int]:
-    """Detect if a line is a reserve line and extract captain/FO slot counts.
+def _detect_reserve_line(block: str) -> Tuple[bool, bool, int, int]:
+    """Detect if a line is a reserve line or hot standby and extract captain/FO slot counts.
 
     Returns:
-        Tuple of (is_reserve, captain_slots, fo_slots)
+        Tuple of (is_reserve, is_hot_standby, captain_slots, fo_slots)
     """
+    # Check for Hot Standby patterns first (HSBY, HOT STANDBY, etc.)
+    is_hot_standby = bool(_HOT_STANDBY_RE.search(block))
+
     # Check for reserve day patterns (RA, SA, RB, SB, RC, SC, RD, SD)
     has_reserve_days = bool(_RESERVE_DAY_PATTERN_RE.search(block))
 
@@ -252,7 +256,7 @@ def _detect_reserve_line(block: str) -> Tuple[bool, int, int]:
         except (ValueError, IndexError):
             pass
 
-    return is_reserve, captain_slots, fo_slots
+    return is_reserve, is_hot_standby, captain_slots, fo_slots
 
 
 def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[List[dict], List[str], List[dict]]:
@@ -283,10 +287,11 @@ def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[Li
 
             # Detect reserve line status for this block
             line_id = block_records[0]["Line"]  # All records in block have same line ID
-            is_reserve, captain_slots, fo_slots = _detect_reserve_line(block)
+            is_reserve, is_hot_standby, captain_slots, fo_slots = _detect_reserve_line(block)
             reserve_info.append({
                 "Line": line_id,
                 "IsReserve": is_reserve,
+                "IsHotStandby": is_hot_standby,
                 "CaptainSlots": captain_slots,
                 "FOSlots": fo_slots,
             })
@@ -341,7 +346,7 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
     matches = list(PAY_PERIOD_RE.finditer(block))
     if matches:
         # Check if this is a reserve line
-        is_reserve, _, _ = _detect_reserve_line(block)
+        is_reserve, _, _, _ = _detect_reserve_line(block)
 
         for match in matches:
             segment = match.group(0)
@@ -390,7 +395,7 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
     dd_value = _extract_int_field(block, "DD")
 
     # Check if this is a reserve line (CT=0, BT=0, or has reserve indicators)
-    is_reserve, _, _ = _detect_reserve_line(block)
+    is_reserve, _, _, _ = _detect_reserve_line(block)
 
     # For reserve lines, DO (Days Off) might be missing - that's okay, default to 0
     if is_reserve and do_value is None:

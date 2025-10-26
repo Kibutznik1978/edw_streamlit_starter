@@ -898,7 +898,7 @@ def render_bid_line_analyzer():
                 st.warning("⚠️ Could not find line data. Try exporting the PDF as Excel if issue persists.")
             else:
                 filters = _build_filters(df)
-                filtered_df = _apply_filters(df, filters)
+                filtered_df = _apply_filters(df, filters, reserve_lines_df)
 
                 csv_buffer = io.StringIO()
                 filtered_df.to_csv(csv_buffer, index=False)
@@ -1014,7 +1014,7 @@ def render_bid_line_analyzer():
                 with summary_tab:
                     _render_summary_tab(filtered_df, pay_periods_df, reserve_lines_df)
                 with visuals_tab:
-                    _render_visuals_tab(filtered_df, pay_periods_df)
+                    _render_visuals_tab(filtered_df, pay_periods_df, reserve_lines_df)
     else:
         st.info("Upload a bid roster PDF to begin analysis.")
 
@@ -1064,6 +1064,15 @@ def _build_filters(df: pd.DataFrame) -> Dict[str, Tuple]:
     filters = st.session_state.get("bidline_filters", {})
 
     st.sidebar.header("Filters")
+
+    # Add reserve line filter checkbox
+    show_reserve_lines = st.sidebar.checkbox(
+        "Show Reserve Lines",
+        value=filters.get("show_reserve_lines", True),
+        help="Reserve lines typically have BT=0 and are excluded from BT averages. Uncheck to hide them from the table.",
+        key="bidline_show_reserve"
+    )
+
     ct_range = filters.get("ct_range", (float(df["CT"].min()), float(df["CT"].max())))
     bt_range = filters.get("bt_range", (float(df["BT"].min()), float(df["BT"].max())))
 
@@ -1096,18 +1105,27 @@ def _build_filters(df: pd.DataFrame) -> Dict[str, Tuple]:
         "bt_range": bt_range,
         "do_values": tuple(selected_do),
         "dd_values": tuple(selected_dd),
+        "show_reserve_lines": show_reserve_lines,
     }
     st.session_state["bidline_filters"] = active_filters
     return active_filters
 
 
-def _apply_filters(df: pd.DataFrame, filters: Dict[str, Tuple]) -> pd.DataFrame:
+def _apply_filters(df: pd.DataFrame, filters: Dict[str, Tuple], reserve_lines_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     filtered = df[
         (df["CT"].between(filters["ct_range"][0], filters["ct_range"][1]))
         & (df["BT"].between(filters["bt_range"][0], filters["bt_range"][1]))
         & (df["DO"].isin(filters["do_values"]))
         & (df["DD"].isin(filters["dd_values"]))
     ]
+
+    # Filter out reserve lines if checkbox is unchecked
+    if not filters.get("show_reserve_lines", True) and reserve_lines_df is not None and not reserve_lines_df.empty:
+        if 'IsReserve' in reserve_lines_df.columns:
+            reserve_mask = reserve_lines_df['IsReserve'] == True
+            reserve_line_numbers = set(reserve_lines_df[reserve_mask]['Line'].tolist())
+            filtered = filtered[~filtered['Line'].isin(reserve_line_numbers)]
+
     return filtered.copy()
 
 
@@ -1147,50 +1165,322 @@ def _render_summary_tab(filtered_df: pd.DataFrame, pay_periods: Optional[pd.Data
         st.info("Add filters or upload a different roster to see summary metrics.")
         return
 
-    metrics = filtered_df.agg({
-        "CT": ["mean", "min", "max"],
-        "BT": ["mean", "min", "max"],
-        "DO": ["mean", "min", "max"],
-        "DD": ["mean", "min", "max"],
-    }).round(1)
+    # Identify reserve lines (exclude regular reserve, keep HSBY for CT/DO/DD)
+    reserve_line_numbers = set()  # Regular reserve lines (RA, SA, RB, etc.) - exclude from everything
+    hsby_line_numbers = set()  # HSBY lines - exclude only from BT
+
+    if reserve_lines is not None and not reserve_lines.empty:
+        if 'IsReserve' in reserve_lines.columns and 'IsHotStandby' in reserve_lines.columns:
+            # Regular reserve lines (not HSBY): exclude from everything
+            regular_reserve_mask = (reserve_lines['IsReserve'] == True) & (reserve_lines['IsHotStandby'] == False)
+            reserve_line_numbers = set(reserve_lines[regular_reserve_mask]['Line'].tolist())
+
+            # HSBY lines: exclude only from BT
+            hsby_mask = reserve_lines['IsHotStandby'] == True
+            hsby_line_numbers = set(reserve_lines[hsby_mask]['Line'].tolist())
+
+    # Filter dataframes
+    # For CT, DO, DD: exclude regular reserve (keep HSBY)
+    filtered_df_non_reserve = filtered_df[~filtered_df['Line'].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_df
+
+    # For BT: exclude both regular reserve AND HSBY
+    all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
+    filtered_df_for_bt = filtered_df[~filtered_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_df
+
+    # Calculate metrics
+    ct_metrics = filtered_df_non_reserve['CT'].agg(['mean', 'min', 'max']) if not filtered_df_non_reserve.empty else filtered_df['CT'].agg(['mean', 'min', 'max'])
+    bt_metrics = filtered_df_for_bt['BT'].agg(['mean', 'min', 'max']) if not filtered_df_for_bt.empty else filtered_df['BT'].agg(['mean', 'min', 'max'])
+    do_metrics = filtered_df_non_reserve['DO'].agg(['mean', 'min', 'max']) if not filtered_df_non_reserve.empty else filtered_df['DO'].agg(['mean', 'min', 'max'])
+    dd_metrics = filtered_df_non_reserve['DD'].agg(['mean', 'min', 'max']) if not filtered_df_non_reserve.empty else filtered_df['DD'].agg(['mean', 'min', 'max'])
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Avg Credit", f"{metrics.loc['mean', 'CT']:.1f}", delta=f"Range {metrics.loc['min', 'CT']:.1f}-{metrics.loc['max', 'CT']:.1f}")
-    col2.metric("Avg Block", f"{metrics.loc['mean', 'BT']:.1f}", delta=f"Range {metrics.loc['min', 'BT']:.1f}-{metrics.loc['max', 'BT']:.1f}")
-    col3.metric("Avg Days Off", f"{metrics.loc['mean', 'DO']:.1f}", delta=f"Range {metrics.loc['min', 'DO']:.0f}-{metrics.loc['max', 'DO']:.0f}")
-    col4.metric("Avg Duty Days", f"{metrics.loc['mean', 'DD']:.1f}", delta=f"Range {metrics.loc['min', 'DD']:.0f}-{metrics.loc['max', 'DD']:.0f}")
+    col1.metric("Avg Credit", f"{ct_metrics['mean']:.1f}", delta=f"Range {ct_metrics['min']:.1f}-{ct_metrics['max']:.1f}")
+    if reserve_line_numbers:
+        col1.caption("*Reserve lines excluded")
+
+    col2.metric("Avg Block", f"{bt_metrics['mean']:.1f}", delta=f"Range {bt_metrics['min']:.1f}-{bt_metrics['max']:.1f}")
+    if reserve_line_numbers or hsby_line_numbers:
+        col2.caption("*Reserve/HSBY excluded")
+
+    col3.metric("Avg Days Off", f"{do_metrics['mean']:.1f}", delta=f"Range {do_metrics['min']:.0f}-{do_metrics['max']:.0f}")
+    if reserve_line_numbers:
+        col3.caption("*Reserve lines excluded")
+
+    col4.metric("Avg Duty Days", f"{dd_metrics['mean']:.1f}", delta=f"Range {dd_metrics['min']:.0f}-{dd_metrics['max']:.0f}")
+    if reserve_line_numbers:
+        col4.caption("*Reserve lines excluded")
 
     if pay_periods is not None and not pay_periods.empty:
         subset = pay_periods[pay_periods["Line"].isin(filtered_df["Line"])]
         if not subset.empty:
-            period_metrics = subset.groupby("Period")[["CT", "BT", "DO", "DD"]].mean().round(1)
-            st.markdown("**Per Pay Period Averages**")
-            st.dataframe(period_metrics.rename(index=lambda idx: f"PP{int(idx)}"))
+            # Filter for pay period averages
+            # For CT, DO, DD: exclude regular reserve (keep HSBY)
+            subset_non_reserve = subset[~subset["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else subset
+
+            # For BT: exclude both regular reserve AND HSBY
+            subset_for_bt = subset[~subset["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else subset
+
+            # Calculate period metrics separately
+            period_metrics_ct = subset_non_reserve.groupby("Period")["CT"].mean().round(1) if not subset_non_reserve.empty else pd.Series()
+            period_metrics_bt = subset_for_bt.groupby("Period")["BT"].mean().round(1) if not subset_for_bt.empty else pd.Series()
+            period_metrics_do = subset_non_reserve.groupby("Period")["DO"].mean().round(1) if not subset_non_reserve.empty else pd.Series()
+            period_metrics_dd = subset_non_reserve.groupby("Period")["DD"].mean().round(1) if not subset_non_reserve.empty else pd.Series()
+
+            # Combine them
+            period_metrics = pd.DataFrame({
+                'CT': period_metrics_ct,
+                'BT': period_metrics_bt,
+                'DO': period_metrics_do,
+                'DD': period_metrics_dd
+            })
+
+            if not period_metrics.empty:
+                st.markdown("**Per Pay Period Averages**")
+                st.dataframe(period_metrics.rename(index=lambda idx: f"PP{int(idx)}"))
 
 
-def _render_visuals_tab(filtered_df: pd.DataFrame, pay_periods: Optional[pd.DataFrame] = None) -> None:
+def _render_visuals_tab(filtered_df: pd.DataFrame, pay_periods: Optional[pd.DataFrame] = None, reserve_lines: Optional[pd.DataFrame] = None) -> None:
     if filtered_df.empty:
         st.info("No data to visualize with the current filters.")
         return
 
+    # Identify reserve lines (same logic as Summary tab)
+    reserve_line_numbers_chart = set()  # Regular reserve lines - exclude from chart
+    if reserve_lines is not None and not reserve_lines.empty:
+        if 'IsReserve' in reserve_lines.columns and 'IsHotStandby' in reserve_lines.columns:
+            # Regular reserve lines (not HSBY): exclude from chart
+            regular_reserve_mask = (reserve_lines['IsReserve'] == True) & (reserve_lines['IsHotStandby'] == False)
+            reserve_line_numbers_chart = set(reserve_lines[regular_reserve_mask]['Line'].tolist())
+
+    # Filter out regular reserve lines for the line chart
+    chart_df = filtered_df[~filtered_df['Line'].isin(reserve_line_numbers_chart)] if reserve_line_numbers_chart else filtered_df
+
     st.markdown("**Credit and Block by Line**")
-    chart_data = filtered_df.set_index("Line")["CT"].to_frame()
-    chart_data["BT"] = filtered_df.set_index("Line")["BT"]
-    st.line_chart(chart_data)
+    if not chart_df.empty:
+        chart_data = chart_df.set_index("Line")["CT"].to_frame()
+        chart_data["BT"] = chart_df.set_index("Line")["BT"]
+        st.line_chart(chart_data)
+    else:
+        st.info("No data to display for Credit and Block by Line chart.")
 
     if alt is None:
         st.info("Install altair to unlock detailed distribution charts.")
         return
 
-    # Basic distribution charts (simplified)
-    st.markdown("**Days Off Distribution**")
-    do_dist = filtered_df.groupby("DO").size().reset_index(name="Lines")
-    do_chart = alt.Chart(do_dist).mark_bar(color="#457B9D").encode(
-        x=alt.X("DO:O", title="Days Off"),
-        y=alt.Y("Lines:Q", title="Count"),
-        tooltip=["DO", "Lines"]
-    )
-    st.altair_chart(do_chart, use_container_width=True)
+    st.markdown("---")
+    st.markdown("### Distribution Charts")
+
+    # Identify reserve lines (same logic as Summary tab)
+    reserve_line_numbers = set()  # Regular reserve lines - exclude from everything
+    hsby_line_numbers = set()  # HSBY lines - exclude only from BT
+
+    if reserve_lines is not None and not reserve_lines.empty:
+        if 'IsReserve' in reserve_lines.columns and 'IsHotStandby' in reserve_lines.columns:
+            # Regular reserve lines (not HSBY): exclude from everything
+            regular_reserve_mask = (reserve_lines['IsReserve'] == True) & (reserve_lines['IsHotStandby'] == False)
+            reserve_line_numbers = set(reserve_lines[regular_reserve_mask]['Line'].tolist())
+
+            # HSBY lines: exclude only from BT
+            hsby_mask = reserve_lines['IsHotStandby'] == True
+            hsby_line_numbers = set(reserve_lines[hsby_mask]['Line'].tolist())
+
+    # Filter dataframes for distributions
+    # For CT, DO, DD: exclude regular reserve (keep HSBY)
+    filtered_df_non_reserve = filtered_df[~filtered_df['Line'].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_df
+
+    # For BT: exclude both regular reserve AND HSBY
+    all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
+    filtered_df_for_bt = filtered_df[~filtered_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_df
+
+    # Credit Time Distribution
+    st.markdown("**Credit Time (CT) Distribution**")
+    # Use filtered_df_non_reserve (excludes regular reserve, keeps HSBY)
+    ct_data = filtered_df_non_reserve[filtered_df_non_reserve['CT'] > 0]['CT']
+    if not ct_data.empty:
+        # Create bins for credit time based on actual data range (5-hour intervals)
+        ct_min = int(ct_data.min())
+        ct_max = int(ct_data.max())
+        # Start bins from the nearest multiple of 5 below min
+        bin_start = (ct_min // 5) * 5
+        # End bins at the nearest multiple of 5 above max
+        bin_end = ((ct_max // 5) + 1) * 5 + 5
+        ct_bins = list(range(bin_start, bin_end, 5))
+
+        ct_binned = pd.cut(ct_data, bins=ct_bins, include_lowest=True)
+        ct_dist = ct_binned.value_counts().sort_index().reset_index()
+        ct_dist.columns = ['Range', 'Lines']
+
+        # Calculate percentages
+        total_lines = ct_dist['Lines'].sum()
+        ct_dist['Percentage'] = (ct_dist['Lines'] / total_lines * 100).round(1)
+
+        # Format labels as "65-70 hrs" instead of interval notation
+        ct_dist['Range_Label'] = ct_dist['Range'].apply(
+            lambda x: f"{int(x.left)}-{int(x.right)} hrs"
+        )
+
+        # Create two columns for count and percentage charts
+        col1, col2 = st.columns(2)
+
+        with col1:
+            ct_chart_count = alt.Chart(ct_dist).mark_bar(color="#1BB3A4").encode(
+                x=alt.X("Range_Label:N", title="Credit Time (hours)", sort=None, axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y("Lines:Q", title="Number of Lines"),
+                tooltip=[
+                    alt.Tooltip("Range_Label:N", title="Credit Time"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Count")
+            st.altair_chart(ct_chart_count, use_container_width=True)
+
+        with col2:
+            ct_chart_pct = alt.Chart(ct_dist).mark_bar(color="#1BB3A4").encode(
+                x=alt.X("Range_Label:N", title="Credit Time (hours)", sort=None, axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y("Percentage:Q", title="Percentage of Lines"),
+                tooltip=[
+                    alt.Tooltip("Range_Label:N", title="Credit Time"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Percentage")
+            st.altair_chart(ct_chart_pct, use_container_width=True)
+    else:
+        st.info("No non-zero credit time data to display.")
+
+    # Block Time Distribution
+    st.markdown("**Block Time (BT) Distribution**")
+    # Use filtered_df_for_bt (excludes regular reserve AND HSBY)
+    bt_data = filtered_df_for_bt[filtered_df_for_bt['BT'] > 0]['BT']
+    if not bt_data.empty:
+        # Create bins for block time based on actual data range (5-hour intervals)
+        bt_min = int(bt_data.min())
+        bt_max = int(bt_data.max())
+        # Start bins from the nearest multiple of 5 below min
+        bin_start = (bt_min // 5) * 5
+        # End bins at the nearest multiple of 5 above max
+        bin_end = ((bt_max // 5) + 1) * 5 + 5
+        bt_bins = list(range(bin_start, bin_end, 5))
+
+        bt_binned = pd.cut(bt_data, bins=bt_bins, include_lowest=True)
+        bt_dist = bt_binned.value_counts().sort_index().reset_index()
+        bt_dist.columns = ['Range', 'Lines']
+
+        # Calculate percentages
+        total_lines = bt_dist['Lines'].sum()
+        bt_dist['Percentage'] = (bt_dist['Lines'] / total_lines * 100).round(1)
+
+        # Format labels as "55-60 hrs" instead of interval notation
+        bt_dist['Range_Label'] = bt_dist['Range'].apply(
+            lambda x: f"{int(x.left)}-{int(x.right)} hrs"
+        )
+
+        # Create two columns for count and percentage charts
+        col1, col2 = st.columns(2)
+
+        with col1:
+            bt_chart_count = alt.Chart(bt_dist).mark_bar(color="#2E9BE8").encode(
+                x=alt.X("Range_Label:N", title="Block Time (hours)", sort=None, axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y("Lines:Q", title="Number of Lines"),
+                tooltip=[
+                    alt.Tooltip("Range_Label:N", title="Block Time"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Count")
+            st.altair_chart(bt_chart_count, use_container_width=True)
+
+        with col2:
+            bt_chart_pct = alt.Chart(bt_dist).mark_bar(color="#2E9BE8").encode(
+                x=alt.X("Range_Label:N", title="Block Time (hours)", sort=None, axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y("Percentage:Q", title="Percentage of Lines"),
+                tooltip=[
+                    alt.Tooltip("Range_Label:N", title="Block Time"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Percentage")
+            st.altair_chart(bt_chart_pct, use_container_width=True)
+    else:
+        st.info("No non-zero block time data to display.")
+
+    # Duty Days Distribution
+    st.markdown("**Duty Days (DD) Distribution**")
+    # Use filtered_df_non_reserve (excludes regular reserve, keeps HSBY)
+    if not filtered_df_non_reserve.empty:
+        dd_dist = filtered_df_non_reserve.groupby("DD").size().reset_index(name="Lines")
+
+        # Calculate percentages
+        total_lines = dd_dist['Lines'].sum()
+        dd_dist['Percentage'] = (dd_dist['Lines'] / total_lines * 100).round(1)
+
+        # Create two columns for count and percentage charts
+        col1, col2 = st.columns(2)
+
+        with col1:
+            dd_chart_count = alt.Chart(dd_dist).mark_bar(color="#0C7C73").encode(
+                x=alt.X("DD:O", title="Duty Days"),
+                y=alt.Y("Lines:Q", title="Number of Lines"),
+                tooltip=[
+                    alt.Tooltip("DD:O", title="Duty Days"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Count")
+            st.altair_chart(dd_chart_count, use_container_width=True)
+
+        with col2:
+            dd_chart_pct = alt.Chart(dd_dist).mark_bar(color="#0C7C73").encode(
+                x=alt.X("DD:O", title="Duty Days"),
+                y=alt.Y("Percentage:Q", title="Percentage of Lines"),
+                tooltip=[
+                    alt.Tooltip("DD:O", title="Duty Days"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Percentage")
+            st.altair_chart(dd_chart_pct, use_container_width=True)
+    else:
+        st.info("No data to display for Duty Days distribution.")
+
+    # Days Off Distribution
+    st.markdown("**Days Off (DO) Distribution**")
+    # Use filtered_df_non_reserve (excludes regular reserve, keeps HSBY)
+    if not filtered_df_non_reserve.empty:
+        do_dist = filtered_df_non_reserve.groupby("DO").size().reset_index(name="Lines")
+
+        # Calculate percentages
+        total_lines = do_dist['Lines'].sum()
+        do_dist['Percentage'] = (do_dist['Lines'] / total_lines * 100).round(1)
+
+        # Create two columns for count and percentage charts
+        col1, col2 = st.columns(2)
+
+        with col1:
+            do_chart_count = alt.Chart(do_dist).mark_bar(color="#457B9D").encode(
+                x=alt.X("DO:O", title="Days Off"),
+                y=alt.Y("Lines:Q", title="Number of Lines"),
+                tooltip=[
+                    alt.Tooltip("DO:O", title="Days Off"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Count")
+            st.altair_chart(do_chart_count, use_container_width=True)
+
+        with col2:
+            do_chart_pct = alt.Chart(do_dist).mark_bar(color="#457B9D").encode(
+                x=alt.X("DO:O", title="Days Off"),
+                y=alt.Y("Percentage:Q", title="Percentage of Lines"),
+                tooltip=[
+                    alt.Tooltip("DO:O", title="Days Off"),
+                    alt.Tooltip("Lines:Q", title="Lines"),
+                    alt.Tooltip("Percentage:Q", title="Percentage", format=".1f")
+                ]
+            ).properties(height=300, title="Percentage")
+            st.altair_chart(do_chart_pct, use_container_width=True)
+    else:
+        st.info("No data to display for Days Off distribution.")
 
 
 #==============================================================================

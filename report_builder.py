@@ -379,6 +379,28 @@ def build_analysis_pdf(
     metadata = metadata or ReportMetadata()
     branding = {**DEFAULT_BRANDING, **(branding or {})}
 
+    # Identify reserve lines (exclude regular reserve, keep HSBY for CT/DO/DD)
+    reserve_line_numbers = set()  # Regular reserve lines (RA, SA, RB, etc.) - exclude from everything
+    hsby_line_numbers = set()  # HSBY lines - exclude only from BT
+
+    if reserve_lines is not None and not reserve_lines.empty:
+        if 'IsReserve' in reserve_lines.columns and 'IsHotStandby' in reserve_lines.columns:
+            # Regular reserve lines (not HSBY): exclude from everything
+            regular_reserve_mask = (reserve_lines['IsReserve'] == True) & (reserve_lines['IsHotStandby'] == False)
+            reserve_line_numbers = set(reserve_lines[regular_reserve_mask]['Line'].tolist())
+
+            # HSBY lines: exclude only from BT
+            hsby_mask = reserve_lines['IsHotStandby'] == True
+            hsby_line_numbers = set(reserve_lines[hsby_mask]['Line'].tolist())
+
+    # Filter dataframes
+    # For CT, DO, DD: exclude regular reserve (keep HSBY)
+    df_non_reserve = df[~df['Line'].isin(reserve_line_numbers)] if reserve_line_numbers else df
+
+    # For BT: exclude both regular reserve AND HSBY
+    all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
+    df_for_bt = df[~df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else df
+
     # Create document
     doc = SimpleDocTemplate(
         tempfile.NamedTemporaryFile(delete=False, suffix='.pdf').name,
@@ -445,23 +467,29 @@ def build_analysis_pdf(
         story.append(Spacer(1, 12))
 
         # KPI Cards - Summary Statistics with ranges
-        summary_stats = df[["CT", "BT", "DO", "DD"]].agg(['mean', 'min', 'max']).transpose()
+        # Use df_non_reserve for CT/DO/DD (excludes regular reserve, keeps HSBY)
+        # Use df_for_bt for BT (excludes regular reserve AND HSBY)
+        ct_stats = df_non_reserve['CT'].agg(['mean', 'min', 'max']) if not df_non_reserve.empty else df['CT'].agg(['mean', 'min', 'max'])
+        bt_stats = df_for_bt['BT'].agg(['mean', 'min', 'max']) if not df_for_bt.empty else df['BT'].agg(['mean', 'min', 'max'])
+        do_stats = df_non_reserve['DO'].agg(['mean', 'min', 'max']) if not df_non_reserve.empty else df['DO'].agg(['mean', 'min', 'max'])
+        dd_stats = df_non_reserve['DD'].agg(['mean', 'min', 'max']) if not df_non_reserve.empty else df['DD'].agg(['mean', 'min', 'max'])
+
         kpi_metrics = {
             "Avg Credit": {
-                "value": f"{summary_stats.loc['CT', 'mean']:.1f}",
-                "range": f"↑ Range {summary_stats.loc['CT', 'min']:.1f}-{summary_stats.loc['CT', 'max']:.1f}"
+                "value": f"{ct_stats['mean']:.1f}",
+                "range": f"↑ Range {ct_stats['min']:.1f}-{ct_stats['max']:.1f}"
             },
             "Avg Block": {
-                "value": f"{summary_stats.loc['BT', 'mean']:.1f}",
-                "range": f"↑ Range {summary_stats.loc['BT', 'min']:.1f}-{summary_stats.loc['BT', 'max']:.1f}"
+                "value": f"{bt_stats['mean']:.1f}",
+                "range": f"↑ Range {bt_stats['min']:.1f}-{bt_stats['max']:.1f}"
             },
             "Avg Days Off": {
-                "value": f"{summary_stats.loc['DO', 'mean']:.1f}",
-                "range": f"↑ Range {int(summary_stats.loc['DO', 'min'])}-{int(summary_stats.loc['DO', 'max'])}"
+                "value": f"{do_stats['mean']:.1f}",
+                "range": f"↑ Range {int(do_stats['min'])}-{int(do_stats['max'])}"
             },
             "Avg Duty Days": {
-                "value": f"{summary_stats.loc['DD', 'mean']:.1f}",
-                "range": f"↑ Range {int(summary_stats.loc['DD', 'min'])}-{int(summary_stats.loc['DD', 'max'])}"
+                "value": f"{dd_stats['mean']:.1f}",
+                "range": f"↑ Range {int(dd_stats['min'])}-{int(dd_stats['max'])}"
             }
         }
         kpi_table = _make_kpi_row(kpi_metrics, branding)
@@ -482,17 +510,21 @@ def build_analysis_pdf(
         story.append(Paragraph("Summary Statistics", heading2_style))
         story.append(Spacer(1, 8))
 
-        summary = df[["CT", "BT", "DO", "DD"]].agg(["min", "max", "mean", "median", "std"]).transpose()
+        # Calculate statistics - use df_non_reserve for CT/DO/DD, df_for_bt for BT
+        ct_summary = df_non_reserve['CT'].agg(["min", "max", "mean", "median", "std"]) if not df_non_reserve.empty else df['CT'].agg(["min", "max", "mean", "median", "std"])
+        bt_summary = df_for_bt['BT'].agg(["min", "max", "mean", "median", "std"]) if not df_for_bt.empty else df['BT'].agg(["min", "max", "mean", "median", "std"])
+        do_summary = df_non_reserve['DO'].agg(["min", "max", "mean", "median", "std"]) if not df_non_reserve.empty else df['DO'].agg(["min", "max", "mean", "median", "std"])
+        dd_summary = df_non_reserve['DD'].agg(["min", "max", "mean", "median", "std"]) if not df_non_reserve.empty else df['DD'].agg(["min", "max", "mean", "median", "std"])
+
         summary_data = [["Metric", "Min", "Max", "Average", "Median", "Std Dev"]]
-        for metric in ["CT", "BT", "DO", "DD"]:
-            row = summary.loc[metric]
+        for metric, stats in [("CT", ct_summary), ("BT", bt_summary), ("DO", do_summary), ("DD", dd_summary)]:
             summary_data.append([
                 metric,
-                f"{row['min']:.2f}",
-                f"{row['max']:.2f}",
-                f"{row['mean']:.2f}",
-                f"{row['median']:.2f}",
-                f"{row['std']:.2f}"
+                f"{stats['min']:.2f}",
+                f"{stats['max']:.2f}",
+                f"{stats['mean']:.2f}",
+                f"{stats['median']:.2f}",
+                f"{stats['std']:.2f}"
             ])
 
         summary_table = _make_styled_table(summary_data, [80, 70, 70, 80, 70, 80], branding)
@@ -507,26 +539,44 @@ def build_analysis_pdf(
                 story.append(Paragraph("Pay Period Averages", heading2_style))
                 story.append(Spacer(1, 8))
 
-                period_metrics = subset.groupby("Period")[["CT", "BT", "DO", "DD"]].mean().round(2)
+                # Filter for pay period averages
+                # For CT, DO, DD: exclude regular reserve (keep HSBY)
+                subset_non_reserve = subset[~subset["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else subset
 
+                # For BT: exclude both regular reserve AND HSBY
+                subset_for_bt = subset[~subset["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else subset
+
+                # Calculate metrics
                 period_data = [["Pay Period", "Avg CT", "Avg BT", "Avg DO", "Avg DD"]]
-                for period, row in period_metrics.iterrows():
+                for period in sorted(subset["Period"].unique()):
+                    period_subset_non_reserve = subset_non_reserve[subset_non_reserve["Period"] == period]
+                    period_subset_for_bt = subset_for_bt[subset_for_bt["Period"] == period]
+
+                    ct_avg = period_subset_non_reserve["CT"].mean() if not period_subset_non_reserve.empty else 0
+                    bt_avg = period_subset_for_bt["BT"].mean() if not period_subset_for_bt.empty else 0
+                    do_avg = period_subset_non_reserve["DO"].mean() if not period_subset_non_reserve.empty else 0
+                    dd_avg = period_subset_non_reserve["DD"].mean() if not period_subset_non_reserve.empty else 0
+
                     period_data.append([
                         f"PP{int(period)}",
-                        f"{row['CT']:.2f}",
-                        f"{row['BT']:.2f}",
-                        f"{row['DO']:.2f}",
-                        f"{row['DD']:.2f}"
+                        f"{ct_avg:.2f}",
+                        f"{bt_avg:.2f}",
+                        f"{do_avg:.2f}",
+                        f"{dd_avg:.2f}"
                     ])
 
                 # Add overall row
-                overall = subset[["CT", "BT", "DO", "DD"]].mean().round(2)
+                ct_overall = subset_non_reserve["CT"].mean() if not subset_non_reserve.empty else 0
+                bt_overall = subset_for_bt["BT"].mean() if not subset_for_bt.empty else 0
+                do_overall = subset_non_reserve["DO"].mean() if not subset_non_reserve.empty else 0
+                dd_overall = subset_non_reserve["DD"].mean() if not subset_non_reserve.empty else 0
+
                 period_data.append([
                     "Overall",
-                    f"{overall['CT']:.2f}",
-                    f"{overall['BT']:.2f}",
-                    f"{overall['DO']:.2f}",
-                    f"{overall['DD']:.2f}"
+                    f"{ct_overall:.2f}",
+                    f"{bt_overall:.2f}",
+                    f"{do_overall:.2f}",
+                    f"{dd_overall:.2f}"
                 ])
 
                 period_table = _make_styled_table(period_data, [100, 80, 80, 80, 80], branding)
@@ -741,25 +791,34 @@ def build_analysis_pdf(
         buy_up_df = df[df['CT'] < threshold]
         non_buy_up_df = df[df['CT'] >= threshold]
 
+        # Filter for buy-up analysis
+        # For CT, DO, DD: exclude regular reserve (keep HSBY)
+        buy_up_df_non_reserve = buy_up_df[~buy_up_df['Line'].isin(reserve_line_numbers)] if reserve_line_numbers else buy_up_df
+        non_buy_up_df_non_reserve = non_buy_up_df[~non_buy_up_df['Line'].isin(reserve_line_numbers)] if reserve_line_numbers else non_buy_up_df
+
+        # For BT: exclude both regular reserve AND HSBY
+        buy_up_df_for_bt = buy_up_df[~buy_up_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else buy_up_df
+        non_buy_up_df_for_bt = non_buy_up_df[~non_buy_up_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else non_buy_up_df
+
         buy_up_data = [
             ["Category", "Lines", "Percent", "Avg CT", "Avg BT", "Avg DO", "Avg DD"],
             [
                 f"Buy-up (<{threshold:.0f} CT)",
                 str(len(buy_up_df)),
                 f"{(len(buy_up_df) / total * 100):.1f}%" if total else "0%",
-                f"{buy_up_df['CT'].mean():.2f}" if not buy_up_df.empty else "N/A",
-                f"{buy_up_df['BT'].mean():.2f}" if not buy_up_df.empty else "N/A",
-                f"{buy_up_df['DO'].mean():.2f}" if not buy_up_df.empty else "N/A",
-                f"{buy_up_df['DD'].mean():.2f}" if not buy_up_df.empty else "N/A"
+                f"{buy_up_df_non_reserve['CT'].mean():.2f}" if not buy_up_df_non_reserve.empty else "N/A",
+                f"{buy_up_df_for_bt['BT'].mean():.2f}" if not buy_up_df_for_bt.empty else "N/A",
+                f"{buy_up_df_non_reserve['DO'].mean():.2f}" if not buy_up_df_non_reserve.empty else "N/A",
+                f"{buy_up_df_non_reserve['DD'].mean():.2f}" if not buy_up_df_non_reserve.empty else "N/A"
             ],
             [
                 f"Non Buy-up (≥{threshold:.0f} CT)",
                 str(len(non_buy_up_df)),
                 f"{(len(non_buy_up_df) / total * 100):.1f}%" if total else "0%",
-                f"{non_buy_up_df['CT'].mean():.2f}" if not non_buy_up_df.empty else "N/A",
-                f"{non_buy_up_df['BT'].mean():.2f}" if not non_buy_up_df.empty else "N/A",
-                f"{non_buy_up_df['DO'].mean():.2f}" if not non_buy_up_df.empty else "N/A",
-                f"{non_buy_up_df['DD'].mean():.2f}" if not non_buy_up_df.empty else "N/A"
+                f"{non_buy_up_df_non_reserve['CT'].mean():.2f}" if not non_buy_up_df_non_reserve.empty else "N/A",
+                f"{non_buy_up_df_for_bt['BT'].mean():.2f}" if not non_buy_up_df_for_bt.empty else "N/A",
+                f"{non_buy_up_df_non_reserve['DO'].mean():.2f}" if not non_buy_up_df_non_reserve.empty else "N/A",
+                f"{non_buy_up_df_non_reserve['DD'].mean():.2f}" if not non_buy_up_df_non_reserve.empty else "N/A"
             ]
         ]
 
