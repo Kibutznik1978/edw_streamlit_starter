@@ -46,13 +46,23 @@ pip install -r requirements.txt
 
 ## Architecture
 
-### Application Structure (Modularized - Sessions 18-21)
+### Application Structure (Modularized - Sessions 18-23)
 
 The application has been refactored into a **fully modular structure** for better maintainability:
 
 ```
 edw_streamlit_starter/
 ├── app.py                           (56 lines - main entry point)
+├── config/                          (Configuration - Phase 5)
+│   ├── __init__.py                 (100 lines - module exports)
+│   ├── constants.py                (75 lines - business logic constants)
+│   ├── branding.py                 (60 lines - brand identity)
+│   └── validation.py               (160 lines - validation rules)
+├── models/                          (Data structures - Phase 5)
+│   ├── __init__.py                 (40 lines - module exports)
+│   ├── pdf_models.py               (75 lines - ReportMetadata, HeaderInfo)
+│   ├── bid_models.py               (65 lines - BidLineData, ReserveLineInfo)
+│   └── edw_models.py               (70 lines - TripData, EDWStatistics)
 ├── ui_modules/                      (UI layer - page modules)
 │   ├── __init__.py                 (11 lines)
 │   ├── edw_analyzer_page.py        (~640 lines - Tab 1)
@@ -87,6 +97,45 @@ Clean entry point with just navigation:
 - Sets up Streamlit page config
 - Creates 3-tab navigation
 - Delegates rendering to module functions
+
+#### Configuration & Models (Phase 5)
+
+**`config/` package** - Centralized configuration (single source of truth):
+- **`constants.py`** - Business logic constants
+  - EDW time detection (02:30-05:00)
+  - Buy-up threshold (75 hours)
+  - Chart configuration (5-hour buckets, 400px height, -45° labels)
+  - Reserve keywords (RA, SA, RB, etc.)
+  - VTO keywords (VTO, VTOR, VOR)
+  - Hot standby detection
+- **`branding.py`** - Brand identity
+  - `BrandColors` dataclass with Aero Crew Data palette
+  - Logo path configuration
+  - Default report title
+- **`validation.py`** - Validation rules
+  - CT/BT thresholds (150 hours warning, 0-200 range)
+  - DO/DD thresholds (20 days warning, 0-31 range)
+  - Combined validation (DO + DD ≤ 31)
+  - Editable/readonly columns
+  - Helper functions for validation
+
+**`models/` package** - Type-safe data structures:
+- **`pdf_models.py`** - PDF report models
+  - `ReportMetadata` - Report metadata (title, subtitle, filters)
+  - `HeaderInfo` - Parsed PDF headers (domicile, aircraft, bid period)
+- **`bid_models.py`** - Bid line models
+  - `BidLineData` - Individual line record with all metrics
+  - `ReserveLineInfo` - Reserve line slot information
+- **`edw_models.py`** - EDW analysis models
+  - `TripData` - Individual trip/pairing record
+  - `EDWStatistics` - Aggregated EDW statistics
+
+**Benefits:**
+- Single source of truth for all configuration
+- Easy to change business rules in one place
+- Type-safe data structures with validation
+- Better testability (can mock/override config)
+- Eliminated code duplication
 
 #### `ui_modules/edw_analyzer_page.py` (722 lines)
 **Tab 1: EDW Pairing Analyzer**
@@ -434,6 +483,30 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 - Click Reset → should restore original parsed data
 
 ## Recent Changes
+
+**Session 23 (October 27, 2025) - Phase 5: Configuration & Models Extraction:**
+- **Created:** `config/` package with all application constants (4 modules, ~300 lines)
+  - `constants.py` - Business logic (EDW times, buy-up threshold, chart config, keywords)
+  - `branding.py` - Brand identity (BrandColors dataclass, logo, colors)
+  - `validation.py` - Validation rules (CT/BT/DO/DD thresholds, ranges, helper functions)
+  - `__init__.py` - Module exports with clean public API
+- **Created:** `models/` package with type-safe data structures (4 modules, ~200 lines)
+  - `pdf_models.py` - ReportMetadata, HeaderInfo dataclasses
+  - `bid_models.py` - BidLineData, ReserveLineInfo dataclasses
+  - `edw_models.py` - TripData, EDWStatistics dataclasses
+  - `__init__.py` - Module exports with clean public API
+- **Updated:** 7 modules to use centralized config/models
+  - `edw/analyzer.py` - Uses EDW time constants from config
+  - `pdf_generation/base.py` - Uses brand colors from config.branding
+  - `pdf_generation/bid_line_pdf.py` - Uses models.ReportMetadata + config (eliminated duplicate)
+  - `ui_components/data_editor.py` - Uses all validation constants from config
+  - `ui_modules/bid_line_analyzer_page.py` - Uses chart config constants
+  - `bid_parser.py` - Uses keyword config for dynamic regex patterns
+- **Benefits:** Single source of truth, type safety, zero duplication, better testability, easy configuration changes
+- **Testing:** All syntax validation passing, all module imports successful, app runs without errors
+- **Result:** Professional architecture, excellent maintainability, fully modularized codebase
+- **Branch:** `refractor`
+- **Refactoring Complete:** All 5 phases (UI, EDW, PDF, Components, Config/Models) finished! 🎉
 
 **Session 22 (October 27, 2025) - Bid Line Distribution Chart Fixes:**
 - **Fixed:** Credit Time (CT) and Block Time (BT) distribution charts showing incorrect sparse distributions
