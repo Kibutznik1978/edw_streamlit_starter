@@ -20,17 +20,16 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import Table, TableStyle, Flowable
 from reportlab.pdfgen import canvas as pdf_canvas
 
+# Import brand configuration
+from config.branding import DEFAULT_BRAND, LOGO_PATH, DEFAULT_REPORT_TITLE
+
 
 # Default branding - Aero Crew Data brand palette
+# Built from config.branding for backward compatibility with dict-based code
 DEFAULT_BRANDING = {
-    "primary_hex": "#0C1E36",  # Brand Navy - headers, primary background
-    "accent_hex": "#1BB3A4",   # Brand Teal - accents, highlights, CTA
-    "rule_hex": "#5B6168",     # Brand Gray - dividers, borders
-    "muted_hex": "#5B6168",    # Brand Gray - secondary typography
-    "bg_alt_hex": "#F8FAFC",   # Light slate for zebra rows (high contrast)
-    "sky_hex": "#2E9BE8",      # Brand Sky - supporting data viz accent
-    "logo_path": "logo-full.svg",  # Aero Crew Data logo
-    "title_left": "Analysis Report"
+    **DEFAULT_BRAND.to_dict(),
+    "logo_path": LOGO_PATH,
+    "title_left": DEFAULT_REPORT_TITLE
 }
 
 

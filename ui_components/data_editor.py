@@ -4,6 +4,14 @@ import pandas as pd
 import streamlit as st
 from typing import List, Dict, Optional
 
+from config.validation import (
+    CT_MIN_HOURS, CT_MAX_HOURS, CT_WARNING_THRESHOLD_HOURS,
+    BT_MIN_HOURS, BT_MAX_HOURS, BT_WARNING_THRESHOLD_HOURS,
+    DO_MIN_DAYS, DO_MAX_DAYS, DO_WARNING_THRESHOLD_DAYS,
+    DD_MIN_DAYS, DD_MAX_DAYS, DD_WARNING_THRESHOLD_DAYS,
+    DO_PLUS_DD_MAX_DAYS, EDITABLE_COLUMNS, READONLY_COLUMNS
+)
+
 
 def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -> pd.DataFrame:
     """Create an editable data grid for bid line data.
@@ -20,7 +28,7 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
         hide_index=True,
         use_container_width=True,
         num_rows="fixed",
-        disabled=["Line"],  # Line number is read-only
+        disabled=READONLY_COLUMNS,  # Line number is read-only
         column_config={
             "Line": st.column_config.NumberColumn(
                 "Line",
@@ -30,32 +38,32 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
             "CT": st.column_config.NumberColumn(
                 "CT",
                 help="Credit Time (hours)",
-                min_value=0.0,
-                max_value=200.0,
+                min_value=CT_MIN_HOURS,
+                max_value=CT_MAX_HOURS,
                 step=0.1,
                 width="small"
             ),
             "BT": st.column_config.NumberColumn(
                 "BT",
                 help="Block Time (hours)",
-                min_value=0.0,
-                max_value=200.0,
+                min_value=BT_MIN_HOURS,
+                max_value=BT_MAX_HOURS,
                 step=0.1,
                 width="small"
             ),
             "DO": st.column_config.NumberColumn(
                 "DO",
                 help="Days Off",
-                min_value=0,
-                max_value=31,
+                min_value=DO_MIN_DAYS,
+                max_value=DO_MAX_DAYS,
                 step=1,
                 width="small"
             ),
             "DD": st.column_config.NumberColumn(
                 "DD",
                 help="Duty Days",
-                min_value=0,
-                max_value=31,
+                min_value=DD_MIN_DAYS,
+                max_value=DD_MAX_DAYS,
                 step=1,
                 width="small"
             ),
@@ -77,7 +85,7 @@ def detect_changes(original_df: pd.DataFrame, edited_df: pd.DataFrame) -> pd.Dat
         DataFrame with columns: Line, Column, Original, Current
     """
     changes = []
-    editable_columns = ["CT", "BT", "DO", "DD"]
+    editable_columns = EDITABLE_COLUMNS
 
     for col in editable_columns:
         if col not in original_df.columns or col not in edited_df.columns:
@@ -121,33 +129,33 @@ def validate_bid_line_edits(df: pd.DataFrame) -> List[str]:
     """
     warnings = []
 
-    # Check for unusually high values
-    if (df["CT"] > 150).any():
-        high_ct_lines = df[df["CT"] > 150]["Line"].tolist()
-        warnings.append(f"Lines with CT > 150: {high_ct_lines}")
+    # Check for unusually high values (using config thresholds)
+    if (df["CT"] > CT_WARNING_THRESHOLD_HOURS).any():
+        high_ct_lines = df[df["CT"] > CT_WARNING_THRESHOLD_HOURS]["Line"].tolist()
+        warnings.append(f"Lines with CT > {CT_WARNING_THRESHOLD_HOURS}: {high_ct_lines}")
 
-    if (df["BT"] > 150).any():
-        high_bt_lines = df[df["BT"] > 150]["Line"].tolist()
-        warnings.append(f"Lines with BT > 150: {high_bt_lines}")
+    if (df["BT"] > BT_WARNING_THRESHOLD_HOURS).any():
+        high_bt_lines = df[df["BT"] > BT_WARNING_THRESHOLD_HOURS]["Line"].tolist()
+        warnings.append(f"Lines with BT > {BT_WARNING_THRESHOLD_HOURS}: {high_bt_lines}")
 
     # Check for BT > CT (block time should never exceed credit time)
     if (df["BT"] > df["CT"]).any():
         invalid_lines = df[df["BT"] > df["CT"]]["Line"].tolist()
         warnings.append(f"Lines where BT > CT (invalid): {invalid_lines}")
 
-    # Check for unreasonable day counts
-    if (df["DO"] > 20).any():
-        high_do_lines = df[df["DO"] > 20]["Line"].tolist()
-        warnings.append(f"Lines with DO > 20: {high_do_lines}")
+    # Check for unreasonable day counts (using config thresholds)
+    if (df["DO"] > DO_WARNING_THRESHOLD_DAYS).any():
+        high_do_lines = df[df["DO"] > DO_WARNING_THRESHOLD_DAYS]["Line"].tolist()
+        warnings.append(f"Lines with DO > {DO_WARNING_THRESHOLD_DAYS}: {high_do_lines}")
 
-    if (df["DD"] > 20).any():
-        high_dd_lines = df[df["DD"] > 20]["Line"].tolist()
-        warnings.append(f"Lines with DD > 20: {high_dd_lines}")
+    if (df["DD"] > DD_WARNING_THRESHOLD_DAYS).any():
+        high_dd_lines = df[df["DD"] > DD_WARNING_THRESHOLD_DAYS]["Line"].tolist()
+        warnings.append(f"Lines with DD > {DD_WARNING_THRESHOLD_DAYS}: {high_dd_lines}")
 
-    # Check if DO + DD > 31 (more days than in a month)
-    if ((df["DO"] + df["DD"]) > 31).any():
-        invalid_sum_lines = df[(df["DO"] + df["DD"]) > 31]["Line"].tolist()
-        warnings.append(f"Lines where DO + DD > 31 (exceeds month): {invalid_sum_lines}")
+    # Check if DO + DD exceeds month (using config threshold)
+    if ((df["DO"] + df["DD"]) > DO_PLUS_DD_MAX_DAYS).any():
+        invalid_sum_lines = df[(df["DO"] + df["DD"]) > DO_PLUS_DD_MAX_DAYS]["Line"].tolist()
+        warnings.append(f"Lines where DO + DD > {DO_PLUS_DD_MAX_DAYS} (exceeds month): {invalid_sum_lines}")
 
     return warnings
 

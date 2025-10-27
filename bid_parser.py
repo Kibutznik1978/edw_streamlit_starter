@@ -9,6 +9,8 @@ from typing import Callable, Iterable, IO, List, Optional, Sequence, Tuple, Dict
 import pandas as pd
 import pdfplumber
 
+from config import RESERVE_DAY_KEYWORDS, SHIFTABLE_RESERVE_KEYWORD, VTO_KEYWORDS
+
 # Regex used by legacy/fallback parsing
 LINE_RE = re.compile(
     r"(?P<line_id>\d{1,4})\s+"
@@ -31,9 +33,11 @@ PAY_PERIOD_RE = re.compile(
 
 _BLOCK_SEPARATOR_RE = re.compile(r"Comment:\s*", re.IGNORECASE)
 _BLOCK_HEADER_RE = re.compile(r"^[A-Z]{2,}\s+(?P<line>\d{1,4})\b", re.MULTILINE)
-_VTO_PATTERN_RE = re.compile(r"\b(VTOR|VTO|VOR)\b", re.IGNORECASE)
-_RESERVE_DAY_PATTERN_RE = re.compile(r"\b(RA|SA|RB|SB|RC|SC|RD|SD)\b", re.IGNORECASE)
-_SHIFTABLE_RESERVE_RE = re.compile(r"SHIFTABLE\s+RESERVE", re.IGNORECASE)
+
+# Build regex patterns dynamically from config keywords
+_VTO_PATTERN_RE = re.compile(r"\b(" + "|".join(VTO_KEYWORDS) + r")\b", re.IGNORECASE)
+_RESERVE_DAY_PATTERN_RE = re.compile(r"\b(" + "|".join(RESERVE_DAY_KEYWORDS) + r")\b", re.IGNORECASE)
+_SHIFTABLE_RESERVE_RE = re.compile(re.escape(SHIFTABLE_RESERVE_KEYWORD), re.IGNORECASE)
 _HOT_STANDBY_RE = re.compile(r"\b(HSBY|HOT\s*STANDBY|HOTSTANDBY)\b", re.IGNORECASE)
 _AVAILABILITY_PATTERN_RE = re.compile(r"(\d+)/(\d+)/(\d+)")
 _CREW_COMPOSITION_RE = re.compile(r"^[A-Z]{2,}\s+\d{1,4}\s+(\d+)/(\d+)/(\d+)/?", re.MULTILINE)

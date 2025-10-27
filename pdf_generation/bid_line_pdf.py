@@ -13,7 +13,6 @@ Creates professional 3-page PDF reports with:
 import os
 import tempfile
 import math
-from dataclasses import dataclass
 from typing import Dict, Iterable, Optional, Any
 
 import pandas as pd
@@ -37,13 +36,9 @@ from .charts import (
     save_bar_chart, save_percentage_bar_chart, save_pie_chart
 )
 
-
-@dataclass
-class ReportMetadata:
-    """Metadata for bid line analysis report."""
-    title: str = "Bid Line Analysis"
-    subtitle: Optional[str] = None
-    filters: Optional[Dict[str, Iterable]] = None
+# Import from models and config
+from models.pdf_models import ReportMetadata
+from config import BUYUP_THRESHOLD_HOURS
 
 
 def _create_binned_distribution(series: pd.Series, bin_width: float, label: str) -> pd.DataFrame:
@@ -551,7 +546,7 @@ def create_bid_line_pdf_report(
         story.append(hr)
 
         # Buy-up vs Non Buy-up Analysis
-        threshold = 75.0
+        threshold = BUYUP_THRESHOLD_HOURS
         buy_up_content = []
         buy_up_content.append(Paragraph(f"Buy-up Analysis (Threshold: {threshold:.0f} CT)", heading2_style))
         buy_up_content.append(Spacer(1, 12))

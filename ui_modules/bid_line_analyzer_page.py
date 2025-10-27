@@ -11,6 +11,7 @@ import numpy as np
 
 from bid_parser import parse_bid_lines, extract_bid_line_header_info
 from pdf_generation import create_bid_line_pdf_report, ReportMetadata
+from config import CT_BT_BUCKET_SIZE_HOURS, CHART_HEIGHT_PX, CHART_LABEL_ANGLE
 from ui_components import (
     create_bid_line_filters,
     apply_dataframe_filters,
@@ -375,14 +376,15 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
 
 
 def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percentage: bool = False):
-    """Create an interactive histogram chart for time metrics (CT/BT) with 5-hour buckets and angled labels."""
+    """Create an interactive histogram chart for time metrics (CT/BT) with configurable buckets and angled labels."""
     if data.empty:
         return None
 
-    # Create 5-hour bins
-    min_val = np.floor(data.min() / 5) * 5
-    max_val = np.ceil(data.max() / 5) * 5
-    bins = np.arange(min_val, max_val + 5, 5)
+    # Create bins using configured bucket size
+    bucket_size = CT_BT_BUCKET_SIZE_HOURS
+    min_val = np.floor(data.min() / bucket_size) * bucket_size
+    max_val = np.ceil(data.max() / bucket_size) * bucket_size
+    bins = np.arange(min_val, max_val + bucket_size, bucket_size)
 
     # Create histogram
     counts, bin_edges = np.histogram(data, bins=bins)
@@ -410,12 +412,12 @@ def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percen
         )
     ])
 
-    # Update layout with angled labels
+    # Update layout with configured angle and height
     fig.update_layout(
         xaxis_title=f"{metric_name} (hrs)",
         yaxis_title=ylabel,
-        xaxis_tickangle=-45,
-        height=400,
+        xaxis_tickangle=CHART_LABEL_ANGLE,
+        height=CHART_HEIGHT_PX,
         margin=dict(l=50, r=50, t=30, b=80),
         hovermode='x',
         yaxis=dict(gridcolor='lightgray', gridwidth=0.5)

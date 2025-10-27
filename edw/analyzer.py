@@ -7,6 +7,13 @@ trips and hot standby pairings.
 
 import re
 from .parser import extract_local_times
+from config import (
+    EDW_START_HOUR,
+    EDW_START_MINUTE,
+    EDW_END_HOUR,
+    EDW_END_MINUTE,
+    HOT_STANDBY_MAX_SEGMENTS,
+)
 
 
 def is_edw_trip(trip_text):
@@ -30,7 +37,10 @@ def is_edw_trip(trip_text):
     times = extract_local_times(trip_text)
     for t in times:
         hh, mm = map(int, t.split(":"))
-        if (hh == 2 and mm >= 30) or (hh in [3, 4]) or (hh == 5 and mm == 0):
+        # Check if time falls within EDW range using config constants
+        if (hh == EDW_START_HOUR and mm >= EDW_START_MINUTE) or \
+           (hh > EDW_START_HOUR and hh < EDW_END_HOUR) or \
+           (hh == EDW_END_HOUR and mm == EDW_END_MINUTE):
             return True
     return False
 
@@ -62,9 +72,9 @@ def is_hot_standby(trip_text):
     matches = pattern.findall(trip_text)
 
     # Only mark as Hot Standby if:
-    # 1. Exactly one route segment found
+    # 1. Exactly one route segment found (using config constant)
     # 2. That segment has same departure and arrival
-    if len(matches) == 1:
+    if len(matches) == HOT_STANDBY_MAX_SEGMENTS:
         dept, arvl = matches[0]
         if dept == arvl:
             return True
