@@ -46,11 +46,40 @@ pip install -r requirements.txt
 
 ## Architecture
 
-### Application Structure (`app.py`)
+### Application Structure (Modularized - Session 18)
 
-The main application file contains a **3-tab interface** (~650+ lines):
+The application has been refactored into a **modular structure** for better maintainability:
 
-**Tab 1: EDW Pairing Analyzer** (lines 1-350+)
+```
+edw_streamlit_starter/
+├── app.py                           (56 lines - main entry point)
+├── ui_modules/                      (UI layer - modular pages)
+│   ├── __init__.py                 (11 lines)
+│   ├── edw_analyzer_page.py        (722 lines - Tab 1)
+│   ├── bid_line_analyzer_page.py   (589 lines - Tab 2)
+│   ├── historical_trends_page.py   (31 lines - Tab 3)
+│   └── shared_components.py        (66 lines - common UI)
+├── edw/                             (EDW analysis module - Session 19)
+│   ├── __init__.py                 (47 lines - module exports)
+│   ├── parser.py                   (814 lines - PDF parsing & text extraction)
+│   ├── analyzer.py                 (73 lines - EDW detection logic)
+│   ├── excel_export.py             (156 lines - Excel workbook generation)
+│   └── reporter.py                 (383 lines - orchestration & PDF generation)
+├── bid_parser.py                    (880 lines - bid line parsing)
+├── export_pdf.py                    (1,122 lines - EDW PDF reports)
+├── report_builder.py                (925 lines - bid line PDF reports)
+└── requirements.txt
+```
+
+#### `app.py` (56 lines)
+Clean entry point with just navigation:
+- Imports UI modules from `ui_modules/`
+- Sets up Streamlit page config
+- Creates 3-tab navigation
+- Delegates rendering to module functions
+
+#### `ui_modules/edw_analyzer_page.py` (722 lines)
+**Tab 1: EDW Pairing Analyzer**
 - PDF upload with automatic header extraction
 - Trip analysis with weighted EDW metrics
 - Duty day distribution charts
@@ -59,20 +88,42 @@ The main application file contains a **3-tab interface** (~650+ lines):
 - Excel and PDF report downloads
 - Uses `edw_reporter.py` for core logic
 
-**Tab 2: Bid Line Analyzer** (lines 351-1750+)
+Functions:
+- `render_edw_analyzer()` - Main entry point
+- `display_edw_results()` - Results and visualizations
+
+#### `ui_modules/bid_line_analyzer_page.py` (589 lines)
+**Tab 2: Bid Line Analyzer**
 - PDF upload with progress bar
 - **Manual data editing** (Overview tab) - Interactive `st.data_editor()` for correcting parsed values
-- Filter sidebar (CT, BT, DO, DD ranges)
+- Filter sidebar (CT, BT, DO, DD ranges) with smart "filters active" detection
 - Three sub-tabs: Overview, Summary, Visuals
 - Pay period comparison (PP1 vs PP2)
 - Reserve line statistics (Captain/FO slots)
 - CSV and PDF export (includes manual edits)
 - Uses `bid_parser.py` and `report_builder.py`
 
-**Tab 3: Historical Trends** (lines 657-680)
+Functions:
+- `render_bid_line_analyzer()` - Main entry point
+- `_display_bid_line_results()` - Display parsed data
+- `_render_overview_tab()` - Data editor with change tracking
+- `_render_summary_tab()` - Statistics
+- `_render_visuals_tab()` - Charts
+- `_detect_changes()` - Track manual edits
+- `_validate_edits()` - Validate user input
+
+#### `ui_modules/historical_trends_page.py` (31 lines)
+**Tab 3: Historical Trends**
 - Placeholder for Supabase integration
 - Future: Trend charts, multi-bid-period comparisons
 - Requires `database.py` module (not yet implemented)
+
+#### `ui_modules/shared_components.py` (66 lines)
+Common UI utilities:
+- `display_header_info()` - PDF header display
+- `show_parsing_warnings()` - Warning expander
+- `show_error_details()` - Error details
+- `progress_bar_callback()` - Progress updates
 
 **Important:** All widgets have unique keys to prevent session state conflicts:
 - Tab 1: `key="edw_pdf_uploader"`, etc.
@@ -80,31 +131,39 @@ The main application file contains a **3-tab interface** (~650+ lines):
 
 ### Core Analysis Modules
 
-#### EDW Reporter (`edw_reporter.py`)
+#### EDW Analysis Module (`edw/` - Session 19)
 
-This module contains the main business logic for EDW trip analysis:
+**Refactored from monolithic `edw_reporter.py` (1,631 lines) into 4 focused modules:**
 
-- **PDF Parsing**: Uses `PyPDF2.PdfReader` to extract text from bid packet PDFs
-- **Header Extraction**: Automatic extraction of bid period, domicile, fleet type from PDF header
-  - Function: `extract_pdf_header_info()` (lines 120-192)
+**`edw/parser.py` (814 lines)** - PDF parsing and text extraction:
+- **PDF Reading**: Uses `PyPDF2.PdfReader` to extract text from bid packet PDFs
+- **Header Extraction**: `extract_pdf_header_info()` - bid period, domicile, fleet type
   - Checks first page, then second page if needed (handles cover pages)
-- **Trip Identification**: Splits extracted text into individual trips by looking for "Trip Id" markers
-- **EDW Detection Logic**: A trip is flagged as EDW if any duty day touches 02:30-05:00 local time (inclusive)
-  - Local time is extracted from pattern `(HH)MM:SS` where HH is local hour
-  - The function `is_edw_trip()` implements this core logic
-- **Metrics Calculation**: Computes three weighted EDW percentages:
+- **Trip Identification**: `parse_pairings()` - splits text into individual trips by "Trip Id" markers
+- **Metric Extraction**: `parse_tafb()`, `parse_duty_days()`, `parse_max_duty_day_length()`, etc.
+- **Detailed Parsing**: `parse_duty_day_details()`, `parse_trip_for_table()` - structured trip data
+**`edw/analyzer.py` (73 lines)** - EDW detection logic:
+- **Core EDW Detection**: `is_edw_trip()` - identifies Early/Day/Window trips
+  - A trip is EDW if any duty day touches 02:30-05:00 local time (inclusive)
+  - Local time extracted from pattern `(HH)MM:SS` where HH is local hour
+- **Hot Standby Detection**: `is_hot_standby()` - identifies single-segment same-airport pairings
+
+**`edw/excel_export.py` (156 lines)** - Excel workbook generation:
+- **Excel Export**: `save_edw_excel()` - writes multi-sheet Excel workbooks
+- **Statistics Builder**: `build_edw_dataframes()` - calculates all statistics from trip data
+- **Weighted Metrics**: Computes three weighted EDW percentages:
   1. Trip-weighted: Simple ratio of EDW trips to total trips
   2. TAFB-weighted: EDW trip hours / total TAFB hours
   3. Duty-day-weighted: EDW duty days / total duty days
-- **Output Generation**: Creates both Excel workbooks and multi-page PDF reports using `reportlab`
 
-Key functions:
-- `extract_pdf_header_info()` - Extracts bid period, domicile, fleet type from PDF header
-- `parse_pairings()` - Extracts trips from PDF text
-- `is_edw_trip()` - Core EDW detection algorithm
-- `run_edw_report()` - Main orchestration function that generates all outputs
-- `parse_trip_for_table()` - Parses individual trips for HTML table display
-- `parse_duty_day_details()` - Extracts duty day metrics (legs, duration, EDW status, credit time)
+**`edw/reporter.py` (383 lines)** - Orchestration and PDF generation:
+- **Main Orchestration**: `run_edw_report()` - coordinates entire analysis workflow
+- **PDF Styling**: Professional headers, footers, and table formatting using ReportLab
+- **Chart Generation**: Creates matplotlib charts (bar, pie) for visualizations
+- **PDF Assembly**: Builds 3-page executive PDF report with charts and tables
+
+Key entry point:
+- `run_edw_report()` from `edw/reporter.py` - main function orchestrating all analysis
 
 #### Bid Line Parser (`bid_parser.py`)
 
@@ -292,6 +351,38 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 
 ## Recent Changes
 
+**Session 19 (October 27, 2025) - Phase 2: EDW Module Refactoring:**
+- **Refactored:** Split monolithic `edw_reporter.py` (1,631 lines) into modular `edw/` package
+- **Created:** New directory `edw/` with 4 focused modules (1,473 total lines):
+  - `parser.py` (814 lines) - PDF parsing & text extraction
+  - `analyzer.py` (73 lines) - EDW detection logic
+  - `excel_export.py` (156 lines) - Excel workbook generation
+  - `reporter.py` (383 lines) - Orchestration & PDF generation
+  - `__init__.py` (47 lines) - Module exports
+- **Result:** Better separation of concerns, improved maintainability
+- **Updated:** `ui_modules/edw_analyzer_page.py` to use new `from edw import` structure
+- **Tested:** All functionality working identical to before refactoring
+- **Branch:** `refractor`
+
+**Session 18 (October 26, 2025) - Phase 1: Codebase Modularization:**
+- **Refactored:** Split monolithic `app.py` (1,751 lines) into modular structure
+- **Created:** `ui_modules/` directory with 5 focused modules (1,419 total lines)
+  - `edw_analyzer_page.py` (722 lines) - Tab 1 UI
+  - `bid_line_analyzer_page.py` (589 lines) - Tab 2 UI
+  - `historical_trends_page.py` (31 lines) - Tab 3 placeholder
+  - `shared_components.py` (66 lines) - Common utilities
+- **Simplified:** `app.py` reduced to 56 lines (96.8% reduction!)
+- **Fixed:** False "Filters are active" message (now only shows when filters applied)
+- **Fixed:** Unwanted sidebar navigation (renamed `pages/` → `ui_modules/`)
+- **Fixed:** NumPy 2.0 compatibility (downgraded to 1.26.4)
+- **Branch:** `refractor`
+
+**Session 17 (October 26, 2025) - Cover Page Support, VTO Split Lines:**
+- PDF header extraction now checks page 2 if page 1 is cover page
+- Added split VTO/VTOR/VOR line detection and parsing
+- Implemented crew composition parsing (Captain/FO slots)
+- Added helpful error messages for wrong PDF uploads
+
 **Session 16 (October 26, 2025) - Manual Data Editing:**
 - Implemented interactive data editor with `st.data_editor()`
 - Added session state management for original vs. edited data
@@ -300,7 +391,6 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 - Ensured all tabs and exports use edited data automatically
 
 **Session 11 (October 20, 2025) - Multi-App Merger:**
-
 - **Merged Applications**: Combined separate EDW and Bid Line analyzers into unified 3-tab interface
 - **New Files**: `bid_parser.py`, `report_builder.py`, `.env.example`
 - **Documentation**: Created `docs/IMPLEMENTATION_PLAN.md` and `docs/SUPABASE_SETUP.md`
@@ -308,7 +398,7 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 - **Fixed**: Pairing detail table width constraint with responsive CSS
 - **Dependencies**: Added numpy, pdfplumber, altair, fpdf2, supabase, python-dotenv, plotly
 
-See `handoff/sessions/session-16.md` for the latest session notes, or `handoff/sessions/session-11.md` for the multi-app merger details.
+See `handoff/sessions/session-19.md` for Phase 2 EDW refactoring details, `handoff/sessions/session-18.md` for Phase 1 UI refactoring, or `handoff/sessions/session-16.md` for manual editing feature.
 
 ## Documentation
 
