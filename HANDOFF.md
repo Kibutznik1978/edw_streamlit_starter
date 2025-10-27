@@ -48,11 +48,33 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 18)
+## Current Status (Session 20)
 
-✅ **Phase 1 Refactoring Complete** - Modularized app.py from 1,751 lines to 56 lines (96.8% reduction!)
+✅ **Phase 3 Refactoring Complete** - Consolidated PDF generation modules into unified package
 
-### Latest Updates (October 26, 2025)
+### Latest Updates (October 27, 2025)
+
+**Session 20 - Phase 3: PDF Generation Module Consolidation:**
+- **Refactored:** Consolidated `export_pdf.py` (1,122 lines) + `report_builder.py` (925 lines) into modular `pdf_generation/` package
+- **Created:** New directory `pdf_generation/` with 5 focused modules (2,056 total lines):
+  - `base.py` (268 lines) - Shared base components (branding, colors, headers, footers, KPI badges)
+  - `charts.py` (616 lines) - All chart generation (generic + EDW-specific)
+  - `edw_pdf.py` (425 lines) - EDW pairing analysis PDF reports
+  - `bid_line_pdf.py` (652 lines) - Bid line analysis PDF reports
+  - `__init__.py` (95 lines) - Module exports and public API
+- **Eliminated:** 4 duplicate functions that existed in both original files
+- **Result:** Zero code duplication, better reusability, easier maintenance
+- **Updated:** `ui_modules/edw_analyzer_page.py` and `ui_modules/bid_line_analyzer_page.py` to use new imports
+- **Tested:** All functionality working identical to before refactoring
+- **Branch:** `refractor`
+
+**Session 19 - Phase 2: EDW Module Refactoring:**
+- **Refactored:** Split monolithic `edw_reporter.py` (1,631 lines) into modular `edw/` package
+- **Created:** New directory `edw/` with 4 focused modules (1,473 total lines)
+- **Result:** Better separation of concerns, improved maintainability
+- **Branch:** `refractor`
+
+### Previous Updates (October 26, 2025)
 
 **Session 18 - Phase 1: Codebase Modularization:**
 - **Refactored:** Split monolithic `app.py` (1,751 lines) into modular `ui_modules/` structure
@@ -202,6 +224,7 @@ Detailed documentation for each development session:
 | Session 17 | Oct 26, 2025 | Cover Page Support, VTO Split Lines & Crew Composition | [session-17.md](handoff/sessions/session-17.md) |
 | Session 18 | Oct 26, 2025 | Phase 1: Codebase Modularization - UI Modules | [session-18.md](handoff/sessions/session-18.md) |
 | Session 19 | Oct 27, 2025 | Phase 2: EDW Module Refactoring | [session-19.md](handoff/sessions/session-19.md) |
+| Session 20 | Oct 27, 2025 | Phase 3: PDF Generation Module Consolidation | [session-20.md](handoff/sessions/session-20.md) |
 
 ---
 
@@ -366,5 +389,5 @@ For questions or issues, please open an issue on GitHub.
 ---
 
 **Last Updated:** October 27, 2025
-**Status:** ✅ Phase 2 Refactoring Complete - EDW module split into 4 focused modules (parser, analyzer, excel_export, reporter)
-**Next Session:** Phase 3 - Consolidate PDF generation modules (export_pdf.py + report_builder.py into pdf_generation/ package)
+**Status:** ✅ Phase 3 Refactoring Complete - PDF generation consolidated into 5 focused modules (base, charts, edw_pdf, bid_line_pdf, __init__)
+**Next Session:** Phase 4 - Extract reusable UI components from ui_modules/ (filters, data editor, visualizations, exports)

@@ -101,7 +101,7 @@ Functions:
 - Pay period comparison (PP1 vs PP2)
 - Reserve line statistics (Captain/FO slots)
 - CSV and PDF export (includes manual edits)
-- Uses `bid_parser.py` and `report_builder.py`
+- Uses `bid_parser.py` and `pdf_generation.create_bid_line_pdf_report()`
 
 Functions:
 - `render_bid_line_analyzer()` - Main entry point
@@ -156,11 +156,10 @@ Common UI utilities:
   2. TAFB-weighted: EDW trip hours / total TAFB hours
   3. Duty-day-weighted: EDW duty days / total duty days
 
-**`edw/reporter.py` (383 lines)** - Orchestration and PDF generation:
+**`edw/reporter.py` (383 lines)** - Orchestration:
 - **Main Orchestration**: `run_edw_report()` - coordinates entire analysis workflow
-- **PDF Styling**: Professional headers, footers, and table formatting using ReportLab
-- **Chart Generation**: Creates matplotlib charts (bar, pie) for visualizations
-- **PDF Assembly**: Builds 3-page executive PDF report with charts and tables
+- **Excel Generation**: Creates multi-sheet Excel workbooks with all statistics
+- **Workflow Coordination**: Manages parsing, analysis, and export generation
 
 Key entry point:
 - `run_edw_report()` from `edw/reporter.py` - main function orchestrating all analysis
@@ -192,22 +191,43 @@ Key functions:
 - `_parse_line_blocks()` - Parses individual line blocks from pages
 - `_aggregate_pay_periods()` - Aggregates data by pay period, excludes VTO periods from calculations
 
-#### Report Builder (`report_builder.py`)
+#### PDF Generation Package (`pdf_generation/` - Session 20)
 
-This module generates PDF reports for bid line analysis:
+**Consolidated from `export_pdf.py` (1,122 lines) + `report_builder.py` (925 lines) into 5 focused modules:**
 
-- **PDF Generation**: Uses `fpdf2` library to create formatted PDFs
-- **Charts**: Uses `matplotlib` to generate distribution charts, pie charts
-- **Tables**: Creates formatted tables with summary statistics
-- **Analysis**: Buy-up vs non buy-up analysis (threshold: 75 CT hours)
+**`pdf_generation/base.py` (268 lines)** - Shared base components:
+- `DEFAULT_BRANDING` - Aero Crew Data brand palette (Navy, Teal, Sky, Gray colors)
+- `hex_to_reportlab_color()` - Hex to ReportLab color conversion
+- `draw_header()` - Professional page header with logo and title
+- `draw_footer()` - Page footer with timestamp and page numbers
+- `KPIBadge` class - Custom flowable for KPI cards (with optional range display)
+- `make_kpi_row()` - Creates row of KPI badges
+- `make_styled_table()` - Generic professional table styling with zebra striping
 
-Key functions:
-- `build_analysis_pdf()` - Main report generation function
-- `_add_summary_table()` - Summary statistics table
-- `_add_pay_period_averages()` - Per-pay-period averages table
-- `_add_reserve_statistics()` - Reserve line statistics table
-- `_add_distribution_charts()` - Distribution visualizations
-- `_add_buy_up_chart()` - Buy-up analysis pie chart
+**`pdf_generation/charts.py` (616 lines)** - All chart generation:
+- **Generic Charts**: `save_bar_chart()`, `save_percentage_bar_chart()`, `save_pie_chart()`
+- **EDW Charts**: `save_edw_pie_chart()`, `save_trip_length_bar_chart()`, `save_edw_percentages_comparison_chart()`, `save_weighted_method_pie_chart()`, `save_duty_day_grouped_bar_chart()`, `save_duty_day_radar_chart()`
+- All charts use brand colors and professional styling
+
+**`pdf_generation/edw_pdf.py` (425 lines)** - EDW pairing analysis PDF:
+- `create_edw_pdf_report()` - Generates 3-page EDW analysis PDF
+- EDW-specific table functions for weighted metrics, duty day stats, trip length tables
+- Uses ReportLab for professional PDF generation
+
+**`pdf_generation/bid_line_pdf.py` (652 lines)** - Bid line analysis PDF:
+- `create_bid_line_pdf_report()` - Generates 3-page bid line analysis PDF
+- Distribution helper functions for CT, BT, DO, DD
+- Buy-up analysis (threshold: 75 CT hours)
+- Smart reserve line filtering (regular reserve excluded, HSBY kept for CT/DO/DD)
+
+**`pdf_generation/__init__.py` (95 lines)** - Module interface:
+- Exports main functions: `create_edw_pdf_report()`, `create_bid_line_pdf_report()`, `ReportMetadata`
+- Exports base components and chart functions for advanced usage
+- Clean public API with `__all__` list
+
+Key entry points:
+- `create_edw_pdf_report()` from `pdf_generation` - EDW PDF generation
+- `create_bid_line_pdf_report()` from `pdf_generation` - Bid line PDF generation
 
 ### Text Handling
 
@@ -350,6 +370,20 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 - Click Reset → should restore original parsed data
 
 ## Recent Changes
+
+**Session 20 (October 27, 2025) - Phase 3: PDF Generation Module Consolidation:**
+- **Refactored:** Consolidated `export_pdf.py` (1,122 lines) + `report_builder.py` (925 lines) into modular `pdf_generation/` package
+- **Created:** New directory `pdf_generation/` with 5 focused modules (2,056 total lines):
+  - `base.py` (268 lines) - Shared base components (branding, colors, headers, footers, KPI badges)
+  - `charts.py` (616 lines) - All chart generation (generic + EDW-specific)
+  - `edw_pdf.py` (425 lines) - EDW pairing analysis PDF reports
+  - `bid_line_pdf.py` (652 lines) - Bid line analysis PDF reports
+  - `__init__.py` (95 lines) - Module exports and public API
+- **Eliminated:** 4 duplicate functions that existed in both original files
+- **Result:** Zero code duplication, better reusability, easier maintenance
+- **Updated:** `ui_modules/edw_analyzer_page.py` and `ui_modules/bid_line_analyzer_page.py` to use new imports
+- **Tested:** All functionality working identical to before refactoring
+- **Branch:** `refractor`
 
 **Session 19 (October 27, 2025) - Phase 2: EDW Module Refactoring:**
 - **Refactored:** Split monolithic `edw_reporter.py` (1,631 lines) into modular `edw/` package

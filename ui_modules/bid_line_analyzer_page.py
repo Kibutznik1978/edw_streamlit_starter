@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from bid_parser import parse_bid_lines, extract_bid_line_header_info
-from report_builder import build_analysis_pdf, ReportMetadata
+from pdf_generation import create_bid_line_pdf_report, ReportMetadata
 
 
 def render_bid_line_analyzer():
@@ -241,7 +241,7 @@ def _display_bid_line_results():
                 subtitle=subtitle
             )
 
-            pdf_bytes = build_analysis_pdf(
+            pdf_bytes = create_bid_line_pdf_report(
                 filtered_df,
                 metadata=metadata,
                 pay_periods=diagnostics.pay_periods if diagnostics else None,

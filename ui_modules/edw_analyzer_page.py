@@ -8,7 +8,7 @@ from typing import Dict
 import streamlit as st
 
 from edw import run_edw_report, parse_trip_for_table, extract_pdf_header_info, is_edw_trip
-from export_pdf import create_pdf_report
+from pdf_generation import create_edw_pdf_report
 
 
 def render_edw_analyzer():
@@ -692,7 +692,7 @@ def display_edw_results(result_data: Dict):
 
             # Create temporary file for PDF
             temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-            create_pdf_report(pdf_data, temp_pdf.name, branding)
+            create_edw_pdf_report(pdf_data, temp_pdf.name, branding)
 
             # Read the PDF bytes
             with open(temp_pdf.name, 'rb') as f:
