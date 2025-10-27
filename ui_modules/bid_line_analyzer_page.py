@@ -6,9 +6,27 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
+import plotly.graph_objects as go
+import numpy as np
 
 from bid_parser import parse_bid_lines, extract_bid_line_header_info
 from pdf_generation import create_bid_line_pdf_report, ReportMetadata
+from ui_components import (
+    create_bid_line_filters,
+    apply_dataframe_filters,
+    is_filter_active,
+    render_filter_summary,
+    render_filter_reset_button,
+    create_bid_line_editor,
+    render_editor_header,
+    render_change_summary,
+    render_reset_button,
+    render_filter_status_message,
+    render_csv_download,
+    render_pdf_download,
+    render_download_section,
+    handle_pdf_generation_error,
+)
 
 
 def render_bid_line_analyzer():
@@ -127,78 +145,16 @@ def _display_bid_line_results():
     st.divider()
 
     # === FILTER SIDEBAR ===
-    st.sidebar.header("🔍 Filters")
-    st.sidebar.caption("Filter bid lines by criteria")
-
-    # CT Filter
-    ct_min = float(df["CT"].min())
-    ct_max = float(df["CT"].max())
-    ct_range = st.sidebar.slider(
-        "Credit Time (CT)",
-        min_value=ct_min,
-        max_value=ct_max,
-        value=(ct_min, ct_max),
-        step=0.1,
-        key="ct_filter"
-    )
-
-    # BT Filter
-    bt_min = float(df["BT"].min())
-    bt_max = float(df["BT"].max())
-    bt_range = st.sidebar.slider(
-        "Block Time (BT)",
-        min_value=bt_min,
-        max_value=bt_max,
-        value=(bt_min, bt_max),
-        step=0.1,
-        key="bt_filter"
-    )
-
-    # DO Filter
-    do_min = int(df["DO"].min())
-    do_max = int(df["DO"].max())
-    do_range = st.sidebar.slider(
-        "Days Off (DO)",
-        min_value=do_min,
-        max_value=do_max,
-        value=(do_min, do_max),
-        step=1,
-        key="do_filter"
-    )
-
-    # DD Filter
-    dd_min = int(df["DD"].min())
-    dd_max = int(df["DD"].max())
-    dd_range = st.sidebar.slider(
-        "Duty Days (DD)",
-        min_value=dd_min,
-        max_value=dd_max,
-        value=(dd_min, dd_max),
-        step=1,
-        key="dd_filter"
-    )
-
-    # Apply filters
-    filtered_df = df[
-        (df["CT"] >= ct_range[0]) & (df["CT"] <= ct_range[1]) &
-        (df["BT"] >= bt_range[0]) & (df["BT"] <= bt_range[1]) &
-        (df["DO"] >= do_range[0]) & (df["DO"] <= do_range[1]) &
-        (df["DD"] >= dd_range[0]) & (df["DD"] <= dd_range[1])
-    ]
-
-    st.sidebar.caption(f"**Showing {len(filtered_df)} of {len(df)} lines**")
+    filter_ranges = create_bid_line_filters(df)
+    filtered_df = apply_dataframe_filters(df, filter_ranges)
+    render_filter_summary(df, filtered_df)
 
     # Reset filters button
-    if st.sidebar.button("Reset Filters", key="reset_filters"):
+    if render_filter_reset_button(key="reset_filters"):
         st.rerun()
 
-    # Check if filters are actively applied (not at default full range)
-    filters_active = (
-        ct_range != (ct_min, ct_max) or
-        bt_range != (bt_min, bt_max) or
-        do_range != (do_min, do_max) or
-        dd_range != (dd_min, dd_max)
-    )
+    # Check if filters are actively applied
+    filters_active = is_filter_active(filter_ranges)
 
     # === TABS FOR DIFFERENT VIEWS ===
     tab1, tab2, tab3 = st.tabs(["📊 Overview", "📈 Summary", "📉 Visuals"])
@@ -213,19 +169,16 @@ def _display_bid_line_results():
         _render_visuals_tab(df, filtered_df, diagnostics)
 
     # === DOWNLOAD SECTION ===
-    st.divider()
-    st.header("⬇️ Downloads")
+    render_download_section(title="⬇️ Downloads")
 
     col1, col2 = st.columns(2)
 
     with col1:
         # CSV Export (uses filtered data with edits)
-        csv = filtered_df.to_csv(index=False)
-        st.download_button(
-            "📊 Download CSV (Filtered)",
-            data=csv,
-            file_name="bid_lines_filtered.csv",
-            mime="text/csv",
+        render_csv_download(
+            filtered_df,
+            filename="bid_lines_filtered.csv",
+            button_label="📊 Download CSV (Filtered)",
             key="download_bid_csv"
         )
 
@@ -248,144 +201,41 @@ def _display_bid_line_results():
                 reserve_lines=diagnostics.reserve_lines if diagnostics else None
             )
 
-            st.download_button(
-                "📄 Download PDF Report",
-                data=pdf_bytes,
-                file_name=f"Bid_Lines_Analysis_Report.pdf",
-                mime="application/pdf",
+            render_pdf_download(
+                pdf_bytes,
+                filename="Bid_Lines_Analysis_Report.pdf",
+                button_label="📄 Download PDF Report",
                 key="download_bid_pdf"
             )
         except Exception as e:
-            st.error(f"Error generating PDF: {e}")
-            import traceback
-            with st.expander("📋 Error Details"):
-                st.code(traceback.format_exc())
+            handle_pdf_generation_error(e, show_traceback=True)
 
 
 def _render_overview_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, filters_active: bool):
     """Render the Overview tab with data editor for manual corrections."""
 
-    st.subheader("📋 Bid Line Data")
-    st.caption("**Edit values directly in the table below to correct parsing errors**")
+    render_editor_header(show_all_data=True)
 
     # Display data editor - ALWAYS show ALL data (not filtered)
-    # Use df (all lines) instead of filtered_df
-    edited_df = st.data_editor(
-        df,
-        hide_index=True,
-        use_container_width=True,
-        num_rows="fixed",
-        disabled=["Line"],  # Line number is read-only
-        column_config={
-            "Line": st.column_config.NumberColumn("Line", help="Bid line number (read-only)", width="small"),
-            "CT": st.column_config.NumberColumn("CT", help="Credit Time (hours)", min_value=0.0, max_value=200.0, step=0.1, width="small"),
-            "BT": st.column_config.NumberColumn("BT", help="Block Time (hours)", min_value=0.0, max_value=200.0, step=0.1, width="small"),
-            "DO": st.column_config.NumberColumn("DO", help="Days Off", min_value=0, max_value=31, step=1, width="small"),
-            "DD": st.column_config.NumberColumn("DD", help="Duty Days", min_value=0, max_value=31, step=1, width="small"),
-        },
-        key="bidline_data_editor"
-    )
+    edited_df = create_bid_line_editor(df, key="bidline_data_editor")
 
     # Save edited data back to session state
-    # IMPORTANT: Use df.copy() as the base, not the parsed data
     st.session_state.bidline_edited_df = edited_df.copy()
 
-    # Detect changes (compare edited vs original)
+    # Detect changes and show summary with validation
     original_df = st.session_state.bidline_original_df
     if original_df is not None:
-        changes = _detect_changes(original_df, edited_df)
-
-        if len(changes) > 0:
-            st.success(f"✏️ **Data has been manually edited** ({len(changes)} change{'s' if len(changes) > 1 else ''})")
-
-            # Show changed cells
-            with st.expander("📝 View edited cells", expanded=False):
-                st.dataframe(changes, hide_index=True, use_container_width=True)
-
-            # Add validation warnings
-            validation_issues = _validate_edits(edited_df)
-            if validation_issues:
-                st.warning("⚠️ **Validation Warnings:**")
-                for issue in validation_issues:
-                    st.warning(issue)
+        render_change_summary(original_df, edited_df, show_validation=True)
 
         # Reset button
-        if st.button("🔄 Reset to Original Data", key="reset_edits"):
-            st.session_state.bidline_edited_df = st.session_state.bidline_original_df.copy()
-            st.rerun()
+        render_reset_button(
+            session_state_key_edited="bidline_edited_df",
+            session_state_key_original="bidline_original_df",
+            button_key="reset_edits"
+        )
 
-    # Display filter status (only if filters are actively applied by user)
-    if filters_active and len(filtered_df) < len(df):
-        st.info(f"ℹ️ Filters are active. Showing **{len(filtered_df)} of {len(df)}** lines. Adjust filters in sidebar to see more.")
-
-
-def _detect_changes(original_df: pd.DataFrame, edited_df: pd.DataFrame) -> pd.DataFrame:
-    """Detect changes between original and edited data."""
-
-    changes = []
-    for col in ["CT", "BT", "DO", "DD"]:
-        if col not in original_df.columns or col not in edited_df.columns:
-            continue
-
-        # Compare column values
-        diff_mask = original_df[col] != edited_df[col]
-
-        # Handle NaN comparisons properly
-        # Two NaNs should be considered equal
-        nan_mask_orig = original_df[col].isna()
-        nan_mask_edit = edited_df[col].isna()
-        both_nan = nan_mask_orig & nan_mask_edit
-        diff_mask = diff_mask & ~both_nan
-
-        for idx in original_df[diff_mask].index:
-            line_num = original_df.loc[idx, "Line"]
-            orig_val = original_df.loc[idx, col]
-            edit_val = edited_df.loc[idx, col]
-
-            changes.append({
-                "Line": line_num,
-                "Column": col,
-                "Original": orig_val if not pd.isna(orig_val) else "N/A",
-                "Current": edit_val if not pd.isna(edit_val) else "N/A"
-            })
-
-    return pd.DataFrame(changes) if changes else pd.DataFrame(columns=["Line", "Column", "Original", "Current"])
-
-
-def _validate_edits(df: pd.DataFrame) -> list[str]:
-    """Validate edited data and return list of warnings."""
-
-    warnings = []
-
-    # Check for unusually high values
-    if (df["CT"] > 150).any():
-        high_ct_lines = df[df["CT"] > 150]["Line"].tolist()
-        warnings.append(f"Lines with CT > 150: {high_ct_lines}")
-
-    if (df["BT"] > 150).any():
-        high_bt_lines = df[df["BT"] > 150]["Line"].tolist()
-        warnings.append(f"Lines with BT > 150: {high_bt_lines}")
-
-    # Check for BT > CT (block time should never exceed credit time)
-    if (df["BT"] > df["CT"]).any():
-        invalid_lines = df[df["BT"] > df["CT"]]["Line"].tolist()
-        warnings.append(f"Lines where BT > CT (invalid): {invalid_lines}")
-
-    # Check for unreasonable day counts
-    if (df["DO"] > 20).any():
-        high_do_lines = df[df["DO"] > 20]["Line"].tolist()
-        warnings.append(f"Lines with DO > 20: {high_do_lines}")
-
-    if (df["DD"] > 20).any():
-        high_dd_lines = df[df["DD"] > 20]["Line"].tolist()
-        warnings.append(f"Lines with DD > 20: {high_dd_lines}")
-
-    # Check if DO + DD > 31 (more days than in a month)
-    if ((df["DO"] + df["DD"]) > 31).any():
-        invalid_sum_lines = df[(df["DO"] + df["DD"]) > 31]["Line"].tolist()
-        warnings.append(f"Lines where DO + DD > 31 (exceeds month): {invalid_sum_lines}")
-
-    return warnings
+    # Display filter status
+    render_filter_status_message(df, filtered_df, filters_active)
 
 
 def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics):
@@ -416,22 +266,35 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     df_for_bt = filtered_df[~filtered_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_df
 
     # Calculate statistics
-    col1, col2 = st.columns(2)
+    ct_stats = df_non_reserve['CT'].agg(['min', 'max', 'mean']) if not df_non_reserve.empty else filtered_df['CT'].agg(['min', 'max', 'mean'])
+    bt_stats = df_for_bt['BT'].agg(['min', 'max', 'mean']) if not df_for_bt.empty else filtered_df['BT'].agg(['min', 'max', 'mean'])
+    do_stats = df_non_reserve['DO'].agg(['min', 'max', 'mean']) if not df_non_reserve.empty else filtered_df['DO'].agg(['min', 'max', 'mean'])
+    dd_stats = df_non_reserve['DD'].agg(['min', 'max', 'mean']) if not df_non_reserve.empty else filtered_df['DD'].agg(['min', 'max', 'mean'])
 
-    with col1:
-        st.metric("Total Lines", len(filtered_df))
-        ct_stats = df_non_reserve['CT'].agg(['min', 'max', 'mean', 'median']) if not df_non_reserve.empty else filtered_df['CT'].agg(['min', 'max', 'mean', 'median'])
-        st.metric("Average Credit Time", f"{ct_stats['mean']:.2f} hrs")
-        st.metric("CT Range", f"{ct_stats['min']:.1f} - {ct_stats['max']:.1f} hrs")
+    # Create summary statistics table
+    summary_data = {
+        'Metric': ['Total Lines', 'Credit Time (CT)', 'Block Time (BT)', 'Days Off (DO)', 'Duty Days (DD)'],
+        'Average': [
+            f"{len(filtered_df)}",
+            f"{ct_stats['mean']:.2f} hrs",
+            f"{bt_stats['mean']:.2f} hrs",
+            f"{do_stats['mean']:.1f} days",
+            f"{dd_stats['mean']:.1f} days"
+        ],
+        'Range': [
+            '—',
+            f"{ct_stats['min']:.1f} - {ct_stats['max']:.1f} hrs",
+            f"{bt_stats['min']:.1f} - {bt_stats['max']:.1f} hrs",
+            f"{int(do_stats['min'])} - {int(do_stats['max'])} days",
+            f"{int(dd_stats['min'])} - {int(dd_stats['max'])} days"
+        ]
+    }
 
-    with col2:
-        bt_stats = df_for_bt['BT'].agg(['min', 'max', 'mean', 'median']) if not df_for_bt.empty else filtered_df['BT'].agg(['min', 'max', 'mean', 'median'])
-        do_stats = df_non_reserve['DO'].agg(['min', 'max', 'mean', 'median']) if not df_non_reserve.empty else filtered_df['DO'].agg(['min', 'max', 'mean', 'median'])
-        dd_stats = df_non_reserve['DD'].agg(['min', 'max', 'mean', 'median']) if not df_non_reserve.empty else filtered_df['DD'].agg(['min', 'max', 'mean', 'median'])
+    summary_df = pd.DataFrame(summary_data)
+    st.dataframe(summary_df, hide_index=True, use_container_width=True)
 
-        st.metric("Average Block Time", f"{bt_stats['mean']:.2f} hrs")
-        st.metric("Average Days Off", f"{do_stats['mean']:.1f} days")
-        st.metric("Average Duty Days", f"{dd_stats['mean']:.1f} days")
+    # Add note about reserve line exclusions
+    st.caption("*Reserve lines excluded from averages. HSBY lines excluded from Block Time only.")
 
     st.divider()
 
@@ -449,32 +312,34 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         pp_for_bt = filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_pay_periods
 
         if not filtered_pay_periods.empty:
-            # Group by period
-            col1, col2 = st.columns(2)
+            # Build pay period comparison table
+            pp_data = {'Metric': ['Avg Credit Time (CT)', 'Avg Block Time (BT)', 'Avg Days Off (DO)', 'Avg Duty Days (DD)']}
 
             for period in sorted(filtered_pay_periods["Period"].unique()):
                 period_data_non_reserve = pp_non_reserve[pp_non_reserve["Period"] == period]
                 period_data_for_bt = pp_for_bt[pp_for_bt["Period"] == period]
 
-                with col1 if period == 1 else col2:
-                    st.markdown(f"**Pay Period {int(period)}**")
+                if not period_data_non_reserve.empty:
+                    pp_ct = period_data_non_reserve["CT"].mean()
+                    pp_do = period_data_non_reserve["DO"].mean()
+                    pp_dd = period_data_non_reserve["DD"].mean()
+                else:
+                    pp_ct, pp_do, pp_dd = 0, 0, 0
 
-                    if not period_data_non_reserve.empty:
-                        pp_ct = period_data_non_reserve["CT"].mean()
-                        pp_do = period_data_non_reserve["DO"].mean()
-                        pp_dd = period_data_non_reserve["DD"].mean()
-                    else:
-                        pp_ct, pp_do, pp_dd = 0, 0, 0
+                if not period_data_for_bt.empty:
+                    pp_bt = period_data_for_bt["BT"].mean()
+                else:
+                    pp_bt = 0
 
-                    if not period_data_for_bt.empty:
-                        pp_bt = period_data_for_bt["BT"].mean()
-                    else:
-                        pp_bt = 0
+                pp_data[f'Pay Period {int(period)}'] = [
+                    f"{pp_ct:.2f} hrs",
+                    f"{pp_bt:.2f} hrs",
+                    f"{pp_do:.1f} days",
+                    f"{pp_dd:.1f} days"
+                ]
 
-                    st.write(f"Avg CT: {pp_ct:.2f} hrs")
-                    st.write(f"Avg BT: {pp_bt:.2f} hrs")
-                    st.write(f"Avg DO: {pp_do:.1f} days")
-                    st.write(f"Avg DD: {pp_dd:.1f} days")
+            pp_comparison_df = pd.DataFrame(pp_data)
+            st.dataframe(pp_comparison_df, hide_index=True, use_container_width=True)
 
     # Reserve Line Statistics
     if diagnostics and diagnostics.reserve_lines is not None:
@@ -509,6 +374,56 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             st.info("No reserve lines found in current filter")
 
 
+def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percentage: bool = False):
+    """Create an interactive histogram chart for time metrics (CT/BT) with 5-hour buckets and angled labels."""
+    if data.empty:
+        return None
+
+    # Create 5-hour bins
+    min_val = np.floor(data.min() / 5) * 5
+    max_val = np.ceil(data.max() / 5) * 5
+    bins = np.arange(min_val, max_val + 5, 5)
+
+    # Create histogram
+    counts, bin_edges = np.histogram(data, bins=bins)
+
+    if is_percentage:
+        values = (counts / counts.sum() * 100) if counts.sum() > 0 else counts
+        ylabel = "Percentage (%)"
+        hover_template = "%{y:.1f}%<extra></extra>"
+    else:
+        values = counts
+        ylabel = "Count"
+        hover_template = "%{y}<extra></extra>"
+
+    # Create bin labels (e.g., "70-75", "75-80")
+    bin_labels = [f"{int(bin_edges[i])}-{int(bin_edges[i+1])}" for i in range(len(bin_edges)-1)]
+
+    # Create Plotly figure
+    fig = go.Figure(data=[
+        go.Bar(
+            x=bin_labels,
+            y=values,
+            marker_color='#1f77b4',
+            opacity=0.7,
+            hovertemplate=hover_template
+        )
+    ])
+
+    # Update layout with angled labels
+    fig.update_layout(
+        xaxis_title=f"{metric_name} (hrs)",
+        yaxis_title=ylabel,
+        xaxis_tickangle=-45,
+        height=400,
+        margin=dict(l=50, r=50, t=30, b=80),
+        hovermode='x',
+        yaxis=dict(gridcolor='lightgray', gridwidth=0.5)
+    )
+
+    return fig
+
+
 def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics):
     """Render the Visuals tab with charts."""
 
@@ -534,64 +449,78 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
     df_for_bt = filtered_df[~filtered_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_df
 
-    # CT Distribution
+    # CT Distribution (5-hour buckets with angled labels)
     st.markdown("**Credit Time (CT) Distribution**")
     col1, col2 = st.columns(2)
     with col1:
         if not df_non_reserve.empty:
-            st.bar_chart(df_non_reserve["CT"].value_counts().sort_index(), x_label="Credit Time", y_label="Count")
+            fig = _create_time_distribution_chart(df_non_reserve["CT"], "Credit Time", is_percentage=False)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data available (all lines are reserve)")
     with col2:
         if not df_non_reserve.empty:
-            st.bar_chart(df_non_reserve["CT"].value_counts(normalize=True).sort_index() * 100, x_label="Credit Time", y_label="Percentage")
+            fig = _create_time_distribution_chart(df_non_reserve["CT"], "Credit Time", is_percentage=True)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data available (all lines are reserve)")
 
     st.divider()
 
-    # BT Distribution
+    # BT Distribution (5-hour buckets with angled labels)
     st.markdown("**Block Time (BT) Distribution**")
     col1, col2 = st.columns(2)
     with col1:
         if not df_for_bt.empty:
-            st.bar_chart(df_for_bt["BT"].value_counts().sort_index(), x_label="Block Time", y_label="Count")
+            fig = _create_time_distribution_chart(df_for_bt["BT"], "Block Time", is_percentage=False)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data available (all lines excluded)")
     with col2:
         if not df_for_bt.empty:
-            st.bar_chart(df_for_bt["BT"].value_counts(normalize=True).sort_index() * 100, x_label="Block Time", y_label="Percentage")
+            fig = _create_time_distribution_chart(df_for_bt["BT"], "Block Time", is_percentage=True)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data available (all lines excluded)")
 
     st.divider()
 
-    # DO Distribution
+    # DO Distribution (whole numbers only)
     st.markdown("**Days Off (DO) Distribution**")
     col1, col2 = st.columns(2)
     with col1:
         if not df_non_reserve.empty:
-            st.bar_chart(df_non_reserve["DO"].value_counts().sort_index(), x_label="Days Off", y_label="Count")
+            # Convert to integers to ensure whole number buckets
+            do_int = df_non_reserve["DO"].round().astype(int)
+            st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
         else:
             st.info("No data available (all lines are reserve)")
     with col2:
         if not df_non_reserve.empty:
-            st.bar_chart(df_non_reserve["DO"].value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
+            do_int = df_non_reserve["DO"].round().astype(int)
+            st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
         else:
             st.info("No data available (all lines are reserve)")
 
     st.divider()
 
-    # DD Distribution
+    # DD Distribution (whole numbers only)
     st.markdown("**Duty Days (DD) Distribution**")
     col1, col2 = st.columns(2)
     with col1:
         if not df_non_reserve.empty:
-            st.bar_chart(df_non_reserve["DD"].value_counts().sort_index(), x_label="Duty Days", y_label="Count")
+            # Convert to integers to ensure whole number buckets
+            dd_int = df_non_reserve["DD"].round().astype(int)
+            st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
         else:
             st.info("No data available (all lines are reserve)")
     with col2:
         if not df_non_reserve.empty:
-            st.bar_chart(df_non_reserve["DD"].value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
+            dd_int = df_non_reserve["DD"].round().astype(int)
+            st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
         else:
             st.info("No data available (all lines are reserve)")

@@ -46,28 +46,38 @@ pip install -r requirements.txt
 
 ## Architecture
 
-### Application Structure (Modularized - Session 18)
+### Application Structure (Modularized - Sessions 18-21)
 
-The application has been refactored into a **modular structure** for better maintainability:
+The application has been refactored into a **fully modular structure** for better maintainability:
 
 ```
 edw_streamlit_starter/
 ├── app.py                           (56 lines - main entry point)
-├── ui_modules/                      (UI layer - modular pages)
+├── ui_modules/                      (UI layer - page modules)
 │   ├── __init__.py                 (11 lines)
-│   ├── edw_analyzer_page.py        (722 lines - Tab 1)
-│   ├── bid_line_analyzer_page.py   (589 lines - Tab 2)
+│   ├── edw_analyzer_page.py        (~640 lines - Tab 1)
+│   ├── bid_line_analyzer_page.py   (~340 lines - Tab 2)
 │   ├── historical_trends_page.py   (31 lines - Tab 3)
-│   └── shared_components.py        (66 lines - common UI)
+│   └── shared_components.py        (66 lines - PDF header display)
+├── ui_components/                   (Reusable UI components - Session 21)
+│   ├── __init__.py                 (95 lines - module exports)
+│   ├── filters.py                  (169 lines - range sliders, filter logic)
+│   ├── data_editor.py              (219 lines - data editor, validation, change tracking)
+│   ├── exports.py                  (152 lines - download buttons, file generation)
+│   └── statistics.py               (252 lines - metrics display, pay period analysis)
 ├── edw/                             (EDW analysis module - Session 19)
 │   ├── __init__.py                 (47 lines - module exports)
 │   ├── parser.py                   (814 lines - PDF parsing & text extraction)
 │   ├── analyzer.py                 (73 lines - EDW detection logic)
 │   ├── excel_export.py             (156 lines - Excel workbook generation)
-│   └── reporter.py                 (383 lines - orchestration & PDF generation)
+│   └── reporter.py                 (383 lines - orchestration)
+├── pdf_generation/                  (PDF report generation - Session 20)
+│   ├── __init__.py                 (95 lines - module exports)
+│   ├── base.py                     (268 lines - shared components)
+│   ├── charts.py                   (616 lines - all chart generation)
+│   ├── edw_pdf.py                  (425 lines - EDW reports)
+│   └── bid_line_pdf.py             (652 lines - bid line reports)
 ├── bid_parser.py                    (880 lines - bid line parsing)
-├── export_pdf.py                    (1,122 lines - EDW PDF reports)
-├── report_builder.py                (925 lines - bid line PDF reports)
 └── requirements.txt
 ```
 
@@ -92,7 +102,7 @@ Functions:
 - `render_edw_analyzer()` - Main entry point
 - `display_edw_results()` - Results and visualizations
 
-#### `ui_modules/bid_line_analyzer_page.py` (589 lines)
+#### `ui_modules/bid_line_analyzer_page.py` (~340 lines - reduced from 589)
 **Tab 2: Bid Line Analyzer**
 - PDF upload with progress bar
 - **Manual data editing** (Overview tab) - Interactive `st.data_editor()` for correcting parsed values
@@ -101,16 +111,14 @@ Functions:
 - Pay period comparison (PP1 vs PP2)
 - Reserve line statistics (Captain/FO slots)
 - CSV and PDF export (includes manual edits)
-- Uses `bid_parser.py` and `pdf_generation.create_bid_line_pdf_report()`
+- Uses `bid_parser.py`, `pdf_generation`, and `ui_components`
 
 Functions:
 - `render_bid_line_analyzer()` - Main entry point
-- `_display_bid_line_results()` - Display parsed data
-- `_render_overview_tab()` - Data editor with change tracking
-- `_render_summary_tab()` - Statistics
-- `_render_visuals_tab()` - Charts
-- `_detect_changes()` - Track manual edits
-- `_validate_edits()` - Validate user input
+- `_display_bid_line_results()` - Display parsed data (uses ui_components for filters/downloads)
+- `_render_overview_tab()` - Data editor (uses ui_components.data_editor)
+- `_render_summary_tab()` - Statistics (uses ui_components.statistics)
+- `_render_visuals_tab()` - Distribution charts (uses ui_components reserve filtering)
 
 #### `ui_modules/historical_trends_page.py` (31 lines)
 **Tab 3: Historical Trends**
@@ -128,6 +136,62 @@ Common UI utilities:
 **Important:** All widgets have unique keys to prevent session state conflicts:
 - Tab 1: `key="edw_pdf_uploader"`, etc.
 - Tab 2: `key="bid_line_pdf_uploader"`, etc.
+
+### UI Components Package (`ui_components/` - Session 21)
+
+**Extracted reusable UI components from ui_modules for better code reuse and maintainability.**
+
+#### `ui_components/filters.py` (169 lines)
+Range sliders and filter logic:
+- `create_metric_range_filter()` - Generic range slider builder
+- `create_bid_line_filters()` - Complete CT/BT/DO/DD filter sidebar
+- `apply_dataframe_filters()` - Apply filter ranges to DataFrame
+- `is_filter_active()` - Detect if filters differ from defaults
+- `render_filter_summary()` - Show "Showing X of Y lines" caption
+- `render_filter_reset_button()` - Reset filters button
+
+#### `ui_components/data_editor.py` (219 lines)
+Data editor with validation and change tracking:
+- `create_bid_line_editor()` - Configure `st.data_editor` for bid lines
+- `detect_changes()` - Compare original vs edited DataFrames
+- `validate_bid_line_edits()` - Validation rules (BT>CT, DO+DD>31, etc.)
+- `render_change_summary()` - Display edit summary with expandable details
+- `render_reset_button()` - Reset to original data button
+- `render_editor_header()` - Data editor section header
+- `render_filter_status_message()` - Filter status info message
+
+#### `ui_components/exports.py` (152 lines)
+Download buttons and file generation:
+- `render_csv_download()` - CSV download button
+- `render_pdf_download()` - PDF download button
+- `render_excel_download()` - Excel file download button
+- `generate_edw_filename()` - Consistent EDW filename generation
+- `generate_bid_line_filename()` - Consistent bid line filename generation
+- `render_download_section()` - Divider and header for download section
+- `render_two_column_downloads()` - Side-by-side download buttons
+- `handle_pdf_generation_error()` - PDF error display with traceback
+
+#### `ui_components/statistics.py` (252 lines)
+Metrics display and pay period analysis:
+- `extract_reserve_line_numbers()` - Extract reserve/HSBY line numbers from diagnostics
+- `filter_by_reserve_lines()` - Filter DataFrame to exclude reserve lines
+- `calculate_metric_stats()` - Calculate min/max/mean/median for metrics
+- `render_basic_statistics()` - CT, BT, DO, DD metrics grid (2 columns)
+- `render_pay_period_analysis()` - PP1 vs PP2 comparison analysis
+- `render_reserve_summary()` - Reserve line statistics display
+
+#### `ui_components/__init__.py` (95 lines)
+Module exports and public API:
+- Exports all public functions from submodules
+- `__all__` list for controlled API surface
+- Clean imports: `from ui_components import create_bid_line_filters`
+
+**Benefits:**
+- **Reduced code duplication:** Common patterns extracted once
+- **Improved maintainability:** Single source of truth for UI components
+- **Better testability:** Isolated, reusable components
+- **Consistent UX:** Same components used across different pages
+- **Code reduction:** bid_line_analyzer_page.py reduced from 589 → 340 lines (42% reduction)
 
 ### Core Analysis Modules
 
@@ -371,6 +435,31 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 
 ## Recent Changes
 
+**Session 22 (October 27, 2025) - Bid Line Distribution Chart Fixes:**
+- **Fixed:** Credit Time (CT) and Block Time (BT) distribution charts showing incorrect sparse distributions
+- **Implemented:** 5-hour bucket histograms for CT/BT (70-75, 75-80, 80-85 hrs)
+- **Added:** Interactive Plotly charts with hover tooltips replacing static charts
+- **Fixed:** Angled labels (-45°) for better readability without overlap
+- **Fixed:** Days Off (DO) and Duty Days (DD) to show whole numbers only (no fractional days)
+- **Created:** Reusable `_create_time_distribution_chart()` helper function
+- **Result:** Accurate, interactive, professional distribution charts with meaningful patterns
+- **Tested:** All syntax and import validation passing
+- **Branch:** `refractor`
+
+**Session 21 (October 27, 2025) - Phase 4: UI Components Extraction:**
+- **Refactored:** Extracted reusable UI components from ui_modules into new `ui_components/` package
+- **Created:** New directory `ui_components/` with 4 focused modules (887 total lines):
+  - `filters.py` (169 lines) - Range sliders and filter logic
+  - `data_editor.py` (219 lines) - Data editor, validation, change tracking
+  - `exports.py` (152 lines) - Download buttons and file generation
+  - `statistics.py` (252 lines) - Metrics display and pay period analysis
+  - `__init__.py` (95 lines) - Module exports and public API
+- **Updated:** `ui_modules/bid_line_analyzer_page.py` (589 → 340 lines, 42% reduction)
+- **Updated:** `ui_modules/edw_analyzer_page.py` to use export components
+- **Result:** Better code reuse, improved maintainability, consistent UX across pages
+- **Tested:** All imports successful, zero breaking changes
+- **Branch:** `refractor`
+
 **Session 20 (October 27, 2025) - Phase 3: PDF Generation Module Consolidation:**
 - **Refactored:** Consolidated `export_pdf.py` (1,122 lines) + `report_builder.py` (925 lines) into modular `pdf_generation/` package
 - **Created:** New directory `pdf_generation/` with 5 focused modules (2,056 total lines):
@@ -432,7 +521,7 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 - **Fixed**: Pairing detail table width constraint with responsive CSS
 - **Dependencies**: Added numpy, pdfplumber, altair, fpdf2, supabase, python-dotenv, plotly
 
-See `handoff/sessions/session-19.md` for Phase 2 EDW refactoring details, `handoff/sessions/session-18.md` for Phase 1 UI refactoring, or `handoff/sessions/session-16.md` for manual editing feature.
+See `handoff/sessions/session-22.md` for distribution chart fixes, `handoff/sessions/session-21.md` for UI components extraction, `handoff/sessions/session-19.md` for Phase 2 EDW refactoring details, `handoff/sessions/session-18.md` for Phase 1 UI refactoring, or `handoff/sessions/session-16.md` for manual editing feature.
 
 ## Documentation
 
@@ -449,4 +538,3 @@ See `handoff/sessions/session-19.md` for Phase 2 EDW refactoring details, `hando
 3. Add save functionality to both analyzer tabs
 4. Build Historical Trends tab with visualizations
 5. Add theme customization and custom CSS
-6. Replace matplotlib with Altair for consistent interactive charts

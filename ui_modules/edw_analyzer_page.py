@@ -9,6 +9,13 @@ import streamlit as st
 
 from edw import run_edw_report, parse_trip_for_table, extract_pdf_header_info, is_edw_trip
 from pdf_generation import create_edw_pdf_report
+from ui_components import (
+    render_excel_download,
+    render_pdf_download,
+    render_download_section,
+    generate_edw_filename,
+    handle_pdf_generation_error,
+)
 
 
 def render_edw_analyzer():
@@ -616,19 +623,17 @@ def display_edw_results(result_data: Dict):
     st.divider()
 
     # === DOWNLOAD SECTION ===
-    st.header("⬇️ Download Reports")
+    render_download_section(title="⬇️ Download Reports")
 
     col1, col2 = st.columns(2)
 
     with col1:
         # Excel
-        xlsx = out_dir / f"{dom}_{ac}_Bid{bid}_EDW_Report_Data.xlsx"
-        st.download_button(
-            "📊 Download Excel Workbook",
-            data=xlsx.read_bytes(),
-            file_name=xlsx.name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_edw_excel",
+        xlsx = out_dir / generate_edw_filename(dom, ac, bid, file_type="xlsx")
+        render_excel_download(
+            xlsx,
+            button_label="📊 Download Excel Workbook",
+            key="download_edw_excel"
         )
 
     with col2:
@@ -702,15 +707,14 @@ def display_edw_results(result_data: Dict):
             import os
             os.unlink(temp_pdf.name)
 
-            st.download_button(
-                "📄 Download Executive PDF Report",
-                data=pdf_bytes,
-                file_name=f"{dom}_{ac}_Bid{bid}_Executive_Report.pdf",
-                mime="application/pdf",
-                key="download_edw_pdf",
+            render_pdf_download(
+                pdf_bytes,
+                filename=f"{dom}_{ac}_Bid{bid}_Executive_Report.pdf",
+                button_label="📄 Download Executive PDF Report",
+                key="download_edw_pdf"
             )
         except Exception as e:
-            st.error(f"Error generating professional PDF: {e}")
+            handle_pdf_generation_error(e, show_traceback=False)
             # Fallback to old PDF if available
             if "report_pdf" in res:
                 st.download_button(
