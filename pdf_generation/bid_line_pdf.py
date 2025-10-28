@@ -378,8 +378,8 @@ def create_bid_line_pdf_report(
         story.append(hr)
         story.append(Spacer(1, 16))
 
-        # CT Distribution
-        ct_distribution = _create_binned_distribution(df['CT'], bin_width=5.0, label='Range')
+        # CT Distribution (exclude reserve lines, consistent with KPI metrics)
+        ct_distribution = _create_binned_distribution(df_non_reserve['CT'], bin_width=5.0, label='Range') if not df_non_reserve.empty else pd.DataFrame()
         if not ct_distribution.empty:
             ct_content = []
             ct_content.append(Paragraph("Distribution Analysis", heading2_style))
@@ -433,8 +433,8 @@ def create_bid_line_pdf_report(
             story.append(KeepTogether(ct_content))
             story.append(Spacer(1, 20))
 
-        # BT Distribution
-        bt_distribution = _create_binned_distribution(df['BT'], bin_width=5.0, label='Range')
+        # BT Distribution (exclude reserve AND HSBY, consistent with KPI metrics)
+        bt_distribution = _create_binned_distribution(df_for_bt['BT'], bin_width=5.0, label='Range') if not df_for_bt.empty else pd.DataFrame()
         if not bt_distribution.empty:
             bt_content = []
             bt_content.append(Paragraph("Block Time (BT) Distribution", heading2_style))
@@ -489,8 +489,19 @@ def create_bid_line_pdf_report(
         # PAGE 3 - Days Off and Buy-up Analysis
         story.append(PageBreak())
 
-        # Days Off Distribution
-        do_distribution = _create_value_distribution(df['DO'], label='Days Off')
+        # Days Off Distribution - Use pay_periods for accurate counts (not averaged)
+        # If pay_periods available, use it to show both PP1 and PP2 separately (2 entries per line)
+        # Otherwise fall back to averaged DO from main df
+        if pay_periods is not None and not pay_periods.empty:
+            # Filter pay periods to match lines in df
+            filtered_pay_periods = pay_periods[pay_periods["Line"].isin(df["Line"])]
+            # Exclude reserve lines
+            pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
+            do_distribution = _create_value_distribution(pp_non_reserve['DO'], label='Days Off') if not pp_non_reserve.empty else pd.DataFrame()
+            do_note = "Note: Showing both pay periods (2 entries per line)"
+        else:
+            do_distribution = _create_value_distribution(df_non_reserve['DO'], label='Days Off') if not df_non_reserve.empty else pd.DataFrame()
+            do_note = "Note: Showing averaged values across pay periods"
         if not do_distribution.empty:
             do_content = []
             do_content.append(Paragraph("Days Off (DO) Distribution", heading2_style))
@@ -538,9 +549,325 @@ def create_bid_line_pdf_report(
                 ]))
                 do_content.append(charts_table)
 
+            # Add note about data source
+            do_content.append(Spacer(1, 8))
+            do_content.append(Paragraph(do_note, body_style))
+
             # Keep title, table, and charts together
             story.append(KeepTogether(do_content))
             story.append(Spacer(1, 20))
+
+        # Duty Days Distribution - Use pay_periods for accurate counts (not averaged)
+        if pay_periods is not None and not pay_periods.empty:
+            # Filter pay periods to match lines in df
+            filtered_pay_periods = pay_periods[pay_periods["Line"].isin(df["Line"])]
+            # Exclude reserve lines
+            pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
+            dd_distribution = _create_value_distribution(pp_non_reserve['DD'], label='Duty Days') if not pp_non_reserve.empty else pd.DataFrame()
+            dd_note = "Note: Showing both pay periods (2 entries per line)"
+        else:
+            dd_distribution = _create_value_distribution(df_non_reserve['DD'], label='Duty Days') if not df_non_reserve.empty else pd.DataFrame()
+            dd_note = "Note: Showing averaged values across pay periods"
+        if not dd_distribution.empty:
+            dd_content = []
+            dd_content.append(Paragraph("Duty Days (DD) Distribution", heading2_style))
+            dd_content.append(Spacer(1, 8))
+
+            dd_data = [["Duty Days", "Lines", "Percent"]]
+            for _, row in dd_distribution.iterrows():
+                dd_data.append([str(row['Duty Days']), str(row['Lines']), row['Percent']])
+
+            dd_table = make_styled_table(dd_data, [120, 100, 100], branding)
+            dd_content.append(dd_table)
+            dd_content.append(Spacer(1, 12))
+
+            # DD Charts - Side by side
+            dd_chart_path = save_bar_chart(
+                dd_distribution,
+                'Duty Days Distribution (Count)',
+                'Duty Days',
+                'Lines',
+                'Duty Days',
+                'Number of Lines',
+                '#1BB3A4'  # Brand Teal
+            )
+            dd_pct_chart_path = save_percentage_bar_chart(
+                dd_distribution,
+                'Duty Days Distribution (Percentage)',
+                'Duty Days',
+                'Percent',
+                'Duty Days',
+                '#0C7C73'  # Dark Teal
+            )
+
+            if dd_chart_path and dd_pct_chart_path:
+                temp_files.extend([dd_chart_path, dd_pct_chart_path])
+                from reportlab.lib.units import inch
+                from reportlab.platypus import Table, TableStyle
+                dd_img = Image(dd_chart_path, width=3.5*inch, height=2.6*inch)
+                dd_pct_img = Image(dd_pct_chart_path, width=3.5*inch, height=2.6*inch)
+
+                # Place charts side by side in a table
+                charts_table = Table([[dd_img, dd_pct_img]], colWidths=[3.6*inch, 3.6*inch])
+                charts_table.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ]))
+                dd_content.append(charts_table)
+
+            # Add note about data source
+            dd_content.append(Spacer(1, 8))
+            dd_content.append(Paragraph(dd_note, body_style))
+
+            # Keep title, table, and charts together
+            story.append(KeepTogether(dd_content))
+            story.append(Spacer(1, 20))
+
+        # Pay Period Breakdown Section (only if multiple pay periods exist)
+        if pay_periods is not None and not pay_periods.empty:
+            # Check if we have multiple pay periods
+            unique_periods = sorted(pay_periods["Period"].unique())
+            if len(unique_periods) > 1:
+                # Add page break before pay period breakdown
+                story.append(PageBreak())
+
+                # Pay Period Breakdown Header
+                story.append(Paragraph("Pay Period Breakdown", heading2_style))
+                story.append(Spacer(1, 8))
+                story.append(Paragraph("Individual distributions for each pay period", body_style))
+                story.append(Spacer(1, 16))
+
+                # Get filtered pay periods data
+                filtered_pay_periods = pay_periods[pay_periods["Line"].isin(df["Line"])]
+                # Exclude reserve lines
+                pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
+                pp_for_bt = filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_pay_periods
+
+                # Create distributions for each pay period
+                for period in unique_periods:
+                    # Period Header
+                    story.append(Paragraph(f"Pay Period {int(period)}", heading2_style))
+                    story.append(Spacer(1, 12))
+
+                    # Filter data for this specific pay period
+                    period_data_non_reserve = pp_non_reserve[pp_non_reserve["Period"] == period]
+                    period_data_for_bt = pp_for_bt[pp_for_bt["Period"] == period]
+
+                    # CT Distribution for this pay period
+                    if not period_data_non_reserve.empty:
+                        ct_pp_distribution = _create_binned_distribution(period_data_non_reserve['CT'], bin_width=5.0, label='Range')
+                        if not ct_pp_distribution.empty:
+                            ct_pp_content = []
+                            ct_pp_content.append(Paragraph("Credit Time (CT)", heading2_style))
+                            ct_pp_content.append(Spacer(1, 8))
+
+                            ct_pp_data = [["Range", "Lines", "Percent"]]
+                            for _, row in ct_pp_distribution.iterrows():
+                                ct_pp_data.append([row['Range'], str(row['Lines']), row['Percent']])
+
+                            ct_pp_table = make_styled_table(ct_pp_data, [120, 100, 100], branding)
+                            ct_pp_content.append(ct_pp_table)
+                            ct_pp_content.append(Spacer(1, 12))
+
+                            # CT Charts - Side by side
+                            ct_pp_chart_path = save_bar_chart(
+                                ct_pp_distribution,
+                                f'PP{int(period)} Credit Time (Count)',
+                                'Range',
+                                'Lines',
+                                'Credit Time Range',
+                                'Number of Lines',
+                                '#1BB3A4'
+                            )
+                            ct_pp_pct_chart_path = save_percentage_bar_chart(
+                                ct_pp_distribution,
+                                f'PP{int(period)} Credit Time (Percentage)',
+                                'Range',
+                                'Percent',
+                                'Credit Time Range',
+                                '#2E9BE8'
+                            )
+
+                            if ct_pp_chart_path and ct_pp_pct_chart_path:
+                                temp_files.extend([ct_pp_chart_path, ct_pp_pct_chart_path])
+                                from reportlab.lib.units import inch
+                                from reportlab.platypus import Table, TableStyle
+                                ct_pp_img = Image(ct_pp_chart_path, width=3.5*inch, height=2.6*inch)
+                                ct_pp_pct_img = Image(ct_pp_pct_chart_path, width=3.5*inch, height=2.6*inch)
+
+                                charts_table = Table([[ct_pp_img, ct_pp_pct_img]], colWidths=[3.6*inch, 3.6*inch])
+                                charts_table.setStyle(TableStyle([
+                                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ]))
+                                ct_pp_content.append(charts_table)
+
+                            story.append(KeepTogether(ct_pp_content))
+                            story.append(Spacer(1, 16))
+
+                    # BT Distribution for this pay period
+                    if not period_data_for_bt.empty:
+                        bt_pp_distribution = _create_binned_distribution(period_data_for_bt['BT'], bin_width=5.0, label='Range')
+                        if not bt_pp_distribution.empty:
+                            bt_pp_content = []
+                            bt_pp_content.append(Paragraph("Block Time (BT)", heading2_style))
+                            bt_pp_content.append(Spacer(1, 8))
+
+                            bt_pp_data = [["Range", "Lines", "Percent"]]
+                            for _, row in bt_pp_distribution.iterrows():
+                                bt_pp_data.append([row['Range'], str(row['Lines']), row['Percent']])
+
+                            bt_pp_table = make_styled_table(bt_pp_data, [120, 100, 100], branding)
+                            bt_pp_content.append(bt_pp_table)
+                            bt_pp_content.append(Spacer(1, 12))
+
+                            # BT Charts - Side by side
+                            bt_pp_chart_path = save_bar_chart(
+                                bt_pp_distribution,
+                                f'PP{int(period)} Block Time (Count)',
+                                'Range',
+                                'Lines',
+                                'Block Time Range',
+                                'Number of Lines',
+                                '#0C7C73'
+                            )
+                            bt_pp_pct_chart_path = save_percentage_bar_chart(
+                                bt_pp_distribution,
+                                f'PP{int(period)} Block Time (Percentage)',
+                                'Range',
+                                'Percent',
+                                'Block Time Range',
+                                '#5BCFC2'
+                            )
+
+                            if bt_pp_chart_path and bt_pp_pct_chart_path:
+                                temp_files.extend([bt_pp_chart_path, bt_pp_pct_chart_path])
+                                from reportlab.lib.units import inch
+                                from reportlab.platypus import Table, TableStyle
+                                bt_pp_img = Image(bt_pp_chart_path, width=3.5*inch, height=2.6*inch)
+                                bt_pp_pct_img = Image(bt_pp_pct_chart_path, width=3.5*inch, height=2.6*inch)
+
+                                charts_table = Table([[bt_pp_img, bt_pp_pct_img]], colWidths=[3.6*inch, 3.6*inch])
+                                charts_table.setStyle(TableStyle([
+                                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ]))
+                                bt_pp_content.append(charts_table)
+
+                            story.append(KeepTogether(bt_pp_content))
+                            story.append(Spacer(1, 16))
+
+                    # DO Distribution for this pay period
+                    if not period_data_non_reserve.empty:
+                        do_pp_distribution = _create_value_distribution(period_data_non_reserve['DO'], label='Days Off')
+                        if not do_pp_distribution.empty:
+                            do_pp_content = []
+                            do_pp_content.append(Paragraph("Days Off (DO)", heading2_style))
+                            do_pp_content.append(Spacer(1, 8))
+
+                            do_pp_data = [["Days Off", "Lines", "Percent"]]
+                            for _, row in do_pp_distribution.iterrows():
+                                do_pp_data.append([str(row['Days Off']), str(row['Lines']), row['Percent']])
+
+                            do_pp_table = make_styled_table(do_pp_data, [120, 100, 100], branding)
+                            do_pp_content.append(do_pp_table)
+                            do_pp_content.append(Spacer(1, 12))
+
+                            # DO Charts - Side by side
+                            do_pp_chart_path = save_bar_chart(
+                                do_pp_distribution,
+                                f'PP{int(period)} Days Off (Count)',
+                                'Days Off',
+                                'Lines',
+                                'Days Off',
+                                'Number of Lines',
+                                '#2E9BE8'
+                            )
+                            do_pp_pct_chart_path = save_percentage_bar_chart(
+                                do_pp_distribution,
+                                f'PP{int(period)} Days Off (Percentage)',
+                                'Days Off',
+                                'Percent',
+                                'Days Off',
+                                '#7EC8F6'
+                            )
+
+                            if do_pp_chart_path and do_pp_pct_chart_path:
+                                temp_files.extend([do_pp_chart_path, do_pp_pct_chart_path])
+                                from reportlab.lib.units import inch
+                                from reportlab.platypus import Table, TableStyle
+                                do_pp_img = Image(do_pp_chart_path, width=3.5*inch, height=2.6*inch)
+                                do_pp_pct_img = Image(do_pp_pct_chart_path, width=3.5*inch, height=2.6*inch)
+
+                                charts_table = Table([[do_pp_img, do_pp_pct_img]], colWidths=[3.6*inch, 3.6*inch])
+                                charts_table.setStyle(TableStyle([
+                                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ]))
+                                do_pp_content.append(charts_table)
+
+                            story.append(KeepTogether(do_pp_content))
+                            story.append(Spacer(1, 16))
+
+                    # DD Distribution for this pay period
+                    if not period_data_non_reserve.empty:
+                        dd_pp_distribution = _create_value_distribution(period_data_non_reserve['DD'], label='Duty Days')
+                        if not dd_pp_distribution.empty:
+                            dd_pp_content = []
+                            dd_pp_content.append(Paragraph("Duty Days (DD)", heading2_style))
+                            dd_pp_content.append(Spacer(1, 8))
+
+                            dd_pp_data = [["Duty Days", "Lines", "Percent"]]
+                            for _, row in dd_pp_distribution.iterrows():
+                                dd_pp_data.append([str(row['Duty Days']), str(row['Lines']), row['Percent']])
+
+                            dd_pp_table = make_styled_table(dd_pp_data, [120, 100, 100], branding)
+                            dd_pp_content.append(dd_pp_table)
+                            dd_pp_content.append(Spacer(1, 12))
+
+                            # DD Charts - Side by side
+                            dd_pp_chart_path = save_bar_chart(
+                                dd_pp_distribution,
+                                f'PP{int(period)} Duty Days (Count)',
+                                'Duty Days',
+                                'Lines',
+                                'Duty Days',
+                                'Number of Lines',
+                                '#1BB3A4'
+                            )
+                            dd_pp_pct_chart_path = save_percentage_bar_chart(
+                                dd_pp_distribution,
+                                f'PP{int(period)} Duty Days (Percentage)',
+                                'Duty Days',
+                                'Percent',
+                                'Duty Days',
+                                '#0C7C73'
+                            )
+
+                            if dd_pp_chart_path and dd_pp_pct_chart_path:
+                                temp_files.extend([dd_pp_chart_path, dd_pp_pct_chart_path])
+                                from reportlab.lib.units import inch
+                                from reportlab.platypus import Table, TableStyle
+                                dd_pp_img = Image(dd_pp_chart_path, width=3.5*inch, height=2.6*inch)
+                                dd_pp_pct_img = Image(dd_pp_pct_chart_path, width=3.5*inch, height=2.6*inch)
+
+                                charts_table = Table([[dd_pp_img, dd_pp_pct_img]], colWidths=[3.6*inch, 3.6*inch])
+                                charts_table.setStyle(TableStyle([
+                                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ]))
+                                dd_pp_content.append(charts_table)
+
+                            story.append(KeepTogether(dd_pp_content))
+                            story.append(Spacer(1, 16))
+
+                    # Add divider between pay periods (except after the last one)
+                    if period != unique_periods[-1]:
+                        story.append(hr)
+                        story.append(Spacer(1, 16))
+
+                # Add page break before buy-up analysis
+                story.append(PageBreak())
 
         # Horizontal rule
         story.append(hr)

@@ -145,19 +145,23 @@ Clean entry point with just navigation:
 - Advanced filtering (duty day criteria, trip length, legs)
 - Trip details viewer with HTML table (50% width, responsive)
 - Excel and PDF report downloads
-- Uses `edw_reporter.py` for core logic
+- Uses `edw/` module for core logic
 
 Functions:
 - `render_edw_analyzer()` - Main entry point
 - `display_edw_results()` - Results and visualizations
 
-#### `ui_modules/bid_line_analyzer_page.py` (~340 lines - reduced from 589)
+#### `ui_modules/bid_line_analyzer_page.py` (~690 lines - includes pay period breakdown)
 **Tab 2: Bid Line Analyzer**
 - PDF upload with progress bar
 - **Manual data editing** (Overview tab) - Interactive `st.data_editor()` for correcting parsed values
 - Filter sidebar (CT, BT, DO, DD ranges) with smart "filters active" detection
 - Three sub-tabs: Overview, Summary, Visuals
 - Pay period comparison (PP1 vs PP2)
+- **Pay period distribution breakdown** (Visuals tab) - Individual distributions for each pay period
+  - Smart detection: only shown when multiple pay periods exist
+  - All 4 metrics (CT, BT, DO, DD) with count and percentage charts
+  - Consistent reserve line filtering
 - Reserve line statistics (Captain/FO slots)
 - CSV and PDF export (includes manual edits)
 - Uses `bid_parser.py`, `pdf_generation`, and `ui_components`
@@ -344,7 +348,7 @@ Key entry points:
 
 ### Text Handling
 
-The `clean_text()` function in edw_reporter.py normalizes Unicode and sanitizes special characters:
+The `clean_text()` function in `edw/parser.py` normalizes Unicode and sanitizes special characters:
 - Converts to NFKC normalization
 - Replaces non-breaking spaces
 - Converts bullet characters to hyphens
@@ -354,8 +358,8 @@ This is critical for reliable PDF text extraction and ReportLab PDF generation.
 ## PDF Libraries
 
 **Two different PDF libraries are used**:
-- `PyPDF2`: For EDW pairing analysis (Tab 1 → edw_reporter.py)
-- `pdfplumber`: For bid line analysis (Tab 2 → bid_parser.py)
+- `PyPDF2`: For EDW pairing analysis (Tab 1 → `edw/parser.py`)
+- `pdfplumber`: For bid line analysis (Tab 2 → `bid_parser.py`)
 
 Keep this distinction when making changes - don't assume they're interchangeable.
 
@@ -484,6 +488,35 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 
 ## Recent Changes
 
+**Session 25 (October 27, 2025) - Pay Period Distribution Breakdown:**
+- **Added:** Comprehensive pay period breakdown functionality to Bid Line Analyzer
+- **App Visuals Tab:** New "Pay Period Breakdown" section (~250 lines added)
+  - Shows individual distributions for each pay period (PP1, PP2)
+  - All 4 metrics: CT, BT, DO, DD with count and percentage charts
+  - Smart detection: only appears when multiple pay periods exist
+  - Interactive Plotly charts for CT/BT, Streamlit bar charts for DO/DD
+- **PDF Generation:** Added pay period breakdown pages (~310 lines added)
+  - Dedicated pages for each pay period's distributions
+  - All 4 metrics with tables and side-by-side charts
+  - Professional formatting with automatic page breaks
+- **Smart Behavior:** Single period = overall only, Multiple periods = overall + per-period breakdown
+- **Files Modified:** `ui_modules/bid_line_analyzer_page.py`, `pdf_generation/bid_line_pdf.py`
+- **Testing:** All syntax validation passing, zero breaking changes
+- **Branch:** `refractor`
+
+**Session 24 (October 27, 2025) - Phase 6: Codebase Cleanup & Distribution Chart Bug Fixes:**
+- **Deleted:** 3 obsolete legacy files (~3,700 lines): `edw_reporter.py`, `export_pdf.py`, `report_builder.py`
+- **Refactored:** `edw/reporter.py` (423 → 206 lines, 51% reduction) - now uses centralized PDF generation
+- **Created:** `ui_components/trip_viewer.py` (281 lines) - reusable trip details viewer component
+- **Updated:** `ui_modules/edw_analyzer_page.py` (726 → 498 lines, 31% reduction)
+- **Fixed:** Critical distribution chart bugs:
+  - PDF distributions now correctly exclude reserve lines (matched with app)
+  - DO/DD distributions now use pay period data instead of averaged values
+  - Issue: `df['DO']` showed averages (1 entry per line), now uses `pay_periods['DO']` (2 entries per line)
+  - Added captions: "*Showing both pay periods (2 entries per line)"
+- **Result:** Removed ~4,000 lines, fixed critical data accuracy bugs
+- **Branch:** `refractor`
+
 **Session 23 (October 27, 2025) - Phase 5: Configuration & Models Extraction:**
 - **Created:** `config/` package with all application constants (4 modules, ~300 lines)
   - `constants.py` - Business logic (EDW times, buy-up threshold, chart config, keywords)
@@ -517,6 +550,19 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 - **Created:** Reusable `_create_time_distribution_chart()` helper function
 - **Result:** Accurate, interactive, professional distribution charts with meaningful patterns
 - **Tested:** All syntax and import validation passing
+- **Branch:** `refractor`
+
+**Session 24 (October 27, 2025) - Phase 6: Codebase Cleanup & Distribution Chart Bug Fixes:**
+- **Deleted:** 3 obsolete legacy files (~3,700 lines): `edw_reporter.py`, `export_pdf.py`, `report_builder.py`
+- **Refactored:** `edw/reporter.py` (423 → 206 lines, 51% reduction) - now uses centralized PDF generation
+- **Created:** `ui_components/trip_viewer.py` (281 lines) - reusable trip details viewer component
+- **Updated:** `ui_modules/edw_analyzer_page.py` (726 → 498 lines, 31% reduction)
+- **Fixed:** Critical distribution chart bugs:
+  - PDF distributions now correctly exclude reserve lines (matched with app)
+  - DO/DD distributions now use pay period data instead of averaged values
+  - Issue: `df['DO']` showed averages (1 entry per line), now uses `pay_periods['DO']` (2 entries per line)
+  - Added captions: "*Showing both pay periods (2 entries per line)"
+- **Result:** Removed ~4,000 lines, fixed critical data accuracy bugs
 - **Branch:** `refractor`
 
 **Session 21 (October 27, 2025) - Phase 4: UI Components Extraction:**

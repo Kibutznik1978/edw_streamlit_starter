@@ -451,6 +451,20 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
     df_for_bt = filtered_df[~filtered_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_df
 
+    # Determine if we have multiple pay periods
+    has_multiple_periods = False
+    pay_periods_df = None
+    if diagnostics and diagnostics.pay_periods is not None:
+        pay_periods_df = diagnostics.pay_periods
+        filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
+        unique_periods = filtered_pay_periods["Period"].unique()
+        has_multiple_periods = len(unique_periods) > 1
+
+    # Overall Distributions Section
+    st.markdown("### Overall Distributions")
+    if has_multiple_periods:
+        st.caption("Combined data across all pay periods")
+
     # CT Distribution (5-hour buckets with angled labels)
     st.markdown("**Credit Time (CT) Distribution**")
     col1, col2 = st.columns(2)
@@ -491,38 +505,179 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
 
     st.divider()
 
-    # DO Distribution (whole numbers only)
+    # DO Distribution (whole numbers only) - Use pay periods data for accurate counts
     st.markdown("**Days Off (DO) Distribution**")
     col1, col2 = st.columns(2)
-    with col1:
-        if not df_non_reserve.empty:
-            # Convert to integers to ensure whole number buckets
-            do_int = df_non_reserve["DO"].round().astype(int)
-            st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
-        else:
-            st.info("No data available (all lines are reserve)")
-    with col2:
-        if not df_non_reserve.empty:
-            do_int = df_non_reserve["DO"].round().astype(int)
-            st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
-        else:
-            st.info("No data available (all lines are reserve)")
+
+    # Get pay periods data if available (shows each period separately, not averaged)
+    if diagnostics and diagnostics.pay_periods is not None:
+        pay_periods_df = diagnostics.pay_periods
+        # Filter to match filtered lines
+        filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
+        # Exclude reserve lines
+        pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
+
+        with col1:
+            if not pp_non_reserve.empty:
+                do_int = pp_non_reserve["DO"].round().astype(int)
+                st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
+                st.caption("*Showing both pay periods (2 entries per line)")
+            else:
+                st.info("No data available (all lines are reserve)")
+        with col2:
+            if not pp_non_reserve.empty:
+                do_int = pp_non_reserve["DO"].round().astype(int)
+                st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
+                st.caption("*Showing both pay periods (2 entries per line)")
+            else:
+                st.info("No data available (all lines are reserve)")
+    else:
+        # Fallback to averaged DO if pay_periods not available
+        with col1:
+            if not df_non_reserve.empty:
+                do_int = df_non_reserve["DO"].round().astype(int)
+                st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
+                st.caption("*Averaged across pay periods")
+            else:
+                st.info("No data available (all lines are reserve)")
+        with col2:
+            if not df_non_reserve.empty:
+                do_int = df_non_reserve["DO"].round().astype(int)
+                st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
+                st.caption("*Averaged across pay periods")
+            else:
+                st.info("No data available (all lines are reserve)")
 
     st.divider()
 
-    # DD Distribution (whole numbers only)
+    # DD Distribution (whole numbers only) - Use pay periods data for accurate counts
     st.markdown("**Duty Days (DD) Distribution**")
     col1, col2 = st.columns(2)
-    with col1:
-        if not df_non_reserve.empty:
-            # Convert to integers to ensure whole number buckets
-            dd_int = df_non_reserve["DD"].round().astype(int)
-            st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
-        else:
-            st.info("No data available (all lines are reserve)")
-    with col2:
-        if not df_non_reserve.empty:
-            dd_int = df_non_reserve["DD"].round().astype(int)
-            st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
-        else:
-            st.info("No data available (all lines are reserve)")
+
+    # Get pay periods data if available (shows each period separately, not averaged)
+    if diagnostics and diagnostics.pay_periods is not None:
+        with col1:
+            if not pp_non_reserve.empty:
+                dd_int = pp_non_reserve["DD"].round().astype(int)
+                st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
+                st.caption("*Showing both pay periods (2 entries per line)")
+            else:
+                st.info("No data available (all lines are reserve)")
+        with col2:
+            if not pp_non_reserve.empty:
+                dd_int = pp_non_reserve["DD"].round().astype(int)
+                st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
+                st.caption("*Showing both pay periods (2 entries per line)")
+            else:
+                st.info("No data available (all lines are reserve)")
+    else:
+        # Fallback to averaged DD if pay_periods not available
+        with col1:
+            if not df_non_reserve.empty:
+                dd_int = df_non_reserve["DD"].round().astype(int)
+                st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
+                st.caption("*Averaged across pay periods")
+            else:
+                st.info("No data available (all lines are reserve)")
+        with col2:
+            if not df_non_reserve.empty:
+                dd_int = df_non_reserve["DD"].round().astype(int)
+                st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
+                st.caption("*Averaged across pay periods")
+            else:
+                st.info("No data available (all lines are reserve)")
+
+    # Pay Period Breakdown Section (only if multiple pay periods exist)
+    if has_multiple_periods and pay_periods_df is not None:
+        st.divider()
+        st.markdown("### Pay Period Breakdown")
+        st.caption("Individual distributions for each pay period")
+
+        # Get filtered pay periods data
+        filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
+        # Exclude reserve lines
+        pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
+        pp_for_bt = filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_pay_periods
+
+        # Get sorted list of unique periods
+        unique_periods = sorted(filtered_pay_periods["Period"].unique())
+
+        # Create a distribution for each pay period
+        for period in unique_periods:
+            st.markdown(f"#### Pay Period {int(period)}")
+
+            # Filter data for this specific pay period
+            period_data_non_reserve = pp_non_reserve[pp_non_reserve["Period"] == period]
+            period_data_for_bt = pp_for_bt[pp_for_bt["Period"] == period]
+
+            # CT Distribution for this pay period
+            st.markdown("**Credit Time (CT)**")
+            col1, col2 = st.columns(2)
+            with col1:
+                if not period_data_non_reserve.empty:
+                    fig = _create_time_distribution_chart(period_data_non_reserve["CT"], "Credit Time", is_percentage=False)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No data available")
+            with col2:
+                if not period_data_non_reserve.empty:
+                    fig = _create_time_distribution_chart(period_data_non_reserve["CT"], "Credit Time", is_percentage=True)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No data available")
+
+            # BT Distribution for this pay period
+            st.markdown("**Block Time (BT)**")
+            col1, col2 = st.columns(2)
+            with col1:
+                if not period_data_for_bt.empty:
+                    fig = _create_time_distribution_chart(period_data_for_bt["BT"], "Block Time", is_percentage=False)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No data available")
+            with col2:
+                if not period_data_for_bt.empty:
+                    fig = _create_time_distribution_chart(period_data_for_bt["BT"], "Block Time", is_percentage=True)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No data available")
+
+            # DO Distribution for this pay period
+            st.markdown("**Days Off (DO)**")
+            col1, col2 = st.columns(2)
+            with col1:
+                if not period_data_non_reserve.empty:
+                    do_int = period_data_non_reserve["DO"].round().astype(int)
+                    st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
+                else:
+                    st.info("No data available")
+            with col2:
+                if not period_data_non_reserve.empty:
+                    do_int = period_data_non_reserve["DO"].round().astype(int)
+                    st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
+                else:
+                    st.info("No data available")
+
+            # DD Distribution for this pay period
+            st.markdown("**Duty Days (DD)**")
+            col1, col2 = st.columns(2)
+            with col1:
+                if not period_data_non_reserve.empty:
+                    dd_int = period_data_non_reserve["DD"].round().astype(int)
+                    st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
+                else:
+                    st.info("No data available")
+            with col2:
+                if not period_data_non_reserve.empty:
+                    dd_int = period_data_non_reserve["DD"].round().astype(int)
+                    st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
+                else:
+                    st.info("No data available")
+
+            # Add divider between pay periods (except after the last one)
+            if period != unique_periods[-1]:
+                st.divider()

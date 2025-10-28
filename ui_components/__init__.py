@@ -8,6 +8,7 @@ Modules:
     data_editor: Data editor with validation and change tracking
     exports: Download buttons and file generation
     statistics: Metrics display and pay period analysis
+    trip_viewer: Trip details viewer for EDW analysis
 """
 
 # Import from filters module
@@ -53,6 +54,11 @@ from .statistics import (
     render_reserve_summary,
 )
 
+# Import from trip_viewer module
+from .trip_viewer import (
+    render_trip_details_viewer,
+)
+
 __all__ = [
     # Filters
     "create_metric_range_filter",
@@ -85,6 +91,8 @@ __all__ = [
     "render_basic_statistics",
     "render_pay_period_analysis",
     "render_reserve_summary",
+    # Trip Viewer
+    "render_trip_details_viewer",
 ]
 
 __version__ = "1.0.0"

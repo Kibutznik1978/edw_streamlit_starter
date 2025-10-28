@@ -37,7 +37,8 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 - Reserve line detection and statistics (Captain/FO slots)
 - Buy-up line identification (CT < 75 hours)
 - **Professional 3-page PDF reports** with KPI cards showing ranges
-- Distribution charts and summary tables
+- **Pay period distribution charts** - CT, BT, DO, DD (shows both pay periods separately for accuracy)
+- Summary tables with reserve line filtering
 - CSV and PDF export functionality (includes manual corrections)
 - **Notes/comments support** for tracking data iterations
 - **Helpful error messages** when wrong PDF type is uploaded
@@ -48,12 +49,69 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 23)
+## Current Status (Session 25)
 
-✅ **Phase 5 Refactoring Complete** - Extracted configuration and models into centralized packages
-✅ **All 5 Refactoring Phases Complete** - Codebase fully modularized and production-ready!
+✅ **Phase 6 Cleanup Complete** - Removed obsolete files and finalized modularization
+✅ **All 6 Refactoring Phases Complete** - Codebase fully optimized and production-ready!
+✅ **Pay Period Distribution Breakdown** - Added comprehensive per-period analysis for all metrics
 
 ### Latest Updates (October 27, 2025)
+
+**Session 25 - Pay Period Distribution Breakdown:**
+- **Added:** Pay period breakdown functionality to Bid Line Analyzer
+- **App Visuals Tab:** New "Pay Period Breakdown" section (~250 lines added)
+  - Shows individual distributions for each pay period (PP1, PP2)
+  - All 4 metrics: CT, BT, DO, DD with count and percentage charts
+  - Smart detection: only appears when multiple pay periods exist
+  - Interactive Plotly charts for CT/BT, Streamlit bar charts for DO/DD
+  - Consistent reserve line filtering across all charts
+- **PDF Generation:** Added pay period breakdown pages (~310 lines added)
+  - Dedicated pages for each pay period's distributions
+  - All 4 metrics with tables and side-by-side charts
+  - Professional formatting with headers and dividers
+  - Automatically inserted only when multiple periods exist
+- **Smart Behavior:**
+  - Single pay period: Shows only overall distributions (clean, simple)
+  - Multiple pay periods: Shows overall + per-period breakdown
+  - Backward compatible with all existing PDFs
+- **Benefits:** Users can now analyze distributions by pay period, compare PP1 vs PP2, and validate overall against individual periods
+- **Files Modified:** `ui_modules/bid_line_analyzer_page.py`, `pdf_generation/bid_line_pdf.py`
+- **Testing:** All syntax validation passing, zero breaking changes
+- **Branch:** `refractor`
+
+**Session 24 - Phase 6: Codebase Cleanup & Final Refactoring:**
+- **Deleted:** 3 obsolete legacy files (~3,700 lines, 170KB)
+  - `edw_reporter.py` (1,631 lines) - replaced by `edw/` module
+  - `export_pdf.py` (1,122 lines) - replaced by `pdf_generation/`
+  - `report_builder.py` (925 lines) - replaced by `pdf_generation/`
+- **Refactored:** `edw/reporter.py` (423 → 206 lines, 51% reduction)
+  - Removed 4 duplicate helper functions
+  - Replaced inline chart generation with `pdf_generation/charts.py`
+  - Replaced inline PDF assembly with `create_edw_pdf_report()`
+  - Now uses centralized PDF generation module
+- **Created:** `ui_components/trip_viewer.py` (281 lines)
+  - Extracted trip details viewer from `edw_analyzer_page.py`
+  - Reusable component for pairing display
+  - HTML table generation with responsive CSS
+- **Updated:** `ui_modules/edw_analyzer_page.py` (726 → 498 lines, 31% reduction)
+  - Uses new trip viewer component
+  - Cleaner imports and code organization
+- **Updated:** Documentation (CLAUDE.md, HANDOFF.md)
+  - Fixed references to obsolete files
+  - Updated technical architecture descriptions
+- **Fixed:** Distribution chart data source bugs (Critical accuracy fix)
+  - **Bug 1:** PDF distributions used unfiltered data (included reserve lines)
+    - Fixed CT, BT, DO distributions in `pdf_generation/bid_line_pdf.py`
+    - Now correctly uses `df_non_reserve` (CT/DO) and `df_for_bt` (BT)
+  - **Bug 2:** DO/DD distributions showed averaged values instead of pay period data
+    - Issue: `df['DO']` contains average of PP1 + PP2 (e.g., 15 DO counted once instead of twice)
+    - Fixed app to use `diagnostics.pay_periods` data (shows both periods separately)
+    - Fixed PDF to use `pay_periods` data when available
+    - Now accurately shows 2 entries per line (one for each pay period)
+    - Added captions: "*Showing both pay periods (2 entries per line)"
+  - **Impact:** Distributions now match between app and PDF, and show accurate pay period counts
+- **Result:** Removed ~4,000 lines of obsolete/duplicate code, improved maintainability, fixed critical data accuracy issues
+- **Branch:** `refractor`
 
 **Session 23 - Phase 5: Configuration & Models Extraction:**
 - **Created:** `config/` package with all application constants (4 modules, ~300 lines)
@@ -270,6 +328,7 @@ Detailed documentation for each development session:
 | Session 21 | Oct 27, 2025 | Phase 4: UI Components Extraction | [session-21.md](handoff/sessions/session-21.md) |
 | Session 22 | Oct 27, 2025 | Distribution Chart Fixes | [session-22.md](handoff/sessions/session-22.md) |
 | Session 23 | Oct 27, 2025 | Phase 5: Configuration & Models Extraction | [session-23.md](handoff/sessions/session-23.md) |
+| Session 24 | Oct 27, 2025 | Phase 6: Codebase Cleanup & Distribution Chart Bug Fixes | [session-24.md](handoff/sessions/session-24.md) |
 
 ---
 
@@ -277,27 +336,27 @@ Detailed documentation for each development session:
 
 ### Core Components
 
-**1. EDW Analysis Module (`edw_reporter.py`)**
-- PDF text extraction using `PyPDF2.PdfReader`
+**1. EDW Analysis Module (`edw/` package)**
+- PDF text extraction using `PyPDF2.PdfReader` (`edw/parser.py`)
 - Trip identification by "Trip Id" markers
-- EDW detection: any duty day touching 02:30-05:00 local time (function at `edw_reporter.py:69`)
+- EDW detection: any duty day touching 02:30-05:00 local time (`edw/analyzer.py`)
 - Multi-format support: 757, MD-11, single-line, multi-line PDFs
 - Fallback duty day detection for PDFs without Briefing/Debriefing keywords
 
-**2. Streamlit UI (`app.py`)**
+**2. Streamlit UI (`app.py` + `ui_modules/`)**
 - File upload and parameter input
 - Interactive visualizations (charts, tables, filters)
-- Trip details viewer with formatted HTML display
+- Trip details viewer with formatted HTML display (`ui_components/trip_viewer.py`)
 - Download buttons for Excel and PDF reports
 - Session state management for persistent results
 
-**3. Trip Parsing (`parse_trip_for_table()` in `edw_reporter.py:176-341`)**
+**3. Trip Parsing (`parse_trip_for_table()` in `edw/parser.py`)**
 - Marker-based parsing (searches for keywords, not fixed line positions)
 - Handles DH (deadhead), GT (ground transport), and regular flights
 - Extracts duty times, block times, credit, TAFB, rest periods
 - Per-duty-day EDW detection and metrics
 
-**4. Duty Day Analysis (`parse_duty_day_details()` in `edw_reporter.py:396-545`)**
+**4. Duty Day Analysis (`parse_duty_day_details()` in `edw/parser.py`)**
 - Analyzes each duty day individually
 - Counts legs per duty day
 - Calculates duty day duration
