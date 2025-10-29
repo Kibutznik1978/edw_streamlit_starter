@@ -3,6 +3,12 @@ Pairing Analyzer Tool 1.0
 Multi-tab application for analyzing airline bid packets.
 
 This is the main entry point. All tab logic has been modularized into the pages/ directory.
+
+Phase 2: Authentication Integration
+- Requires user login via Supabase Auth
+- Session management with automatic token refresh
+- Role-based access control (admin vs user)
+- User info displayed in sidebar
 """
 
 import streamlit as st
@@ -12,6 +18,8 @@ from ui_modules import (
     render_bid_line_analyzer,
     render_historical_trends
 )
+from auth import init_auth, login_page, show_user_info
+from database import get_supabase_client
 
 
 #==============================================================================
@@ -30,8 +38,28 @@ st.set_page_config(
 #==============================================================================
 
 def main():
-    """Main application entry point with tab navigation."""
+    """Main application entry point with authentication and tab navigation."""
 
+    # Initialize Supabase client
+    try:
+        supabase = get_supabase_client()
+    except ValueError as e:
+        st.error(f"❌ Configuration Error: {str(e)}")
+        st.info("Please ensure .env file exists with SUPABASE_URL and SUPABASE_ANON_KEY")
+        st.stop()
+
+    # Initialize authentication
+    user = init_auth(supabase)
+
+    # If not authenticated, show login page and stop
+    if not user:
+        login_page(supabase)
+        st.stop()
+
+    # User is authenticated - show user info in sidebar
+    show_user_info(supabase)
+
+    # Continue with main application
     st.title("✈️ Pairing Analyzer Tool 1.0")
     st.caption("Comprehensive analysis tool for airline bid packets and pairings")
 

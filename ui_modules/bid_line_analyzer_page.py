@@ -3,6 +3,7 @@
 import tempfile
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -27,6 +28,14 @@ from ui_components import (
     render_pdf_download,
     render_download_section,
     handle_pdf_generation_error,
+)
+from auth import is_admin
+from database import (
+    get_supabase_client,
+    save_bid_period,
+    save_bid_lines,
+    refresh_trends,
+    check_duplicate_bid_period,
 )
 
 
@@ -133,7 +142,170 @@ def render_bid_line_analyzer():
 
     # Display results if data exists (use edited data)
     if st.session_state.bidline_edited_df is not None:
+        # Add "Save to Database" button (admin only)
+        _render_save_to_database_button()
+
         _display_bid_line_results()
+
+
+def _render_save_to_database_button():
+    """Render the 'Save to Database' button (admin only)."""
+
+    # Get Supabase client
+    try:
+        supabase = get_supabase_client()
+    except ValueError:
+        return  # Silently skip if Supabase not configured
+
+    # Check if user is admin
+    if not is_admin(supabase):
+        return  # Only admins can save to database
+
+    # Check if already saved
+    if "bidline_saved_to_db" not in st.session_state:
+        st.session_state.bidline_saved_to_db = False
+
+    # Get data
+    if "bidline_edited_df" not in st.session_state or st.session_state.bidline_edited_df is None:
+        return
+
+    if "bidline_header_info" not in st.session_state or st.session_state.bidline_header_info is None:
+        return
+
+    st.divider()
+
+    # Show save button
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        if st.session_state.bidline_saved_to_db:
+            st.success("✅ Data already saved to database for this analysis")
+        else:
+            st.info("💾 **Admin:** Save this analysis to the database for historical tracking")
+
+    with col2:
+        if not st.session_state.bidline_saved_to_db:
+            if st.button("💾 Save to Database", type="primary", key="bidline_save_button"):
+                _save_bid_lines_to_database(
+                    st.session_state.bidline_edited_df,
+                    st.session_state.bidline_header_info,
+                    supabase
+                )
+
+
+def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
+    """Save bid line analysis results to database."""
+
+    try:
+        # Parse dates from header
+        date_range = header_info.get("bid_period_date_range", "")
+        try:
+            # Extract start and end dates from "MM/DD/YY - MM/DD/YY" format
+            parts = date_range.split(" - ")
+            if len(parts) == 2:
+                start_date = datetime.strptime(parts[0].strip(), "%m/%d/%y").date()
+                end_date = datetime.strptime(parts[1].strip(), "%m/%d/%y").date()
+            else:
+                # Default to current month if parsing fails
+                today = datetime.now()
+                start_date = today.replace(day=1).date()
+                end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+                end_date = end_date.date()
+        except:
+            # Default to current month if parsing fails
+            today = datetime.now()
+            start_date = today.replace(day=1).date()
+            end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+            end_date = end_date.date()
+
+        # Prepare bid period data
+        bid_period_data = {
+            "period": header_info["bid_period"],
+            "domicile": header_info["domicile"],
+            "aircraft": header_info["fleet_type"],
+            "seat": "CA",  # Default to Captain, could be extracted from PDF in future
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat()
+        }
+
+        # Check for duplicate
+        with st.spinner("Checking for existing data..."):
+            existing = check_duplicate_bid_period(
+                bid_period_data["period"],
+                bid_period_data["domicile"],
+                bid_period_data["aircraft"],
+                bid_period_data["seat"]
+            )
+
+        if existing:
+            st.warning(
+                f"⚠️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
+                f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists in database.\n\n"
+                f"Existing record ID: {existing['id']}\n\n"
+                f"To avoid duplicates, this data will not be saved."
+            )
+            return
+
+        # Save bid period
+        with st.spinner("Saving bid period..."):
+            bid_period_id = save_bid_period(bid_period_data)
+
+        st.success(f"✅ Bid period saved (ID: {bid_period_id[:8]}...)")
+
+        # Prepare bid lines data
+        bid_lines_records = []
+        for _, row in df.iterrows():
+            record = {
+                "line_number": int(row["Line"]),
+                "total_ct": float(row["CT"]),
+                "total_bt": float(row["BT"]),
+                "total_do": int(row["DO"]),
+                "total_dd": int(row["DD"]),
+                "is_reserve": bool(row.get("IsReserve", False)),
+                "vto_type": row.get("VTOType") if pd.notna(row.get("VTOType")) else None,
+                "vto_period": int(row.get("VTOPeriod")) if pd.notna(row.get("VTOPeriod")) else None,
+            }
+
+            # Add PP1 and PP2 data if available
+            if "PP1_CT" in row:
+                record["pp1_ct"] = float(row["PP1_CT"]) if pd.notna(row["PP1_CT"]) else None
+                record["pp1_bt"] = float(row["PP1_BT"]) if pd.notna(row["PP1_BT"]) else None
+                record["pp1_do"] = int(row["PP1_DO"]) if pd.notna(row["PP1_DO"]) else None
+                record["pp1_dd"] = int(row["PP1_DD"]) if pd.notna(row["PP1_DD"]) else None
+
+            if "PP2_CT" in row:
+                record["pp2_ct"] = float(row["PP2_CT"]) if pd.notna(row["PP2_CT"]) else None
+                record["pp2_bt"] = float(row["PP2_BT"]) if pd.notna(row["PP2_BT"]) else None
+                record["pp2_do"] = int(row["PP2_DO"]) if pd.notna(row["PP2_DO"]) else None
+                record["pp2_dd"] = int(row["PP2_DD"]) if pd.notna(row["PP2_DD"]) else None
+
+            bid_lines_records.append(record)
+
+        # Create DataFrame for validation
+        bid_lines_df = pd.DataFrame(bid_lines_records)
+
+        # Save bid lines
+        with st.spinner(f"Saving {len(bid_lines_df)} bid lines..."):
+            count = save_bid_lines(bid_period_id, bid_lines_df)
+
+        st.success(f"✅ Saved {count} bid lines")
+
+        # Refresh materialized view
+        with st.spinner("Refreshing trend statistics..."):
+            refresh_trends()
+
+        st.success("✅ Trend statistics updated")
+
+        # Mark as saved
+        st.session_state.bidline_saved_to_db = True
+
+        st.success("🎉 All data saved successfully to database!")
+
+    except Exception as e:
+        st.error(f"❌ Error saving to database: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
 
 
 def _display_bid_line_results():

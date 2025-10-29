@@ -4,8 +4,10 @@ import io
 import tempfile
 from pathlib import Path
 from typing import Dict
+from datetime import datetime
 
 import streamlit as st
+import pandas as pd
 
 from edw import run_edw_report, extract_pdf_header_info
 from pdf_generation import create_edw_pdf_report
@@ -16,6 +18,14 @@ from ui_components import (
     generate_edw_filename,
     handle_pdf_generation_error,
     render_trip_details_viewer,
+)
+from auth import is_admin
+from database import (
+    get_supabase_client,
+    save_bid_period,
+    save_pairings,
+    refresh_trends,
+    check_duplicate_bid_period,
 )
 
 
@@ -126,12 +136,166 @@ def render_edw_analyzer():
 
     # Display download buttons and visualizations if results exist
     if st.session_state.edw_results is not None:
+        # Add "Save to Database" button (admin only)
+        _render_save_to_database_button()
+
         display_edw_results(st.session_state.edw_results)
 
     st.caption(
         "Notes: EDW = any duty day touches 02:30–05:00 local (inclusive). "
         "Local hour comes from the number in parentheses ( ), minutes from the following Z time."
     )
+
+
+def _render_save_to_database_button():
+    """Render the 'Save to Database' button (admin only)."""
+
+    # Get Supabase client
+    try:
+        supabase = get_supabase_client()
+    except ValueError:
+        return  # Silently skip if Supabase not configured
+
+    # Check if user is admin
+    if not is_admin(supabase):
+        return  # Only admins can save to database
+
+    # Check if already saved
+    if "edw_saved_to_db" not in st.session_state:
+        st.session_state.edw_saved_to_db = False
+
+    # Get result data
+    if "edw_results" not in st.session_state or st.session_state.edw_results is None:
+        return
+
+    result_data = st.session_state.edw_results
+    header = result_data["header_info"]
+
+    st.divider()
+
+    # Show save button
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        if st.session_state.edw_saved_to_db:
+            st.success("✅ Data already saved to database for this analysis")
+        else:
+            st.info("💾 **Admin:** Save this analysis to the database for historical tracking")
+
+    with col2:
+        if not st.session_state.edw_saved_to_db:
+            if st.button("💾 Save to Database", type="primary", key="edw_save_button"):
+                _save_edw_to_database(result_data, supabase)
+
+
+def _save_edw_to_database(result_data: Dict, supabase):
+    """Save EDW analysis results to database."""
+
+    try:
+        header = result_data["header_info"]
+        res = result_data["res"]
+
+        # Parse dates from header
+        date_range = header.get("date_range", "")
+        try:
+            # Extract start and end dates from "MM/DD/YY - MM/DD/YY" format
+            parts = date_range.split(" - ")
+            if len(parts) == 2:
+                start_date = datetime.strptime(parts[0].strip(), "%m/%d/%y").date()
+                end_date = datetime.strptime(parts[1].strip(), "%m/%d/%y").date()
+            else:
+                # Default to current month if parsing fails
+                today = datetime.now()
+                start_date = today.replace(day=1).date()
+                end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+                end_date = end_date.date()
+        except:
+            # Default to current month if parsing fails
+            today = datetime.now()
+            start_date = today.replace(day=1).date()
+            end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+            end_date = end_date.date()
+
+        # Prepare bid period data
+        bid_period_data = {
+            "period": header["bid_period"],
+            "domicile": header["domicile"],
+            "aircraft": header["fleet_type"],
+            "seat": "CA",  # Default to Captain, could be extracted from PDF in future
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat()
+        }
+
+        # Check for duplicate
+        with st.spinner("Checking for existing data..."):
+            existing = check_duplicate_bid_period(
+                bid_period_data["period"],
+                bid_period_data["domicile"],
+                bid_period_data["aircraft"],
+                bid_period_data["seat"]
+            )
+
+        if existing:
+            st.warning(
+                f"⚠️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
+                f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists in database.\n\n"
+                f"Existing record ID: {existing['id']}\n\n"
+                f"To avoid duplicates, this data will not be saved."
+            )
+            return
+
+        # Save bid period
+        with st.spinner("Saving bid period..."):
+            bid_period_id = save_bid_period(bid_period_data)
+
+        st.success(f"✅ Bid period saved (ID: {bid_period_id[:8]}...)")
+
+        # Prepare pairings data from df_trips
+        df_trips = res["df_trips"]
+
+        # Convert to database format
+        pairings_records = []
+        for _, row in df_trips.iterrows():
+            record = {
+                "trip_id": str(row["Trip ID"]),
+                "is_edw": bool(row["EDW"]),
+                "edw_reason": "touches_edw_window" if row["EDW"] else None,
+                "tafb_hours": float(row["TAFB Hours"]),
+                "total_credit_time": None,  # Not in current data
+                "num_duty_days": int(row["Duty Days"]),
+                "num_legs": None,  # Not in summary data
+                "max_duty_day_length": float(row["Max Duty Length"]) if "Max Duty Length" in row else None,
+                "max_legs_per_duty": int(row["Max Legs/Duty"]) if "Max Legs/Duty" in row else None,
+                "first_departure": None,  # Not in current data
+                "is_hot_standby": bool(row.get("Hot Standby", False)),
+            }
+            pairings_records.append(record)
+
+        # Create DataFrame for validation
+        pairings_df = pd.DataFrame(pairings_records)
+
+        # Save pairings
+        with st.spinner(f"Saving {len(pairings_df)} pairings..."):
+            count = save_pairings(bid_period_id, pairings_df)
+
+        st.success(f"✅ Saved {count} pairings")
+
+        # Refresh materialized view
+        with st.spinner("Refreshing trend statistics..."):
+            refresh_trends()
+
+        st.success("✅ Trend statistics updated")
+
+        # Mark as saved
+        st.session_state.edw_saved_to_db = True
+
+        st.success("🎉 All data saved successfully to database!")
+
+    except Exception as e:
+        st.error(f"❌ Error saving to database: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
 
 
 def display_edw_results(result_data: Dict):
