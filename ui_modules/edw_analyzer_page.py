@@ -19,7 +19,7 @@ from ui_components import (
     handle_pdf_generation_error,
     render_trip_details_viewer,
 )
-from auth import is_admin
+from auth import is_admin, get_current_user_id
 from database import (
     get_supabase_client,
     save_bid_period,
@@ -216,6 +216,9 @@ def _save_edw_to_database(result_data: Dict, supabase):
             end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
             end_date = end_date.date()
 
+        # Get current user ID for audit fields
+        user_id = get_current_user_id()
+
         # Prepare bid period data
         bid_period_data = {
             "period": header["bid_period"],
@@ -223,7 +226,9 @@ def _save_edw_to_database(result_data: Dict, supabase):
             "aircraft": header["fleet_type"],
             "seat": "CA",  # Default to Captain, could be extracted from PDF in future
             "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat()
+            "end_date": end_date.isoformat(),
+            "created_by": user_id,
+            "updated_by": user_id,
         }
 
         # Check for duplicate
@@ -253,7 +258,7 @@ def _save_edw_to_database(result_data: Dict, supabase):
         # Prepare pairings data from df_trips
         df_trips = res["df_trips"]
 
-        # Convert to database format
+        # Convert to database format (matching actual schema)
         pairings_records = []
         for _, row in df_trips.iterrows():
             record = {
@@ -261,13 +266,9 @@ def _save_edw_to_database(result_data: Dict, supabase):
                 "is_edw": bool(row["EDW"]),
                 "edw_reason": "touches_edw_window" if row["EDW"] else None,
                 "tafb_hours": float(row["TAFB Hours"]),
-                "total_credit_time": None,  # Not in current data
                 "num_duty_days": int(row["Duty Days"]),
-                "num_legs": None,  # Not in summary data
-                "max_duty_day_length": float(row["Max Duty Length"]) if "Max Duty Length" in row else None,
-                "max_legs_per_duty": int(row["Max Legs/Duty"]) if "Max Legs/Duty" in row else None,
-                "first_departure": None,  # Not in current data
-                "is_hot_standby": bool(row.get("Hot Standby", False)),
+                "total_credit_time": None,  # Not available in current data
+                "num_legs": None,  # Not available in trip summary data
             }
             pairings_records.append(record)
 

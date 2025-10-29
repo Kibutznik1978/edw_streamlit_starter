@@ -29,7 +29,7 @@ from ui_components import (
     render_download_section,
     handle_pdf_generation_error,
 )
-from auth import is_admin
+from auth import is_admin, get_current_user_id
 from database import (
     get_supabase_client,
     save_bid_period,
@@ -218,6 +218,9 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
             end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
             end_date = end_date.date()
 
+        # Get current user ID for audit fields
+        user_id = get_current_user_id()
+
         # Prepare bid period data
         bid_period_data = {
             "period": header_info["bid_period"],
@@ -225,7 +228,9 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
             "aircraft": header_info["fleet_type"],
             "seat": "CA",  # Default to Captain, could be extracted from PDF in future
             "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat()
+            "end_date": end_date.isoformat(),
+            "created_by": user_id,
+            "updated_by": user_id,
         }
 
         # Check for duplicate
