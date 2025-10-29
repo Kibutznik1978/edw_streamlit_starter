@@ -498,7 +498,7 @@ def create_bid_line_pdf_report(
             # Exclude reserve lines
             pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
             do_distribution = _create_value_distribution(pp_non_reserve['DO'], label='Days Off') if not pp_non_reserve.empty else pd.DataFrame()
-            do_note = "Note: Showing both pay periods (2 entries per line)"
+            do_note = "Showing total averages for both pay periods combined"
         else:
             do_distribution = _create_value_distribution(df_non_reserve['DO'], label='Days Off') if not df_non_reserve.empty else pd.DataFrame()
             do_note = "Note: Showing averaged values across pay periods"
@@ -564,7 +564,7 @@ def create_bid_line_pdf_report(
             # Exclude reserve lines
             pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
             dd_distribution = _create_value_distribution(pp_non_reserve['DD'], label='Duty Days') if not pp_non_reserve.empty else pd.DataFrame()
-            dd_note = "Note: Showing both pay periods (2 entries per line)"
+            dd_note = "Showing total averages for both pay periods combined"
         else:
             dd_distribution = _create_value_distribution(df_non_reserve['DD'], label='Duty Days') if not df_non_reserve.empty else pd.DataFrame()
             dd_note = "Note: Showing averaged values across pay periods"

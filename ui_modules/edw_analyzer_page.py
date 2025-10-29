@@ -453,7 +453,7 @@ def display_edw_results(result_data: Dict):
                     for _, row in result_data["res"]["duty_dist"].iterrows()
                 ],
                 "notes": result_data.get("notes", ""),
-                "generated_by": "Hot Standby pairings were excluded from trip-length distribution.",
+                "generated_by": "",
             }
 
             # Create branding with proper header

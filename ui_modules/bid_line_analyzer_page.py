@@ -195,11 +195,23 @@ def _display_bid_line_results():
                 subtitle=subtitle
             )
 
+            # Create branding to match pairing analyzer
+            branding = {
+                "primary_hex": "#1E40AF",  # Lighter blue (matches pairing analyzer)
+                "accent_hex": "#F3F4F6",   # Light gray
+                "rule_hex": "#E5E7EB",     # Medium gray
+                "muted_hex": "#6B7280",    # Darker gray
+                "bg_alt_hex": "#FAFAFA",   # Very light gray
+                "logo_path": None,
+                "title_left": f"{header['domicile']} {header['fleet_type']} – Bid {header['bid_period']} | Bid Line Analysis Report"
+            }
+
             pdf_bytes = create_bid_line_pdf_report(
                 filtered_df,
                 metadata=metadata,
                 pay_periods=diagnostics.pay_periods if diagnostics else None,
-                reserve_lines=diagnostics.reserve_lines if diagnostics else None
+                reserve_lines=diagnostics.reserve_lines if diagnostics else None,
+                branding=branding
             )
 
             render_pdf_download(
