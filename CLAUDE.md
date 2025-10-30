@@ -488,6 +488,31 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 
 ## Recent Changes
 
+**Session 30 (October 29, 2025) - UI Fixes & Critical Bug Resolution:**
+- **Status:** ✅ COMPLETE - All UI and critical bugs resolved
+- **Fixed:** Trip details table width (60% optimal for sidebar open/closed)
+- **Fixed:** Distribution chart memory bug (27 PiB allocation error from NaN values)
+- **Fixed:** Header extraction for final iteration PDFs (now checks up to 5 pages)
+- **Implementation:**
+  - `ui_components/trip_viewer.py`: Adjusted table width from 50% → 60%
+  - `ui_modules/bid_line_analyzer_page.py`: Added 6-layer data validation to `_create_time_distribution_chart()`
+  - `bid_parser.py`: Loop through up to 5 pages for header extraction (was 2)
+- **Bug Fix Details:**
+  - Root cause: NaN/inf values in data caused `np.arange()` to allocate massive array
+  - Solution: Multi-layer validation (clean data, check empty, validate range, verify bins)
+  - Result: Charts fail gracefully instead of crashing
+- **Testing:** All fixes verified working
+  - ✅ Table looks good with/without sidebar
+  - ✅ Distribution charts render without errors
+  - ✅ Header extraction works for PDFs with cover pages on first 5 pages
+- **Files Modified:**
+  - `ui_components/trip_viewer.py` (lines 86-96): Width adjustment
+  - `ui_modules/bid_line_analyzer_page.py` (lines 611-642): Data validation
+  - `bid_parser.py` (lines 130-154): Multi-page header extraction
+- **Handoff Doc:** See `handoff/sessions/session-30.md` (comprehensive debugging documentation)
+- **Duration:** ~1 hour
+- **Branch:** `refractor`
+
 **Session 29 (October 29, 2025) - Duplicate Trip Parsing Fix:**
 - **Status:** ✅ COMPLETE - Parser now correctly handles all PDF variations
 - **Fixed:** Duplicate trip IDs in parsed pairing data (129 trips → 120 unique)

@@ -84,14 +84,10 @@ def _get_trip_table_styles() -> str:
     return """
     <style>
     .trip-detail-container {
-        max-width: 50%;
+        max-width: 60%;
         margin: 0 auto;
         overflow-x: auto;
-    }
-    @media (max-width: 1200px) {
-        .trip-detail-container {
-            max-width: 80%;
-        }
+        overflow-y: visible;
     }
     @media (max-width: 768px) {
         .trip-detail-container {
@@ -100,6 +96,7 @@ def _get_trip_table_styles() -> str:
     }
     .trip-table {
         width: 100%;
+        min-width: 650px;
         border-collapse: collapse;
         font-family: 'Courier New', monospace;
         font-size: 11px;
@@ -111,6 +108,7 @@ def _get_trip_table_styles() -> str:
         border: 1px solid #999;
         font-weight: bold;
         font-size: 10px;
+        white-space: nowrap;
     }
     .trip-table td {
         padding: 4px;

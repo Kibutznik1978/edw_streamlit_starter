@@ -613,14 +613,33 @@ def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percen
     if data.empty:
         return None
 
+    # Clean data: remove NaN, inf, and invalid values
+    clean_data = data.dropna()
+    clean_data = clean_data[np.isfinite(clean_data)]
+
+    # Check if we have valid data after cleaning
+    if clean_data.empty:
+        return None
+
+    # Additional validation: ensure we have reasonable values
+    if clean_data.min() < 0 or clean_data.max() > 500:
+        # CT/BT should be between 0-500 hours (reasonable upper bound)
+        # If outside this range, likely data corruption
+        return None
+
     # Create bins using configured bucket size
     bucket_size = CT_BT_BUCKET_SIZE_HOURS
-    min_val = np.floor(data.min() / bucket_size) * bucket_size
-    max_val = np.ceil(data.max() / bucket_size) * bucket_size
+    min_val = np.floor(clean_data.min() / bucket_size) * bucket_size
+    max_val = np.ceil(clean_data.max() / bucket_size) * bucket_size
+
+    # Safety check: ensure bin range is reasonable
+    if not np.isfinite(min_val) or not np.isfinite(max_val) or (max_val - min_val) > 1000:
+        return None
+
     bins = np.arange(min_val, max_val + bucket_size, bucket_size)
 
-    # Create histogram
-    counts, bin_edges = np.histogram(data, bins=bins)
+    # Create histogram using cleaned data
+    counts, bin_edges = np.histogram(clean_data, bins=bins)
 
     if is_percentage:
         values = (counts / counts.sum() * 100) if counts.sum() > 0 else counts

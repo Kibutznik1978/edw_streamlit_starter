@@ -57,7 +57,7 @@ class ParseDiagnostics:
 def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
     """
     Extract header information from a bid line PDF.
-    Checks the first page, and if header info is not found, checks the second page.
+    Checks pages sequentially (up to first 5 pages) until header info is found.
 
     Extracts:
     - Bid Period (e.g., "2507")
@@ -132,18 +132,20 @@ def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
             if not pdf.pages:
                 return result
 
-            # Try extracting from first page
-            first_page_text = pdf.pages[0].extract_text()
-            if first_page_text:
-                result = extract_from_text(first_page_text, result)
+            # Check up to first 5 pages (or all pages if fewer than 5)
+            max_pages_to_check = min(5, len(pdf.pages))
 
-            # If any critical fields are still None, try second page
-            if (result["bid_period"] is None or
-                result["domicile"] is None or
-                result["fleet_type"] is None) and len(pdf.pages) >= 2:
-                second_page_text = pdf.pages[1].extract_text()
-                if second_page_text:
-                    result = extract_from_text(second_page_text, result)
+            for page_idx in range(max_pages_to_check):
+                # Extract text from current page
+                page_text = pdf.pages[page_idx].extract_text()
+                if page_text:
+                    result = extract_from_text(page_text, result)
+
+                # Stop early if all critical fields are found
+                if (result["bid_period"] is not None and
+                    result["domicile"] is not None and
+                    result["fleet_type"] is not None):
+                    break
 
     except Exception:
         # Silently return partial results if extraction fails
