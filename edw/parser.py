@@ -330,7 +330,26 @@ def parse_max_legs_per_duty_day(trip_text):
 
         # Check if we're ending a duty day
         is_debriefing = re.search(r'\bDebriefing\b', line, re.IGNORECASE)
-        is_fallback_end = (line.strip() == 'Duty Time:')
+
+        # Fallback: Detect duty day end without "Debriefing" keyword
+        # Pattern: (HH)MM:SS followed by short duration (0h15 or 0h30)
+        is_fallback_end = False
+        if in_duty and not is_debriefing and i + 1 < len(lines):
+            # Check if "Debriefing" appeared in the last 2 lines
+            recent_debriefing = any(
+                i - offset >= 0 and re.search(r'\bDebriefing\b', lines[i - offset], re.IGNORECASE)
+                for offset in range(1, 3)
+            )
+
+            if not recent_debriefing:
+                # Check if current line is a time pattern
+                time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
+                # Next line should be a short duration (debrief is typically 0h15 or 0h30)
+                duration_match = re.match(r'0h(15|30)', lines[i + 1].strip()) if i + 1 < len(lines) else None
+
+                if time_match and duration_match and current_duty_legs > 0:
+                    # Only consider this a debrief if we've counted legs in this duty day
+                    is_fallback_end = True
 
         if is_debriefing or is_fallback_end:
             if in_duty:
@@ -461,7 +480,26 @@ def parse_duty_day_details(trip_text, is_edw_func):
 
         # End of duty day - capture duration and block time by searching between briefing and debriefing
         is_debriefing = re.search(r'\bDebriefing\b', line, re.IGNORECASE)
-        is_fallback_end = (line.strip() == 'Duty Time:')
+
+        # Fallback: Detect duty day end without "Debriefing" keyword
+        # Pattern: (HH)MM:SS followed by short duration (0h15 or 0h30)
+        is_fallback_end = False
+        if current_duty_day and not is_debriefing and i + 1 < len(lines):
+            # Check if "Debriefing" appeared in the last 2 lines
+            recent_debriefing = any(
+                i - offset >= 0 and re.search(r'\bDebriefing\b', lines[i - offset], re.IGNORECASE)
+                for offset in range(1, 3)
+            )
+
+            if not recent_debriefing:
+                # Check if current line is a time pattern
+                time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line.strip())
+                # Next line should be a short duration (debrief is typically 0h15 or 0h30)
+                duration_match = re.match(r'0h(15|30)', lines[i + 1].strip()) if i + 1 < len(lines) else None
+
+                if time_match and duration_match and current_duty_day['num_legs'] > 0:
+                    # Only consider this a debrief if we've counted legs in this duty day
+                    is_fallback_end = True
 
         if current_duty_day and (is_debriefing or is_fallback_end):
             # Search from briefing through a few lines after debriefing for "Duty", "Block", and "Credit" times
@@ -727,10 +765,25 @@ def parse_trip_for_table(trip_text, is_edw_func):
         is_debriefing = re.search(r'\bDebriefing\b', line, re.IGNORECASE)
 
         # Fallback: Detect duty day end without "Debriefing" keyword
-        # Pattern: "Duty Time:" label (after "Rest" marker)
+        # Pattern: (HH)MM:SS followed by short duration (0h15 or 0h30)
+        # This detects standalone debrief times in older PDFs without "Debriefing" label
         is_fallback_duty_end = False
-        if current_duty and not is_debriefing and line == 'Duty Time:':
-            is_fallback_duty_end = True
+        if current_duty and not is_debriefing and i + 1 < len(lines):
+            # Check if "Debriefing" appeared in the last 2 lines
+            recent_debriefing = any(
+                i - offset >= 0 and re.search(r'\bDebriefing\b', lines[i - offset], re.IGNORECASE)
+                for offset in range(1, 3)
+            )
+
+            if not recent_debriefing:
+                # Check if current line is a time pattern
+                time_match = re.match(r'\((\d+)\)(\d{2}:\d{2})', line)
+                # Next line should be a short duration (debrief is typically 0h15 or 0h30)
+                duration_match = re.match(r'0h(15|30)', lines[i + 1].strip()) if i + 1 < len(lines) else None
+
+                if time_match and duration_match and len(current_duty.get('flights', [])) > 0:
+                    # Only consider this a debrief if we've seen flights in this duty day
+                    is_fallback_duty_end = True
 
         if current_duty and (is_debriefing or is_fallback_duty_end):
             # Capture debriefing time and credit from the line
@@ -1043,21 +1096,27 @@ def parse_trip_for_table(trip_text, is_edw_func):
             elif i + 1 < len(lines):
                 trip_summary['TAFB'] = lines[i + 1].strip()
 
-        # Premium
-        if 'Premium:' in line:
-            match = re.search(r'Premium:\s*(\S+)', line)
-            if match:
+        # Premium (handles both "Premium:" and "Premium" formats)
+        if 'Premium' in line:
+            match = re.search(r'Premium:?\s*(\S+)', line)
+            if match and match.group(1) not in ['', 'Premium']:
                 trip_summary['Prem'] = match.group(1)
             elif i + 1 < len(lines):
-                trip_summary['Prem'] = lines[i + 1].strip()
+                next_line = lines[i + 1].strip()
+                # Value is on next line
+                if next_line and not next_line[0].isalpha():
+                    trip_summary['Prem'] = next_line
 
-        # Per Diem
-        if 'per Diem:' in line:
-            match = re.search(r'per Diem:\s*(\S+)', line)
-            if match:
+        # Per Diem (handles both "per Diem:" and "per Diem" formats, case insensitive)
+        if re.search(r'per\s+Diem', line, re.IGNORECASE):
+            match = re.search(r'per\s+Diem:?\s*(\S+)', line, re.IGNORECASE)
+            if match and match.group(1) not in ['', 'Diem']:
                 trip_summary['PDiem'] = match.group(1)
             elif i + 1 < len(lines):
-                trip_summary['PDiem'] = lines[i + 1].strip()
+                next_line = lines[i + 1].strip()
+                # Value is on next line
+                if next_line and not next_line[0].isalpha():
+                    trip_summary['PDiem'] = next_line
 
         # LDGS
         if 'LDGS' in line:

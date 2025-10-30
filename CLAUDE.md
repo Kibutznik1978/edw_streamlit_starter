@@ -513,6 +513,35 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 - **Duration:** ~1 hour
 - **Branch:** `refractor`
 
+**Session 31 (October 29, 2025) - Older PDF Format Compatibility & Trip Summary Parsing:**
+- **Status:** ✅ COMPLETE - Parser now handles all PDF format variations
+- **Fixed:** Debriefing time parsing for older PDFs without "Briefing/Debriefing" labels
+- **Fixed:** Premium and Per Diem fields missing from trip summary display
+- **Issue 1: Debriefing Parsing**
+  - Root cause: Older PDFs (2022-2023) lack "Briefing/Debriefing" text labels
+  - Briefing fallback worked, but debriefing fallback was broken (checking for non-existent "Duty Time:")
+  - Solution: Detect standalone debrief times by pattern: `(HH)MM:SS` + short duration `0h15` or `0h30`
+  - Added defense-in-depth validation (recent label check, flight count check, pattern validation)
+- **Issue 2: Trip Summary Fields**
+  - Root cause: Parser looking for "Premium:" and "per Diem:" (with colons), but PDFs have no colons
+  - Solution: Made parsing flexible with optional colons (`Premium:?`), case-insensitive matching
+  - Now handles both same-line and next-line value patterns
+- **Implementation:**
+  - Updated 3 parsing functions in `edw/parser.py` with debriefing fallback logic
+  - Lines 334-352: `parse_max_legs_per_duty_day()`
+  - Lines 484-502: `parse_duty_day_details()`
+  - Lines 729-748: `parse_trip_for_table()`
+  - Lines 1099-1119: Premium/Per Diem parsing (optional colon, case-insensitive)
+- **Testing:**
+  - ✅ Older PDF: Trip 181 - parsed 6 duty days, all with non-zero durations
+  - ✅ Modern PDF: 1,344 trips - zero errors, no regression
+  - ✅ Trip summary: All 11 fields now displayed (including Prem and PDiem)
+- **Files Modified:**
+  - `edw/parser.py` (4 sections updated for broader format compatibility)
+- **Handoff Doc:** See `handoff/sessions/session-31.md` (comprehensive format analysis)
+- **Duration:** ~1.5 hours
+- **Branch:** `refractor`
+
 **Session 29 (October 29, 2025) - Duplicate Trip Parsing Fix:**
 - **Status:** ✅ COMPLETE - Parser now correctly handles all PDF variations
 - **Fixed:** Duplicate trip IDs in parsed pairing data (129 trips → 120 unique)
@@ -740,6 +769,8 @@ See `handoff/sessions/session-22.md` for distribution chart fixes, `handoff/sess
 - **Session 27**: `handoff/sessions/session-27.md` - Phase 1: Database deployment (Oct 29, 2025) ✅
 - **Session 28**: `handoff/sessions/session-28.md` - Phase 2: Authentication & database save (Oct 29, 2025) ✅
 - **Session 29**: `handoff/sessions/session-29.md` - Duplicate trip parsing fix (Oct 29, 2025) ✅
+- **Session 30**: `handoff/sessions/session-30.md` - UI fixes & critical bug resolution (Oct 29, 2025) ✅
+- **Session 31**: `handoff/sessions/session-31.md` - Older PDF format compatibility & trip summary parsing (Oct 29, 2025) ✅
 - **Environment Template**: `.env.example` - Supabase credentials template
 
 ## Current Status & Next Steps
