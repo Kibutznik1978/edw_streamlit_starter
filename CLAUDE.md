@@ -88,6 +88,8 @@ edw_streamlit_starter/
 │   ├── edw_pdf.py                  (425 lines - EDW reports)
 │   └── bid_line_pdf.py             (652 lines - bid line reports)
 ├── bid_parser.py                    (880 lines - bid line parsing)
+├── database.py                      (Database integration - Phase 2)
+├── auth.py                          (Authentication - Phase 2)
 └── requirements.txt
 ```
 
@@ -143,8 +145,9 @@ Clean entry point with just navigation:
 - Trip analysis with weighted EDW metrics
 - Duty day distribution charts
 - Advanced filtering (duty day criteria, trip length, legs)
-- Trip details viewer with HTML table (50% width, responsive)
+- Trip details viewer with HTML table (60% width, responsive)
 - Excel and PDF report downloads
+- Database save functionality (Phase 2)
 - Uses `edw/` module for core logic
 
 Functions:
@@ -164,6 +167,7 @@ Functions:
   - Consistent reserve line filtering
 - Reserve line statistics (Captain/FO slots)
 - CSV and PDF export (includes manual edits)
+- Database save functionality (Phase 2)
 - Uses `bid_parser.py`, `pdf_generation`, and `ui_components`
 
 Functions:
@@ -177,7 +181,7 @@ Functions:
 **Tab 3: Historical Trends**
 - Placeholder for Supabase integration
 - Future: Trend charts, multi-bid-period comparisons
-- Requires `database.py` module (not yet implemented)
+- Will use `database.py` module for queries
 
 #### `ui_modules/shared_components.py` (66 lines)
 Common UI utilities:
@@ -233,19 +237,6 @@ Metrics display and pay period analysis:
 - `render_pay_period_analysis()` - PP1 vs PP2 comparison analysis
 - `render_reserve_summary()` - Reserve line statistics display
 
-#### `ui_components/__init__.py` (95 lines)
-Module exports and public API:
-- Exports all public functions from submodules
-- `__all__` list for controlled API surface
-- Clean imports: `from ui_components import create_bid_line_filters`
-
-**Benefits:**
-- **Reduced code duplication:** Common patterns extracted once
-- **Improved maintainability:** Single source of truth for UI components
-- **Better testability:** Isolated, reusable components
-- **Consistent UX:** Same components used across different pages
-- **Code reduction:** bid_line_analyzer_page.py reduced from 589 → 340 lines (42% reduction)
-
 ### Core Analysis Modules
 
 #### EDW Analysis Module (`edw/` - Session 19)
@@ -255,10 +246,14 @@ Module exports and public API:
 **`edw/parser.py` (814 lines)** - PDF parsing and text extraction:
 - **PDF Reading**: Uses `PyPDF2.PdfReader` to extract text from bid packet PDFs
 - **Header Extraction**: `extract_pdf_header_info()` - bid period, domicile, fleet type
-  - Checks first page, then second page if needed (handles cover pages)
+  - Checks up to 5 pages to find header (handles cover pages)
 - **Trip Identification**: `parse_pairings()` - splits text into individual trips by "Trip Id" markers
+  - Stops at "Open Trips Report" section to avoid duplicates
 - **Metric Extraction**: `parse_tafb()`, `parse_duty_days()`, `parse_max_duty_day_length()`, etc.
 - **Detailed Parsing**: `parse_duty_day_details()`, `parse_trip_for_table()` - structured trip data
+  - Handles older PDF formats without "Briefing/Debriefing" labels
+  - Flexible Premium/Per Diem parsing (optional colons)
+
 **`edw/analyzer.py` (73 lines)** - EDW detection logic:
 - **Core EDW Detection**: `is_edw_trip()` - identifies Early/Day/Window trips
   - A trip is EDW if any duty day touches 02:30-05:00 local time (inclusive)
@@ -288,7 +283,7 @@ This module handles parsing of bid line PDFs:
 - **PDF Parsing**: Uses `pdfplumber` library to extract text and tables
 - **Header Extraction**: Automatic extraction of bid period, domicile, fleet type, date range
   - Function: `extract_bid_line_header_info()` (lines 52-147)
-  - Checks first page, then second page if needed (handles cover pages)
+  - Checks up to 5 pages to find header (handles cover pages)
 - **Line Detection**: Parses bid line data including CT, BT, DO, DD metrics
 - **Pay Period Analysis**: Separates data by pay period (PP1 vs PP2)
 - **VTO/VTOR/VOR Split Line Handling**: Detects and includes split lines (one period regular, one VTO)
@@ -336,15 +331,47 @@ Key functions:
 - Distribution helper functions for CT, BT, DO, DD
 - Buy-up analysis (threshold: 75 CT hours)
 - Smart reserve line filtering (regular reserve excluded, HSBY kept for CT/DO/DD)
-
-**`pdf_generation/__init__.py` (95 lines)** - Module interface:
-- Exports main functions: `create_edw_pdf_report()`, `create_bid_line_pdf_report()`, `ReportMetadata`
-- Exports base components and chart functions for advanced usage
-- Clean public API with `__all__` list
+- Pay period breakdown pages with individual distributions
 
 Key entry points:
 - `create_edw_pdf_report()` from `pdf_generation` - EDW PDF generation
 - `create_bid_line_pdf_report()` from `pdf_generation` - Bid line PDF generation
+
+#### Database Module (`database.py` - Phase 1-2)
+
+**Supabase integration for persistent data storage:**
+
+- **Client Management**: `get_supabase_client()` - creates authenticated Supabase client
+  - Automatic JWT session handling for RLS policies
+  - Extracts JWT from st.session_state and sets session context
+- **Pairing Data Save**: `save_pairing_data_to_db()` - saves EDW analysis results
+  - Deduplication by trip_id (detects and offers replace workflow)
+  - Saves to `bid_periods`, `pairings`, `pairing_duty_days` tables
+- **Bid Line Data Save**: `save_bid_line_data_to_db()` - saves bid line analysis results
+  - Deduplication by line_number (detects and offers replace workflow)
+  - Saves to `bid_periods`, `bid_lines` tables
+- **Query Functions**: Placeholder for historical data queries
+- **Error Handling**: Comprehensive error handling with user-friendly messages
+
+Key entry points:
+- `save_pairing_data_to_db()` - Save EDW pairing data
+- `save_bid_line_data_to_db()` - Save bid line data
+
+#### Authentication Module (`auth.py` - Phase 2)
+
+**Supabase authentication integration:**
+
+- **Login/Signup UI**: `render_auth_ui()` - sidebar authentication interface
+  - Email/password login
+  - New user registration
+  - Profile creation on signup
+- **Session Management**: JWT token handling and user state
+- **JWT Debug Tools**: `debug_jwt_claims()` - displays JWT claims in sidebar (admin only)
+- **Role Management**: Admin vs regular user permissions
+
+Key functions:
+- `render_auth_ui()` - Main authentication interface
+- `debug_jwt_claims()` - JWT token debugging
 
 ### Text Handling
 
@@ -380,24 +407,26 @@ Bid_Lines_Analysis_Report.pdf
 bid_lines_filtered.csv
 ```
 
-## Database Integration (Planned)
+## Database Schema
 
 See `docs/IMPLEMENTATION_PLAN.md` and `docs/SUPABASE_SETUP.md` for comprehensive database integration plans.
 
-**Database Schema** (6 tables):
+**Database Schema** (7 tables, 1 materialized view):
 1. `bid_periods` - Master table for bid period metadata
-2. `trips` - Individual trip records (EDW analysis)
-3. `edw_summary_stats` - Aggregated EDW statistics
+2. `pairings` - Individual pairing/trip records (EDW analysis)
+3. `pairing_duty_days` - Duty day details for each pairing
 4. `bid_lines` - Individual bid line records
-5. `bid_line_summary_stats` - Aggregated bid line statistics
-6. `pay_period_data` - Pay period breakdowns
+5. `profiles` - User profiles and roles
+6. `pdf_export_templates` - PDF template customization
+7. `audit_log` - Change tracking and audit trail
+8. `bid_period_trends` - Materialized view for trend analysis
 
-**Pending Implementation Tasks:**
-1. Create `database.py` module with Supabase client
-2. Add "Save to Database" buttons to both analyzers
-3. Build Historical Trends tab with visualizations
-4. Replace matplotlib with Altair for interactive charts
-5. Add theme configuration and custom CSS
+**Key Features:**
+- Row Level Security (RLS) with JWT-based policies
+- JWT Custom Claims for role-based access control
+- Audit triggers for change tracking
+- Performance-optimized indexes
+- Materialized view for fast trend queries
 
 ## Testing Changes
 
@@ -407,15 +436,18 @@ Since this is a Streamlit app without formal tests:
    - Upload a pairing PDF and verify automatic header extraction
    - Run analysis and check all weighted EDW metrics
    - Test duty day criteria filtering (match modes: Any/All)
-   - View trip details and verify table width constraint (50% on desktop)
+   - View trip details and verify table width constraint (60% on desktop)
    - Download Excel and PDF reports
+   - Test "Save to Database" with duplicate detection
 
 2. **Tab 2 (Bid Line Analyzer):**
    - Upload a bid line PDF and verify parsing completes
    - Apply filters (CT, BT, DO, DD ranges)
    - Check all three sub-tabs (Overview, Summary, Visuals)
    - Verify pay period analysis displays correctly
+   - Test manual data editing and change tracking
    - Test CSV and PDF export
+   - Test "Save to Database" with duplicate detection
 
 3. **Tab 3 (Historical Trends):**
    - Verify placeholder content displays
@@ -425,6 +457,11 @@ Since this is a Streamlit app without formal tests:
    - Verify session state isolation (no bleeding between tabs)
    - Test switching between tabs multiple times
    - Upload different PDFs in different tabs
+
+5. **Authentication:**
+   - Test login/signup flow
+   - Verify JWT claims are set correctly
+   - Test admin vs regular user permissions
 
 ## Common Issues
 
@@ -437,327 +474,92 @@ Since this is a Streamlit app without formal tests:
 - **Unicode handling**: Always use `clean_text()` when preparing text for ReportLab or Excel
 - **Session state conflicts**: Ensure all widget keys are unique across tabs
 - **Table width**: Pairing detail table uses responsive CSS (50%/80%/100% based on screen width)
+- **Database errors**: Check JWT claims are set (use debug tools in sidebar)
+- **RLS violations**: Ensure user is authenticated and JWT session is set in `get_supabase_client()`
 
-## Manual Data Editing Feature (Session 16)
+## Manual Data Editing Feature
 
-The Bid Line Analyzer now supports inline data editing to fix missing or incorrect parsed values.
+The Bid Line Analyzer supports inline data editing to fix missing or incorrect parsed values.
 
 ### Key Components:
 
-**Data Editor (`_render_overview_tab()` in `app.py` lines 1143-1380)**
+**Data Editor** - Interactive editing interface:
 - Uses `st.data_editor()` for interactive editing
 - Editable columns: CT, BT, DO, DD (Line number is read-only)
 - Always shows ALL parsed lines (filters don't affect editor)
 - Column validation: CT/BT (0.0-200.0), DO/DD (0-31)
-- Compact column widths for better UX
 
-**Session State Management (lines 875-884)**
+**Session State Management**:
 - `bidline_original_df`: Original parsed data (never modified)
 - `bidline_edited_df`: User-corrected data (contains edits)
 - Data flow: All tabs, charts, and exports use edited data automatically
 
-**Change Tracking (lines 1223-1327)**
+**Change Tracking**:
 - Compares edited data against original
 - Visual indicators: ✏️ "Data has been manually edited (N changes)"
 - "View edited cells" expander shows Line, Column, Original, Current
 - Handles NaN/None values properly
 
-**Validation Warnings (lines 1266-1286)**
+**Validation Warnings**:
 - CT or BT > 150 hours
 - BT > CT (block time exceeds credit time)
 - DO or DD > 20 days
 - DO + DD > 31 (exceeds month length)
 
-**Reset Functionality (lines 1304-1322)**
-- "Reset to Original Data" button
-- Deletes edited data and restores parsed values
-- Simple one-click operation
-
-### Important Implementation Details:
-
-1. **Data editor always uses `df` (all lines), never `filtered_df`** (line 1152)
-2. **When saving edits, use `df.copy()` as base, not parsed data** (line 1290)
-3. **All calculations automatically use edited data** - no manual updates needed
-4. **CSV/PDF exports include edits** - filtered_df already contains edited values
-
-### Testing:
-- Upload PDF, parse, edit a value in Overview tab
-- Switch to Summary/Visuals tabs → should see updated calculations
-- Download CSV/PDF → should include edits
-- Click Reset → should restore original parsed data
+**Important:** Data editor always uses `df` (all lines), never `filtered_df`. All calculations automatically use edited data.
 
 ## Recent Changes
 
+### Latest Sessions (Detailed)
+
+**Session 31 (October 29, 2025) - Older PDF Format Compatibility & Trip Summary Parsing:**
+- **Fixed:** Debriefing time parsing for older PDFs without "Briefing/Debriefing" labels
+- **Fixed:** Premium and Per Diem fields missing from trip summary display
+- **Implementation:** Updated 3 parsing functions in `edw/parser.py` with fallback logic
+- **Testing:** Older PDFs now parse correctly, zero regression on modern PDFs
+- See `handoff/sessions/session-31.md` for detailed format analysis
+
 **Session 30 (October 29, 2025) - UI Fixes & Critical Bug Resolution:**
-- **Status:** ✅ COMPLETE - All UI and critical bugs resolved
 - **Fixed:** Trip details table width (60% optimal for sidebar open/closed)
 - **Fixed:** Distribution chart memory bug (27 PiB allocation error from NaN values)
 - **Fixed:** Header extraction for final iteration PDFs (now checks up to 5 pages)
-- **Implementation:**
-  - `ui_components/trip_viewer.py`: Adjusted table width from 50% → 60%
-  - `ui_modules/bid_line_analyzer_page.py`: Added 6-layer data validation to `_create_time_distribution_chart()`
-  - `bid_parser.py`: Loop through up to 5 pages for header extraction (was 2)
-- **Bug Fix Details:**
-  - Root cause: NaN/inf values in data caused `np.arange()` to allocate massive array
-  - Solution: Multi-layer validation (clean data, check empty, validate range, verify bins)
-  - Result: Charts fail gracefully instead of crashing
-- **Testing:** All fixes verified working
-  - ✅ Table looks good with/without sidebar
-  - ✅ Distribution charts render without errors
-  - ✅ Header extraction works for PDFs with cover pages on first 5 pages
-- **Files Modified:**
-  - `ui_components/trip_viewer.py` (lines 86-96): Width adjustment
-  - `ui_modules/bid_line_analyzer_page.py` (lines 611-642): Data validation
-  - `bid_parser.py` (lines 130-154): Multi-page header extraction
-- **Handoff Doc:** See `handoff/sessions/session-30.md` (comprehensive debugging documentation)
-- **Duration:** ~1 hour
-- **Branch:** `refractor`
-
-**Session 31 (October 29, 2025) - Older PDF Format Compatibility & Trip Summary Parsing:**
-- **Status:** ✅ COMPLETE - Parser now handles all PDF format variations
-- **Fixed:** Debriefing time parsing for older PDFs without "Briefing/Debriefing" labels
-- **Fixed:** Premium and Per Diem fields missing from trip summary display
-- **Issue 1: Debriefing Parsing**
-  - Root cause: Older PDFs (2022-2023) lack "Briefing/Debriefing" text labels
-  - Briefing fallback worked, but debriefing fallback was broken (checking for non-existent "Duty Time:")
-  - Solution: Detect standalone debrief times by pattern: `(HH)MM:SS` + short duration `0h15` or `0h30`
-  - Added defense-in-depth validation (recent label check, flight count check, pattern validation)
-- **Issue 2: Trip Summary Fields**
-  - Root cause: Parser looking for "Premium:" and "per Diem:" (with colons), but PDFs have no colons
-  - Solution: Made parsing flexible with optional colons (`Premium:?`), case-insensitive matching
-  - Now handles both same-line and next-line value patterns
-- **Implementation:**
-  - Updated 3 parsing functions in `edw/parser.py` with debriefing fallback logic
-  - Lines 334-352: `parse_max_legs_per_duty_day()`
-  - Lines 484-502: `parse_duty_day_details()`
-  - Lines 729-748: `parse_trip_for_table()`
-  - Lines 1099-1119: Premium/Per Diem parsing (optional colon, case-insensitive)
-- **Testing:**
-  - ✅ Older PDF: Trip 181 - parsed 6 duty days, all with non-zero durations
-  - ✅ Modern PDF: 1,344 trips - zero errors, no regression
-  - ✅ Trip summary: All 11 fields now displayed (including Prem and PDiem)
-- **Files Modified:**
-  - `edw/parser.py` (4 sections updated for broader format compatibility)
-- **Handoff Doc:** See `handoff/sessions/session-31.md` (comprehensive format analysis)
-- **Duration:** ~1.5 hours
-- **Branch:** `refractor`
+- **Implementation:** Multi-layer data validation in chart generation
+- See `handoff/sessions/session-30.md` for comprehensive debugging documentation
 
 **Session 29 (October 29, 2025) - Duplicate Trip Parsing Fix:**
-- **Status:** ✅ COMPLETE - Parser now correctly handles all PDF variations
 - **Fixed:** Duplicate trip IDs in parsed pairing data (129 trips → 120 unique)
-- **Root Cause:** "Open Trips Report" section contained duplicate trips in open time
+- **Root Cause:** "Open Trips Report" section contained duplicate trips
 - **Solution:** Parser now stops at "Open Trips Report" heading
-- **Implementation:**
-  - Modified `edw/parser.py` to detect and stop at "Open Trips Report"
-  - Uses Python `for...else` pattern for clean break handling
-  - Works for PDFs with or without "Open Trips Report" section
-- **Testing:** Verified with debug script - zero duplicates found
-- **Files Modified:**
-  - `edw/parser.py` (lines 128-180): Added stop condition
-  - `database.py` (lines 555-557): Updated comment
-- **Handoff Doc:** See `handoff/sessions/session-29.md` (detailed investigation & solution)
-- **Duration:** ~1.5 hours
-- **Branch:** `refractor`
+- See `handoff/sessions/session-29.md` for detailed investigation
+
+### Recent Milestones
 
 **Phase 2 Complete (October 29, 2025) - Authentication Integration & Database Save:**
-- **Status:** ✅ Phase 2 Complete - Database save functionality fully operational
-- **Fixed:** RLS policy violations (42501 errors) by setting JWT session in `get_supabase_client()`
-- **Fixed:** Duplicate key constraints (23505 errors) by adding deduplication logic
-- **Implemented:**
-  - Automatic JWT session handling in `get_supabase_client()`
-  - Deduplication for pairing data (by trip_id) and bid line data (by line_number)
-  - JWT debug tools (`debug_jwt_claims()` function and sidebar UI)
-  - Clean duplicate detection and replace workflow
-- **Testing:** Both EDW pairing and bid line data save successfully to database
-  - Test save: 120 unique pairings (9 duplicates removed from 129 total)
-  - Test save: 38 bid lines with replace workflow
-  - JWT claims verified: `app_role: "admin"` present and working
-- **Files Modified:**
-  - `database.py` (+252 lines): JWT session handling, deduplication logic
-  - `auth.py` (+16 lines): JWT debug UI in sidebar
-  - `ui_modules/edw_analyzer_page.py` (+70 lines): Save workflow
-  - `ui_modules/bid_line_analyzer_page.py` (+80 lines): Save workflow
-- **Handoff Doc:** See `handoff/sessions/session-28.md` (complete session documentation)
-- **Duration:** ~2 hours
-- **Branch:** `refractor`
-- **Next:** Phase 3 - Testing & Optimization (or Phase 4 - Admin Upload Interface)
+- ✅ Fixed RLS policy violations with JWT session handling
+- ✅ Implemented "Save to Database" for both EDW and bid line data
+- ✅ Added deduplication logic and duplicate detection workflow
+- ✅ JWT debug tools in sidebar
+- See `handoff/sessions/session-28.md`
 
 **Phase 1 Complete (October 29, 2025) - Supabase Database Schema Deployment:**
-- **Status:** ✅ Phase 1 Complete - Database backend fully deployed and operational
-- **Deployed:** Complete database schema to Supabase (7 tables, 1 materialized view, 30+ indexes)
-- **Created:** Fixed migration (v1.1) - `docs/migrations/001_initial_schema_fixed.sql`
-  - Fixed auth.users trigger permission issue from original migration
-  - Profiles now created via auth.py module (simpler implementation)
-- **Configured:** JWT Custom Claims via Auth Hooks
-  - Created `custom_access_token_hook` function
-  - Enabled Customize Access Token (JWT) Claims hook
-  - All JWTs now include `app_role` claim for RLS
-- **Admin User:** Created giladswerdlow@gmail.com as first admin
-- **Environment:** `.env` file created and secured (600 permissions, gitignored)
-- **Testing:** `test_supabase_connection.py` passes all checks
-- **Database Objects:**
-  - Tables: bid_periods, pairings, pairing_duty_days, bid_lines, profiles, pdf_export_templates, audit_log
-  - View: bid_period_trends (materialized)
-  - Functions: is_admin, handle_new_user, log_changes, refresh_trends
-  - Triggers: 3 audit triggers (bid_periods, pairings, bid_lines)
-  - RLS Policies: 32 JWT-based policies (performance-optimized)
-- **Handoff Doc:** See `handoff/sessions/session-27.md` (comprehensive session documentation)
-- **Duration:** 45 minutes
-- **Branch:** `refractor`
+- ✅ Complete database schema deployed (7 tables, 32 RLS policies, 30+ indexes)
+- ✅ JWT custom claims configured via Auth Hooks
+- ✅ Admin user created (giladswerdlow@gmail.com)
+- See `handoff/sessions/session-27.md`
 
-**Session 25 (October 27, 2025) - Pay Period Distribution Breakdown:**
-- **Added:** Comprehensive pay period breakdown functionality to Bid Line Analyzer
-- **App Visuals Tab:** New "Pay Period Breakdown" section (~250 lines added)
-  - Shows individual distributions for each pay period (PP1, PP2)
-  - All 4 metrics: CT, BT, DO, DD with count and percentage charts
-  - Smart detection: only appears when multiple pay periods exist
-  - Interactive Plotly charts for CT/BT, Streamlit bar charts for DO/DD
-- **PDF Generation:** Added pay period breakdown pages (~310 lines added)
-  - Dedicated pages for each pay period's distributions
-  - All 4 metrics with tables and side-by-side charts
-  - Professional formatting with automatic page breaks
-- **Smart Behavior:** Single period = overall only, Multiple periods = overall + per-period breakdown
-- **Files Modified:** `ui_modules/bid_line_analyzer_page.py`, `pdf_generation/bid_line_pdf.py`
-- **Testing:** All syntax validation passing, zero breaking changes
-- **Branch:** `refractor`
+### Older Sessions (Summary)
 
-**Session 24 (October 27, 2025) - Phase 6: Codebase Cleanup & Distribution Chart Bug Fixes:**
-- **Deleted:** 3 obsolete legacy files (~3,700 lines): `edw_reporter.py`, `export_pdf.py`, `report_builder.py`
-- **Refactored:** `edw/reporter.py` (423 → 206 lines, 51% reduction) - now uses centralized PDF generation
-- **Created:** `ui_components/trip_viewer.py` (281 lines) - reusable trip details viewer component
-- **Updated:** `ui_modules/edw_analyzer_page.py` (726 → 498 lines, 31% reduction)
-- **Fixed:** Critical distribution chart bugs:
-  - PDF distributions now correctly exclude reserve lines (matched with app)
-  - DO/DD distributions now use pay period data instead of averaged values
-  - Issue: `df['DO']` showed averages (1 entry per line), now uses `pay_periods['DO']` (2 entries per line)
-  - Added captions: "*Showing both pay periods (2 entries per line)"
-- **Result:** Removed ~4,000 lines, fixed critical data accuracy bugs
-- **Branch:** `refractor`
+**Refactoring Sessions (18-25, October 26-27, 2025):**
+- Session 25: Pay period distribution breakdown
+- Session 24: Codebase cleanup, distribution chart bug fixes
+- Session 23: Configuration & models extraction (config/, models/ packages)
+- Session 22: Bid line distribution chart fixes (5-hour buckets, Plotly)
+- Session 21: UI components extraction (ui_components/ package)
+- Session 20: PDF generation consolidation (pdf_generation/ package)
+- Session 19: EDW module refactoring (edw/ package)
+- Session 18: Codebase modularization (ui_modules/, app.py reduced to 56 lines)
 
-**Session 23 (October 27, 2025) - Phase 5: Configuration & Models Extraction:**
-- **Created:** `config/` package with all application constants (4 modules, ~300 lines)
-  - `constants.py` - Business logic (EDW times, buy-up threshold, chart config, keywords)
-  - `branding.py` - Brand identity (BrandColors dataclass, logo, colors)
-  - `validation.py` - Validation rules (CT/BT/DO/DD thresholds, ranges, helper functions)
-  - `__init__.py` - Module exports with clean public API
-- **Created:** `models/` package with type-safe data structures (4 modules, ~200 lines)
-  - `pdf_models.py` - ReportMetadata, HeaderInfo dataclasses
-  - `bid_models.py` - BidLineData, ReserveLineInfo dataclasses
-  - `edw_models.py` - TripData, EDWStatistics dataclasses
-  - `__init__.py` - Module exports with clean public API
-- **Updated:** 7 modules to use centralized config/models
-  - `edw/analyzer.py` - Uses EDW time constants from config
-  - `pdf_generation/base.py` - Uses brand colors from config.branding
-  - `pdf_generation/bid_line_pdf.py` - Uses models.ReportMetadata + config (eliminated duplicate)
-  - `ui_components/data_editor.py` - Uses all validation constants from config
-  - `ui_modules/bid_line_analyzer_page.py` - Uses chart config constants
-  - `bid_parser.py` - Uses keyword config for dynamic regex patterns
-- **Benefits:** Single source of truth, type safety, zero duplication, better testability, easy configuration changes
-- **Testing:** All syntax validation passing, all module imports successful, app runs without errors
-- **Result:** Professional architecture, excellent maintainability, fully modularized codebase
-- **Branch:** `refractor`
-- **Refactoring Complete:** All 5 phases (UI, EDW, PDF, Components, Config/Models) finished! 🎉
-
-**Session 22 (October 27, 2025) - Bid Line Distribution Chart Fixes:**
-- **Fixed:** Credit Time (CT) and Block Time (BT) distribution charts showing incorrect sparse distributions
-- **Implemented:** 5-hour bucket histograms for CT/BT (70-75, 75-80, 80-85 hrs)
-- **Added:** Interactive Plotly charts with hover tooltips replacing static charts
-- **Fixed:** Angled labels (-45°) for better readability without overlap
-- **Fixed:** Days Off (DO) and Duty Days (DD) to show whole numbers only (no fractional days)
-- **Created:** Reusable `_create_time_distribution_chart()` helper function
-- **Result:** Accurate, interactive, professional distribution charts with meaningful patterns
-- **Tested:** All syntax and import validation passing
-- **Branch:** `refractor`
-
-**Session 24 (October 27, 2025) - Phase 6: Codebase Cleanup & Distribution Chart Bug Fixes:**
-- **Deleted:** 3 obsolete legacy files (~3,700 lines): `edw_reporter.py`, `export_pdf.py`, `report_builder.py`
-- **Refactored:** `edw/reporter.py` (423 → 206 lines, 51% reduction) - now uses centralized PDF generation
-- **Created:** `ui_components/trip_viewer.py` (281 lines) - reusable trip details viewer component
-- **Updated:** `ui_modules/edw_analyzer_page.py` (726 → 498 lines, 31% reduction)
-- **Fixed:** Critical distribution chart bugs:
-  - PDF distributions now correctly exclude reserve lines (matched with app)
-  - DO/DD distributions now use pay period data instead of averaged values
-  - Issue: `df['DO']` showed averages (1 entry per line), now uses `pay_periods['DO']` (2 entries per line)
-  - Added captions: "*Showing both pay periods (2 entries per line)"
-- **Result:** Removed ~4,000 lines, fixed critical data accuracy bugs
-- **Branch:** `refractor`
-
-**Session 21 (October 27, 2025) - Phase 4: UI Components Extraction:**
-- **Refactored:** Extracted reusable UI components from ui_modules into new `ui_components/` package
-- **Created:** New directory `ui_components/` with 4 focused modules (887 total lines):
-  - `filters.py` (169 lines) - Range sliders and filter logic
-  - `data_editor.py` (219 lines) - Data editor, validation, change tracking
-  - `exports.py` (152 lines) - Download buttons and file generation
-  - `statistics.py` (252 lines) - Metrics display and pay period analysis
-  - `__init__.py` (95 lines) - Module exports and public API
-- **Updated:** `ui_modules/bid_line_analyzer_page.py` (589 → 340 lines, 42% reduction)
-- **Updated:** `ui_modules/edw_analyzer_page.py` to use export components
-- **Result:** Better code reuse, improved maintainability, consistent UX across pages
-- **Tested:** All imports successful, zero breaking changes
-- **Branch:** `refractor`
-
-**Session 20 (October 27, 2025) - Phase 3: PDF Generation Module Consolidation:**
-- **Refactored:** Consolidated `export_pdf.py` (1,122 lines) + `report_builder.py` (925 lines) into modular `pdf_generation/` package
-- **Created:** New directory `pdf_generation/` with 5 focused modules (2,056 total lines):
-  - `base.py` (268 lines) - Shared base components (branding, colors, headers, footers, KPI badges)
-  - `charts.py` (616 lines) - All chart generation (generic + EDW-specific)
-  - `edw_pdf.py` (425 lines) - EDW pairing analysis PDF reports
-  - `bid_line_pdf.py` (652 lines) - Bid line analysis PDF reports
-  - `__init__.py` (95 lines) - Module exports and public API
-- **Eliminated:** 4 duplicate functions that existed in both original files
-- **Result:** Zero code duplication, better reusability, easier maintenance
-- **Updated:** `ui_modules/edw_analyzer_page.py` and `ui_modules/bid_line_analyzer_page.py` to use new imports
-- **Tested:** All functionality working identical to before refactoring
-- **Branch:** `refractor`
-
-**Session 19 (October 27, 2025) - Phase 2: EDW Module Refactoring:**
-- **Refactored:** Split monolithic `edw_reporter.py` (1,631 lines) into modular `edw/` package
-- **Created:** New directory `edw/` with 4 focused modules (1,473 total lines):
-  - `parser.py` (814 lines) - PDF parsing & text extraction
-  - `analyzer.py` (73 lines) - EDW detection logic
-  - `excel_export.py` (156 lines) - Excel workbook generation
-  - `reporter.py` (383 lines) - Orchestration & PDF generation
-  - `__init__.py` (47 lines) - Module exports
-- **Result:** Better separation of concerns, improved maintainability
-- **Updated:** `ui_modules/edw_analyzer_page.py` to use new `from edw import` structure
-- **Tested:** All functionality working identical to before refactoring
-- **Branch:** `refractor`
-
-**Session 18 (October 26, 2025) - Phase 1: Codebase Modularization:**
-- **Refactored:** Split monolithic `app.py` (1,751 lines) into modular structure
-- **Created:** `ui_modules/` directory with 5 focused modules (1,419 total lines)
-  - `edw_analyzer_page.py` (722 lines) - Tab 1 UI
-  - `bid_line_analyzer_page.py` (589 lines) - Tab 2 UI
-  - `historical_trends_page.py` (31 lines) - Tab 3 placeholder
-  - `shared_components.py` (66 lines) - Common utilities
-- **Simplified:** `app.py` reduced to 56 lines (96.8% reduction!)
-- **Fixed:** False "Filters are active" message (now only shows when filters applied)
-- **Fixed:** Unwanted sidebar navigation (renamed `pages/` → `ui_modules/`)
-- **Fixed:** NumPy 2.0 compatibility (downgraded to 1.26.4)
-- **Branch:** `refractor`
-
-**Session 17 (October 26, 2025) - Cover Page Support, VTO Split Lines:**
-- PDF header extraction now checks page 2 if page 1 is cover page
-- Added split VTO/VTOR/VOR line detection and parsing
-- Implemented crew composition parsing (Captain/FO slots)
-- Added helpful error messages for wrong PDF uploads
-
-**Session 16 (October 26, 2025) - Manual Data Editing:**
-- Implemented interactive data editor with `st.data_editor()`
-- Added session state management for original vs. edited data
-- Built change tracking and validation system
-- Fixed data loss bugs when editing with filters
-- Ensured all tabs and exports use edited data automatically
-
-**Session 11 (October 20, 2025) - Multi-App Merger:**
-- **Merged Applications**: Combined separate EDW and Bid Line analyzers into unified 3-tab interface
-- **New Files**: `bid_parser.py`, `report_builder.py`, `.env.example`
-- **Documentation**: Created `docs/IMPLEMENTATION_PLAN.md` and `docs/SUPABASE_SETUP.md`
-- **Restored Features**: Detailed pairing viewer, duty day criteria analyzer
-- **Fixed**: Pairing detail table width constraint with responsive CSS
-- **Dependencies**: Added numpy, pdfplumber, altair, fpdf2, supabase, python-dotenv, plotly
-
-See `handoff/sessions/session-22.md` for distribution chart fixes, `handoff/sessions/session-21.md` for UI components extraction, `handoff/sessions/session-19.md` for Phase 2 EDW refactoring details, `handoff/sessions/session-18.md` for Phase 1 UI refactoring, or `handoff/sessions/session-16.md` for manual editing feature.
+See individual session docs in `handoff/sessions/` for detailed information.
 
 ## Documentation
 
@@ -765,12 +567,7 @@ See `handoff/sessions/session-22.md` for distribution chart fixes, `handoff/sess
 - **Session Details**: `handoff/sessions/session-XX.md` - Detailed session documentation
 - **Implementation Plan**: `docs/IMPLEMENTATION_PLAN.md` - 6-phase Supabase integration roadmap
 - **Database Setup**: `docs/SUPABASE_SETUP.md` - Supabase project creation and SQL migrations
-- **Session 26**: `handoff/sessions/session-26.md` - Supabase planning & preparation (Oct 28, 2025)
-- **Session 27**: `handoff/sessions/session-27.md` - Phase 1: Database deployment (Oct 29, 2025) ✅
-- **Session 28**: `handoff/sessions/session-28.md` - Phase 2: Authentication & database save (Oct 29, 2025) ✅
-- **Session 29**: `handoff/sessions/session-29.md` - Duplicate trip parsing fix (Oct 29, 2025) ✅
-- **Session 30**: `handoff/sessions/session-30.md` - UI fixes & critical bug resolution (Oct 29, 2025) ✅
-- **Session 31**: `handoff/sessions/session-31.md` - Older PDF format compatibility & trip summary parsing (Oct 29, 2025) ✅
+- **Migrations**: `docs/migrations/` - SQL migration files
 - **Environment Template**: `.env.example` - Supabase credentials template
 
 ## Current Status & Next Steps
@@ -800,7 +597,6 @@ See `handoff/sessions/session-22.md` for distribution chart fixes, `handoff/sess
 5. Improve error handling and retry logic
 
 ### Future Phases (4-5 weeks)
-- Phase 3: Database Module Testing & Optimization
 - Phase 4: Admin Upload Interface
 - Phase 5: User Query Interface
 - Phase 6: Historical Trends Tab (visualization)
