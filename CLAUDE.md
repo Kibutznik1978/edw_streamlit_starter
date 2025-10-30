@@ -488,6 +488,46 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
 
 ## Recent Changes
 
+**Session 29 (October 29, 2025) - Duplicate Trip Parsing Fix:**
+- **Status:** ✅ COMPLETE - Parser now correctly handles all PDF variations
+- **Fixed:** Duplicate trip IDs in parsed pairing data (129 trips → 120 unique)
+- **Root Cause:** "Open Trips Report" section contained duplicate trips in open time
+- **Solution:** Parser now stops at "Open Trips Report" heading
+- **Implementation:**
+  - Modified `edw/parser.py` to detect and stop at "Open Trips Report"
+  - Uses Python `for...else` pattern for clean break handling
+  - Works for PDFs with or without "Open Trips Report" section
+- **Testing:** Verified with debug script - zero duplicates found
+- **Files Modified:**
+  - `edw/parser.py` (lines 128-180): Added stop condition
+  - `database.py` (lines 555-557): Updated comment
+- **Handoff Doc:** See `handoff/sessions/session-29.md` (detailed investigation & solution)
+- **Duration:** ~1.5 hours
+- **Branch:** `refractor`
+
+**Phase 2 Complete (October 29, 2025) - Authentication Integration & Database Save:**
+- **Status:** ✅ Phase 2 Complete - Database save functionality fully operational
+- **Fixed:** RLS policy violations (42501 errors) by setting JWT session in `get_supabase_client()`
+- **Fixed:** Duplicate key constraints (23505 errors) by adding deduplication logic
+- **Implemented:**
+  - Automatic JWT session handling in `get_supabase_client()`
+  - Deduplication for pairing data (by trip_id) and bid line data (by line_number)
+  - JWT debug tools (`debug_jwt_claims()` function and sidebar UI)
+  - Clean duplicate detection and replace workflow
+- **Testing:** Both EDW pairing and bid line data save successfully to database
+  - Test save: 120 unique pairings (9 duplicates removed from 129 total)
+  - Test save: 38 bid lines with replace workflow
+  - JWT claims verified: `app_role: "admin"` present and working
+- **Files Modified:**
+  - `database.py` (+252 lines): JWT session handling, deduplication logic
+  - `auth.py` (+16 lines): JWT debug UI in sidebar
+  - `ui_modules/edw_analyzer_page.py` (+70 lines): Save workflow
+  - `ui_modules/bid_line_analyzer_page.py` (+80 lines): Save workflow
+- **Handoff Doc:** See `handoff/sessions/session-28.md` (complete session documentation)
+- **Duration:** ~2 hours
+- **Branch:** `refractor`
+- **Next:** Phase 3 - Testing & Optimization (or Phase 4 - Admin Upload Interface)
+
 **Phase 1 Complete (October 29, 2025) - Supabase Database Schema Deployment:**
 - **Status:** ✅ Phase 1 Complete - Database backend fully deployed and operational
 - **Deployed:** Complete database schema to Supabase (7 tables, 1 materialized view, 30+ indexes)
@@ -507,11 +547,9 @@ The Bid Line Analyzer now supports inline data editing to fix missing or incorre
   - Functions: is_admin, handle_new_user, log_changes, refresh_trends
   - Triggers: 3 audit triggers (bid_periods, pairings, bid_lines)
   - RLS Policies: 32 JWT-based policies (performance-optimized)
-- **Ready for Phase 2:** Authentication integration (auth.py and database.py ready but not yet integrated)
-- **Handoff Doc:** Created `docs/HANDOFF_PHASE1_DEPLOYMENT.md` (comprehensive session documentation)
+- **Handoff Doc:** See `handoff/sessions/session-27.md` (comprehensive session documentation)
 - **Duration:** 45 minutes
 - **Branch:** `refractor`
-- **Next:** Phase 2 - Authentication Integration (3-4 days)
 
 **Session 25 (October 27, 2025) - Pay Period Distribution Breakdown:**
 - **Added:** Comprehensive pay period breakdown functionality to Bid Line Analyzer
@@ -673,8 +711,10 @@ See `handoff/sessions/session-22.md` for distribution chart fixes, `handoff/sess
 - **Session Details**: `handoff/sessions/session-XX.md` - Detailed session documentation
 - **Implementation Plan**: `docs/IMPLEMENTATION_PLAN.md` - 6-phase Supabase integration roadmap
 - **Database Setup**: `docs/SUPABASE_SETUP.md` - Supabase project creation and SQL migrations
-- **Phase 0 Handoff**: `docs/HANDOFF_SUPABASE_SESSION.md` - Planning & preparation (Oct 28, 2025)
-- **Phase 1 Handoff**: `docs/HANDOFF_PHASE1_DEPLOYMENT.md` - Database deployment (Oct 29, 2025) ✅
+- **Session 26**: `handoff/sessions/session-26.md` - Supabase planning & preparation (Oct 28, 2025)
+- **Session 27**: `handoff/sessions/session-27.md` - Phase 1: Database deployment (Oct 29, 2025) ✅
+- **Session 28**: `handoff/sessions/session-28.md` - Phase 2: Authentication & database save (Oct 29, 2025) ✅
+- **Session 29**: `handoff/sessions/session-29.md` - Duplicate trip parsing fix (Oct 29, 2025) ✅
 - **Environment Template**: `.env.example` - Supabase credentials template
 
 ## Current Status & Next Steps
@@ -687,12 +727,21 @@ See `handoff/sessions/session-22.md` for distribution chart fixes, `handoff/sess
 - ✅ All tests passing
 - ✅ `.env` file configured and secured
 
-### Phase 2: Authentication Integration 🔜 NEXT (3-4 days)
-1. Integrate `auth.py` into `app.py` (require login to access app)
-2. Test login/signup flow with Supabase Auth
-3. Add "Save to Database" buttons to both analyzer tabs
-4. Verify RLS policies work in practice
-5. Test with admin and regular user accounts
+### Phase 2: Authentication Integration ✅ COMPLETE (Oct 29, 2025)
+- ✅ Fixed RLS policy violations with JWT session handling
+- ✅ Implemented "Save to Database" for EDW pairing data
+- ✅ Implemented "Save to Database" for bid line data
+- ✅ Added deduplication logic for both data types
+- ✅ JWT debug tools in sidebar
+- ✅ Tested with admin user account
+- ✅ Duplicate detection and replace workflow
+
+### Phase 3: Testing & Optimization 🔜 NEXT (2-3 days)
+1. Apply audit migration (002_add_audit_fields)
+2. Populate `created_by` and `updated_by` fields
+3. Test with multiple users (admin and regular)
+4. Performance testing with large datasets
+5. Improve error handling and retry logic
 
 ### Future Phases (4-5 weeks)
 - Phase 3: Database Module Testing & Optimization

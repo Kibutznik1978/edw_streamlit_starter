@@ -26,6 +26,8 @@ from database import (
     save_pairings,
     refresh_trends,
     check_duplicate_bid_period,
+    check_pairings_exist,
+    delete_pairings,
 )
 
 
@@ -219,6 +221,10 @@ def _save_edw_to_database(result_data: Dict, supabase):
         # Get current user ID for audit fields
         user_id = get_current_user_id()
 
+        if not user_id:
+            st.error("❌ Could not get user ID. Please try logging out and back in.")
+            return
+
         # Prepare bid period data
         bid_period_data = {
             "period": header["bid_period"],
@@ -231,8 +237,8 @@ def _save_edw_to_database(result_data: Dict, supabase):
             "updated_by": user_id,
         }
 
-        # Check for duplicate
-        with st.spinner("Checking for existing data..."):
+        # Check if bid period exists
+        with st.spinner("Checking for existing bid period..."):
             existing = check_duplicate_bid_period(
                 bid_period_data["period"],
                 bid_period_data["domicile"],
@@ -240,20 +246,18 @@ def _save_edw_to_database(result_data: Dict, supabase):
                 bid_period_data["seat"]
             )
 
+        # Reuse existing or create new bid period
         if existing:
-            st.warning(
-                f"⚠️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
-                f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists in database.\n\n"
-                f"Existing record ID: {existing['id']}\n\n"
-                f"To avoid duplicates, this data will not be saved."
+            bid_period_id = existing['id']
+            st.info(
+                f"ℹ️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
+                f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists.\n\n"
+                f"Reusing existing record (ID: {bid_period_id[:8]}...)"
             )
-            return
-
-        # Save bid period
-        with st.spinner("Saving bid period..."):
-            bid_period_id = save_bid_period(bid_period_data)
-
-        st.success(f"✅ Bid period saved (ID: {bid_period_id[:8]}...)")
+        else:
+            with st.spinner("Creating new bid period..."):
+                bid_period_id = save_bid_period(bid_period_data)
+            st.success(f"✅ New bid period created (ID: {bid_period_id[:8]}...)")
 
         # Prepare pairings data from df_trips
         df_trips = res["df_trips"]
@@ -269,11 +273,49 @@ def _save_edw_to_database(result_data: Dict, supabase):
                 "num_duty_days": int(row["Duty Days"]),
                 "total_credit_time": None,  # Not available in current data
                 "num_legs": None,  # Not available in trip summary data
+                "created_by": user_id,
+                "updated_by": user_id,
             }
             pairings_records.append(record)
 
         # Create DataFrame for validation
         pairings_df = pd.DataFrame(pairings_records)
+
+        # Check if pairings already exist for this bid period
+        pairings_exist = check_pairings_exist(bid_period_id)
+
+        if pairings_exist:
+            # Show confirmation dialog
+            st.warning(f"⚠️ Pairings data already exists for this bid period ({len(pairings_df)} records)")
+            st.markdown("**Do you want to delete the existing pairings and replace with new data?**")
+
+            col1, col2 = st.columns(2)
+
+            # Use session state to track confirmation
+            if 'confirm_replace_pairings' not in st.session_state:
+                st.session_state.confirm_replace_pairings = False
+
+            with col1:
+                if st.button("🗑️ Delete and Replace", key="btn_replace_pairings", type="primary"):
+                    st.session_state.confirm_replace_pairings = True
+                    st.rerun()
+
+            with col2:
+                if st.button("❌ Cancel", key="btn_cancel_pairings"):
+                    st.info("❌ Save cancelled. Existing pairings data unchanged.")
+                    return
+
+            # If confirmation flag not set, stop here
+            if not st.session_state.confirm_replace_pairings:
+                return
+
+            # User confirmed - delete old pairings
+            with st.spinner("Deleting existing pairings..."):
+                deleted_count = delete_pairings(bid_period_id)
+            st.success(f"✅ Deleted {deleted_count} existing pairings")
+
+            # Clear confirmation flag
+            st.session_state.confirm_replace_pairings = False
 
         # Save pairings
         with st.spinner(f"Saving {len(pairings_df)} pairings..."):

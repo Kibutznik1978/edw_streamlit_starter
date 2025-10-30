@@ -431,6 +431,22 @@ def show_user_info(supabase: Client) -> None:
         # Clear local session
         logout()
 
+    # Debug JWT claims (for troubleshooting RLS issues)
+    with st.sidebar.expander("🔍 Debug JWT Claims", expanded=False):
+        from database import debug_jwt_claims
+
+        debug_info = debug_jwt_claims()
+
+        if debug_info['error']:
+            st.error(f"Error: {debug_info['error']}")
+        else:
+            st.json({
+                'has_session': debug_info['has_session'],
+                'has_access_token': debug_info['has_access_token'],
+                'app_role': debug_info.get('app_role', 'NOT FOUND'),
+                'claims': debug_info.get('claims', {})
+            })
+
 
 # =====================================================================
 # ADMIN OPERATIONS

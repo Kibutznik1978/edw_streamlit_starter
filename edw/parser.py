@@ -129,12 +129,15 @@ def parse_pairings(pdf_path: Path, progress_callback=None):
     """
     Extract individual trip/pairing texts from PDF.
 
+    Stops parsing when it reaches "Open Trips Report" section to avoid
+    duplicate trips that are in open time.
+
     Args:
         pdf_path: Path to the PDF file
         progress_callback: Optional callback function(progress, message) for progress updates
 
     Returns:
-        List of trip text strings
+        List of trip text strings (only assigned pairings, not open time)
     """
     reader = PdfReader(str(pdf_path))
     all_text = ""
@@ -152,6 +155,16 @@ def parse_pairings(pdf_path: Path, progress_callback=None):
     in_trip = False  # Flag to track if we've started collecting trips
 
     for line in all_text.splitlines():
+        # Stop parsing when we hit "Open Trips Report" section
+        # This section contains duplicate trips in open time that we don't need
+        if re.search(r"Open\s+Trips?\s+Report", line, re.IGNORECASE):
+            # Save the current trip if we have one
+            if current_trip and in_trip:
+                trips.append("\n".join(current_trip))
+            if progress_callback:
+                progress_callback(45, f"Stopped at 'Open Trips Report' - found {len(trips)} pairings")
+            break  # Stop parsing - we've reached open time duplicates
+
         if re.match(r"^\s*Trip\s*Id", line, re.IGNORECASE):
             if current_trip:
                 trips.append("\n".join(current_trip))
@@ -159,9 +172,10 @@ def parse_pairings(pdf_path: Path, progress_callback=None):
             in_trip = True
         elif in_trip:
             current_trip.append(line)
-
-    if current_trip and in_trip:
-        trips.append("\n".join(current_trip))
+    else:
+        # Loop completed without break - add final trip if we have one
+        if current_trip and in_trip:
+            trips.append("\n".join(current_trip))
 
     return trips
 

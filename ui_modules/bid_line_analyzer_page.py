@@ -36,6 +36,8 @@ from database import (
     save_bid_lines,
     refresh_trends,
     check_duplicate_bid_period,
+    check_bid_lines_exist,
+    delete_bid_lines,
 )
 
 
@@ -221,6 +223,10 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
         # Get current user ID for audit fields
         user_id = get_current_user_id()
 
+        if not user_id:
+            st.error("❌ Could not get user ID. Please try logging out and back in.")
+            return
+
         # Prepare bid period data
         bid_period_data = {
             "period": header_info["bid_period"],
@@ -233,8 +239,8 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
             "updated_by": user_id,
         }
 
-        # Check for duplicate
-        with st.spinner("Checking for existing data..."):
+        # Check if bid period exists
+        with st.spinner("Checking for existing bid period..."):
             existing = check_duplicate_bid_period(
                 bid_period_data["period"],
                 bid_period_data["domicile"],
@@ -242,30 +248,28 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
                 bid_period_data["seat"]
             )
 
+        # Reuse existing or create new bid period
         if existing:
-            st.warning(
-                f"⚠️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
-                f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists in database.\n\n"
-                f"Existing record ID: {existing['id']}\n\n"
-                f"To avoid duplicates, this data will not be saved."
+            bid_period_id = existing['id']
+            st.info(
+                f"ℹ️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
+                f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists.\n\n"
+                f"Reusing existing record (ID: {bid_period_id[:8]}...)"
             )
-            return
-
-        # Save bid period
-        with st.spinner("Saving bid period..."):
-            bid_period_id = save_bid_period(bid_period_data)
-
-        st.success(f"✅ Bid period saved (ID: {bid_period_id[:8]}...)")
+        else:
+            with st.spinner("Creating new bid period..."):
+                bid_period_id = save_bid_period(bid_period_data)
+            st.success(f"✅ New bid period created (ID: {bid_period_id[:8]}...)")
 
         # Prepare bid lines data
         bid_lines_records = []
         for _, row in df.iterrows():
             record = {
                 "line_number": int(row["Line"]),
-                "total_ct": float(row["CT"]),
-                "total_bt": float(row["BT"]),
-                "total_do": int(row["DO"]),
-                "total_dd": int(row["DD"]),
+                "total_ct": float(row["CT"]) if pd.notna(row["CT"]) else None,
+                "total_bt": float(row["BT"]) if pd.notna(row["BT"]) else None,
+                "total_do": int(row["DO"]) if pd.notna(row["DO"]) else None,
+                "total_dd": int(row["DD"]) if pd.notna(row["DD"]) else None,
                 "is_reserve": bool(row.get("IsReserve", False)),
                 "vto_type": row.get("VTOType") if pd.notna(row.get("VTOType")) else None,
                 "vto_period": int(row.get("VTOPeriod")) if pd.notna(row.get("VTOPeriod")) else None,
@@ -284,10 +288,50 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
                 record["pp2_do"] = int(row["PP2_DO"]) if pd.notna(row["PP2_DO"]) else None
                 record["pp2_dd"] = int(row["PP2_DD"]) if pd.notna(row["PP2_DD"]) else None
 
+            # Add audit fields
+            record["created_by"] = user_id
+            record["updated_by"] = user_id
+
             bid_lines_records.append(record)
 
         # Create DataFrame for validation
         bid_lines_df = pd.DataFrame(bid_lines_records)
+
+        # Check if bid lines already exist for this bid period
+        bid_lines_exist = check_bid_lines_exist(bid_period_id)
+
+        if bid_lines_exist:
+            # Show confirmation dialog
+            st.warning(f"⚠️ Bid lines data already exists for this bid period ({len(bid_lines_df)} records)")
+            st.markdown("**Do you want to delete the existing bid lines and replace with new data?**")
+
+            col1, col2 = st.columns(2)
+
+            # Use session state to track confirmation
+            if 'confirm_replace_bid_lines' not in st.session_state:
+                st.session_state.confirm_replace_bid_lines = False
+
+            with col1:
+                if st.button("🗑️ Delete and Replace", key="btn_replace_bid_lines", type="primary"):
+                    st.session_state.confirm_replace_bid_lines = True
+                    st.rerun()
+
+            with col2:
+                if st.button("❌ Cancel", key="btn_cancel_bid_lines"):
+                    st.info("❌ Save cancelled. Existing bid lines data unchanged.")
+                    return
+
+            # If confirmation flag not set, stop here
+            if not st.session_state.confirm_replace_bid_lines:
+                return
+
+            # User confirmed - delete old bid lines
+            with st.spinner("Deleting existing bid lines..."):
+                deleted_count = delete_bid_lines(bid_period_id)
+            st.success(f"✅ Deleted {deleted_count} existing bid lines")
+
+            # Clear confirmation flag
+            st.session_state.confirm_replace_bid_lines = False
 
         # Save bid lines
         with st.spinner(f"Saving {len(bid_lines_df)} bid lines..."):

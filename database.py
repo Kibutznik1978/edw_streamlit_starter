@@ -53,18 +53,12 @@ load_dotenv()
 # =====================================================================
 
 @lru_cache(maxsize=1)
-def get_supabase_client() -> Client:
+def _get_base_client() -> Client:
     """
-    Get singleton Supabase client.
+    Get base Supabase client (internal use only).
 
-    Uses @lru_cache to ensure only one client instance is created.
-    The client is reused across all function calls.
-
-    Returns:
-        Client: Supabase client instance
-
-    Raises:
-        ValueError: If SUPABASE_URL or SUPABASE_ANON_KEY are not set
+    This is the cached singleton client instance.
+    Use get_supabase_client() instead to get a properly authenticated client.
     """
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_ANON_KEY")
@@ -76,6 +70,102 @@ def get_supabase_client() -> Client:
         )
 
     return create_client(url, key)
+
+
+def get_supabase_client(debug: bool = False) -> Client:
+    """
+    Get authenticated Supabase client.
+
+    This function returns the singleton client instance and automatically
+    sets the user's JWT session if one exists in st.session_state.
+
+    This ensures that all database operations use the authenticated user's
+    JWT token, which is required for Row Level Security (RLS) policies.
+
+    Args:
+        debug: If True, print debug information about JWT session
+
+    Returns:
+        Client: Supabase client instance with JWT session set (if authenticated)
+
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_ANON_KEY are not set
+    """
+    # Get the base client (singleton)
+    client = _get_base_client()
+
+    # Set JWT session if user is authenticated
+    # This is critical for RLS policies to work correctly
+    if hasattr(st, 'session_state') and 'supabase_session' in st.session_state:
+        session = st.session_state['supabase_session']
+        if session and hasattr(session, 'access_token'):
+            if debug:
+                print(f"DEBUG: Setting JWT session for user")
+                print(f"DEBUG: Access token exists: {bool(session.access_token)}")
+                print(f"DEBUG: Refresh token exists: {bool(session.refresh_token)}")
+
+            client.auth.set_session(
+                session.access_token,
+                session.refresh_token
+            )
+        elif debug:
+            print("DEBUG: Session exists but missing tokens")
+    elif debug:
+        print("DEBUG: No session found in st.session_state")
+
+    return client
+
+
+# =====================================================================
+# DEBUG FUNCTIONS
+# =====================================================================
+
+def debug_jwt_claims() -> Dict[str, Any]:
+    """
+    Debug function to check JWT claims.
+
+    This function decodes the JWT token and returns the claims.
+    Useful for troubleshooting RLS policy issues.
+
+    Returns:
+        Dictionary with JWT claims and debug info
+    """
+    import jwt
+    import json
+
+    result = {
+        'has_session': False,
+        'has_access_token': False,
+        'claims': None,
+        'error': None
+    }
+
+    try:
+        if hasattr(st, 'session_state') and 'supabase_session' in st.session_state:
+            session = st.session_state['supabase_session']
+            result['has_session'] = True
+
+            if session and hasattr(session, 'access_token'):
+                result['has_access_token'] = True
+
+                # Decode JWT without verification (just to see claims)
+                # Note: We're not verifying because we trust the token from Supabase
+                decoded = jwt.decode(
+                    session.access_token,
+                    options={"verify_signature": False}
+                )
+                result['claims'] = decoded
+
+                # Check for app_role claim
+                if 'app_role' in decoded:
+                    result['app_role'] = decoded['app_role']
+                else:
+                    result['app_role'] = 'NOT FOUND - RLS policies will fail!'
+
+    except Exception as e:
+        result['error'] = str(e)
+
+    return result
 
 
 # =====================================================================
@@ -462,6 +552,20 @@ def save_pairings(bid_period_id: str, pairings_df: pd.DataFrame) -> int:
     if errors:
         raise ValueError(f"Validation failed: {'; '.join(errors)}")
 
+    # Remove duplicates based on trip_id (keep first occurrence)
+    # Parser now stops at "Trips to Flight Report" section
+    # so duplicates should not occur
+    original_count = len(pairings_df)
+    pairings_df = pairings_df.drop_duplicates(subset=['trip_id'], keep='first')
+    deduped_count = len(pairings_df)
+
+    if original_count != deduped_count:
+        import streamlit as st
+        st.warning(
+            f"⚠️ Removed {original_count - deduped_count} duplicate trip(s). "
+            f"Inserting {deduped_count} unique pairings."
+        )
+
     # Convert to list of dicts
     records = pairings_df.to_dict('records')
 
@@ -487,6 +591,64 @@ def save_pairings(bid_period_id: str, pairings_df: pd.DataFrame) -> int:
             )
 
     return inserted_count
+
+
+def check_pairings_exist(bid_period_id: str) -> bool:
+    """
+    Check if pairings exist for a bid period.
+
+    Args:
+        bid_period_id: Bid period UUID
+
+    Returns:
+        True if pairings exist, False otherwise
+
+    Example:
+        if check_pairings_exist(bid_period_id):
+            print("Pairings already exist for this bid period")
+    """
+    supabase = get_supabase_client()
+
+    try:
+        response = supabase.table('pairings')\
+            .select('id')\
+            .eq('bid_period_id', bid_period_id)\
+            .limit(1)\
+            .execute()
+
+        return len(response.data) > 0 if response.data else False
+    except Exception:
+        return False
+
+
+def delete_pairings(bid_period_id: str) -> int:
+    """
+    Delete all pairings for a bid period.
+
+    Args:
+        bid_period_id: Bid period UUID
+
+    Returns:
+        Number of records deleted
+
+    Raises:
+        Exception: If delete operation fails
+
+    Example:
+        count = delete_pairings(bid_period_id)
+        print(f"Deleted {count} pairings")
+    """
+    supabase = get_supabase_client()
+
+    try:
+        response = supabase.table('pairings')\
+            .delete()\
+            .eq('bid_period_id', bid_period_id)\
+            .execute()
+
+        return len(response.data) if response.data else 0
+    except Exception as e:
+        raise Exception(f"Failed to delete pairings: {str(e)}")
 
 
 # =====================================================================
@@ -517,6 +679,19 @@ def save_bid_lines(bid_period_id: str, bid_lines_df: pd.DataFrame) -> int:
     if errors:
         raise ValueError(f"Validation failed: {'; '.join(errors)}")
 
+    # Remove duplicates based on line_number (keep first occurrence)
+    # This prevents unique constraint violations
+    original_count = len(bid_lines_df)
+    bid_lines_df = bid_lines_df.drop_duplicates(subset=['line_number'], keep='first')
+    deduped_count = len(bid_lines_df)
+
+    if original_count != deduped_count:
+        import streamlit as st
+        st.warning(
+            f"⚠️ Removed {original_count - deduped_count} duplicate line(s). "
+            f"Inserting {deduped_count} unique bid lines."
+        )
+
     # Convert to list of dicts
     records = bid_lines_df.to_dict('records')
 
@@ -542,6 +717,64 @@ def save_bid_lines(bid_period_id: str, bid_lines_df: pd.DataFrame) -> int:
             )
 
     return inserted_count
+
+
+def check_bid_lines_exist(bid_period_id: str) -> bool:
+    """
+    Check if bid lines exist for a bid period.
+
+    Args:
+        bid_period_id: Bid period UUID
+
+    Returns:
+        True if bid lines exist, False otherwise
+
+    Example:
+        if check_bid_lines_exist(bid_period_id):
+            print("Bid lines already exist for this bid period")
+    """
+    supabase = get_supabase_client()
+
+    try:
+        response = supabase.table('bid_lines')\
+            .select('id')\
+            .eq('bid_period_id', bid_period_id)\
+            .limit(1)\
+            .execute()
+
+        return len(response.data) > 0 if response.data else False
+    except Exception:
+        return False
+
+
+def delete_bid_lines(bid_period_id: str) -> int:
+    """
+    Delete all bid lines for a bid period.
+
+    Args:
+        bid_period_id: Bid period UUID
+
+    Returns:
+        Number of records deleted
+
+    Raises:
+        Exception: If delete operation fails
+
+    Example:
+        count = delete_bid_lines(bid_period_id)
+        print(f"Deleted {count} bid lines")
+    """
+    supabase = get_supabase_client()
+
+    try:
+        response = supabase.table('bid_lines')\
+            .delete()\
+            .eq('bid_period_id', bid_period_id)\
+            .execute()
+
+        return len(response.data) if response.data else 0
+    except Exception as e:
+        raise Exception(f"Failed to delete bid lines: {str(e)}")
 
 
 # =====================================================================
