@@ -1,43 +1,43 @@
 """Bid Line Analyzer page (Tab 2)."""
 
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
-import pandas as pd
-import streamlit as st
-import plotly.graph_objects as go
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
-from bid_parser import parse_bid_lines, extract_bid_line_header_info
-from pdf_generation import create_bid_line_pdf_report, ReportMetadata
-from config import CT_BT_BUCKET_SIZE_HOURS, CHART_HEIGHT_PX, CHART_LABEL_ANGLE
-from ui_components import (
-    create_bid_line_filters,
-    apply_dataframe_filters,
-    is_filter_active,
-    render_filter_summary,
-    render_filter_reset_button,
-    create_bid_line_editor,
-    render_editor_header,
-    render_change_summary,
-    render_reset_button,
-    render_filter_status_message,
-    render_csv_download,
-    render_pdf_download,
-    render_download_section,
-    handle_pdf_generation_error,
-)
-from auth import is_admin, get_current_user_id
+from auth import get_current_user_id, is_admin
+from bid_parser import extract_bid_line_header_info, parse_bid_lines
+from config import CHART_HEIGHT_PX, CHART_LABEL_ANGLE, CT_BT_BUCKET_SIZE_HOURS
 from database import (
-    get_supabase_client,
-    save_bid_period,
-    save_bid_lines,
-    refresh_trends,
-    check_duplicate_bid_period,
     check_bid_lines_exist,
+    check_duplicate_bid_period,
     delete_bid_lines,
+    get_supabase_client,
+    refresh_trends,
+    save_bid_lines,
+    save_bid_period,
+)
+from pdf_generation import ReportMetadata, create_bid_line_pdf_report
+from ui_components import (
+    apply_dataframe_filters,
+    create_bid_line_editor,
+    create_bid_line_filters,
+    handle_pdf_generation_error,
+    is_filter_active,
+    render_change_summary,
+    render_csv_download,
+    render_download_section,
+    render_editor_header,
+    render_filter_reset_button,
+    render_filter_status_message,
+    render_filter_summary,
+    render_pdf_download,
+    render_reset_button,
 )
 
 
@@ -50,9 +50,7 @@ def render_bid_line_analyzer():
     )
 
     uploaded_file = st.file_uploader(
-        "Choose a Bid Line PDF",
-        type=["pdf"],
-        key="bid_line_pdf_uploader"
+        "Choose a Bid Line PDF", type=["pdf"], key="bid_line_pdf_uploader"
     )
 
     # Initialize session state for header info
@@ -67,7 +65,7 @@ def render_bid_line_analyzer():
         pdf_path.write_bytes(uploaded_file.getvalue())
 
         # Extract header information
-        with open(pdf_path, 'rb') as f:
+        with open(pdf_path, "rb") as f:
             header_info = extract_bid_line_header_info(f)
         st.session_state.bidline_header_info = header_info
 
@@ -89,7 +87,9 @@ def render_bid_line_analyzer():
     if "bidline_diagnostics" not in st.session_state:
         st.session_state.bidline_diagnostics = None
 
-    run_button = st.button("Parse Bid Lines", disabled=(uploaded_file is None), key="parse_bid_lines")
+    run_button = st.button(
+        "Parse Bid Lines", disabled=(uploaded_file is None), key="parse_bid_lines"
+    )
 
     if run_button:
         if uploaded_file is None:
@@ -108,7 +108,7 @@ def render_bid_line_analyzer():
         pdf_path.write_bytes(uploaded_file.getvalue())
 
         try:
-            with open(pdf_path, 'rb') as f:
+            with open(pdf_path, "rb") as f:
                 df, diagnostics = parse_bid_lines(f, progress_callback=update_progress)
 
             # Store original parsed data (never modified)
@@ -138,6 +138,7 @@ def render_bid_line_analyzer():
         except Exception as e:
             st.error(f"Error parsing PDF: {e}")
             import traceback
+
             with st.expander("📋 Error Details"):
                 st.code(traceback.format_exc())
             st.stop()
@@ -171,7 +172,10 @@ def _render_save_to_database_button():
     if "bidline_edited_df" not in st.session_state or st.session_state.bidline_edited_df is None:
         return
 
-    if "bidline_header_info" not in st.session_state or st.session_state.bidline_header_info is None:
+    if (
+        "bidline_header_info" not in st.session_state
+        or st.session_state.bidline_header_info is None
+    ):
         return
 
     st.divider()
@@ -191,7 +195,7 @@ def _render_save_to_database_button():
                 _save_bid_lines_to_database(
                     st.session_state.bidline_edited_df,
                     st.session_state.bidline_header_info,
-                    supabase
+                    supabase,
                 )
 
 
@@ -211,13 +215,17 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
                 # Default to current month if parsing fails
                 today = datetime.now()
                 start_date = today.replace(day=1).date()
-                end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+                end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(
+                    day=1
+                ) - pd.Timedelta(days=1)
                 end_date = end_date.date()
         except:
             # Default to current month if parsing fails
             today = datetime.now()
             start_date = today.replace(day=1).date()
-            end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+            end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(
+                days=1
+            )
             end_date = end_date.date()
 
         # Get current user ID for audit fields
@@ -245,12 +253,12 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
                 bid_period_data["period"],
                 bid_period_data["domicile"],
                 bid_period_data["aircraft"],
-                bid_period_data["seat"]
+                bid_period_data["seat"],
             )
 
         # Reuse existing or create new bid period
         if existing:
-            bid_period_id = existing['id']
+            bid_period_id = existing["id"]
             st.info(
                 f"ℹ️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
                 f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists.\n\n"
@@ -302,13 +310,17 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
 
         if bid_lines_exist:
             # Show confirmation dialog
-            st.warning(f"⚠️ Bid lines data already exists for this bid period ({len(bid_lines_df)} records)")
-            st.markdown("**Do you want to delete the existing bid lines and replace with new data?**")
+            st.warning(
+                f"⚠️ Bid lines data already exists for this bid period ({len(bid_lines_df)} records)"
+            )
+            st.markdown(
+                "**Do you want to delete the existing bid lines and replace with new data?**"
+            )
 
             col1, col2 = st.columns(2)
 
             # Use session state to track confirmation
-            if 'confirm_replace_bid_lines' not in st.session_state:
+            if "confirm_replace_bid_lines" not in st.session_state:
                 st.session_state.confirm_replace_bid_lines = False
 
             with col1:
@@ -353,6 +365,7 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
     except Exception as e:
         st.error(f"❌ Error saving to database: {str(e)}")
         import traceback
+
         with st.expander("Show error details"):
             st.code(traceback.format_exc())
 
@@ -401,7 +414,7 @@ def _display_bid_line_results():
             filtered_df,
             filename="bid_lines_filtered.csv",
             button_label="📊 Download CSV (Filtered)",
-            key="download_bid_csv"
+            key="download_bid_csv",
         )
 
     with col2:
@@ -411,20 +424,17 @@ def _display_bid_line_results():
             title = f"{header['domicile']} {header['fleet_type']} – Bid {header['bid_period']}"
             subtitle = f"Bid Line Analysis Report • {header['bid_period_date_range']}"
 
-            metadata = ReportMetadata(
-                title=title,
-                subtitle=subtitle
-            )
+            metadata = ReportMetadata(title=title, subtitle=subtitle)
 
             # Create branding to match pairing analyzer
             branding = {
                 "primary_hex": "#1E40AF",  # Lighter blue (matches pairing analyzer)
-                "accent_hex": "#F3F4F6",   # Light gray
-                "rule_hex": "#E5E7EB",     # Medium gray
-                "muted_hex": "#6B7280",    # Darker gray
-                "bg_alt_hex": "#FAFAFA",   # Very light gray
+                "accent_hex": "#F3F4F6",  # Light gray
+                "rule_hex": "#E5E7EB",  # Medium gray
+                "muted_hex": "#6B7280",  # Darker gray
+                "bg_alt_hex": "#FAFAFA",  # Very light gray
                 "logo_path": None,
-                "title_left": f"{header['domicile']} {header['fleet_type']} – Bid {header['bid_period']} | Bid Line Analysis Report"
+                "title_left": f"{header['domicile']} {header['fleet_type']} – Bid {header['bid_period']} | Bid Line Analysis Report",
             }
 
             pdf_bytes = create_bid_line_pdf_report(
@@ -432,14 +442,14 @@ def _display_bid_line_results():
                 metadata=metadata,
                 pay_periods=diagnostics.pay_periods if diagnostics else None,
                 reserve_lines=diagnostics.reserve_lines if diagnostics else None,
-                branding=branding
+                branding=branding,
             )
 
             render_pdf_download(
                 pdf_bytes,
                 filename="Bid_Lines_Analysis_Report.pdf",
                 button_label="📄 Download PDF Report",
-                key="download_bid_pdf"
+                key="download_bid_pdf",
             )
         except Exception as e:
             handle_pdf_generation_error(e, show_traceback=True)
@@ -465,7 +475,7 @@ def _render_overview_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, filters_ac
         render_reset_button(
             session_state_key_edited="bidline_edited_df",
             session_state_key_original="bidline_original_df",
-            button_key="reset_edits"
+            button_key="reset_edits",
         )
 
     # Display filter status
@@ -483,45 +493,77 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
 
     if diagnostics and diagnostics.reserve_lines is not None:
         reserve_df = diagnostics.reserve_lines
-        if 'IsReserve' in reserve_df.columns and 'IsHotStandby' in reserve_df.columns:
+        if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
             # Regular reserve lines (not HSBY): exclude from everything
-            regular_reserve_mask = (reserve_df['IsReserve'] == True) & (reserve_df['IsHotStandby'] == False)
-            reserve_line_numbers = set(reserve_df[regular_reserve_mask]['Line'].tolist())
+            regular_reserve_mask = (reserve_df["IsReserve"] == True) & (
+                reserve_df["IsHotStandby"] == False
+            )
+            reserve_line_numbers = set(reserve_df[regular_reserve_mask]["Line"].tolist())
 
             # HSBY lines: exclude only from BT
-            hsby_mask = reserve_df['IsHotStandby'] == True
-            hsby_line_numbers = set(reserve_df[hsby_mask]['Line'].tolist())
+            hsby_mask = reserve_df["IsHotStandby"] == True
+            hsby_line_numbers = set(reserve_df[hsby_mask]["Line"].tolist())
 
     # For CT, DO, DD: exclude regular reserve (keep HSBY)
-    df_non_reserve = filtered_df[~filtered_df['Line'].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_df
+    df_non_reserve = (
+        filtered_df[~filtered_df["Line"].isin(reserve_line_numbers)]
+        if reserve_line_numbers
+        else filtered_df
+    )
 
     # For BT: exclude both regular reserve AND HSBY
     all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
-    df_for_bt = filtered_df[~filtered_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_df
+    df_for_bt = (
+        filtered_df[~filtered_df["Line"].isin(all_exclude_for_bt)]
+        if all_exclude_for_bt
+        else filtered_df
+    )
 
     # Calculate statistics
-    ct_stats = df_non_reserve['CT'].agg(['min', 'max', 'mean']) if not df_non_reserve.empty else filtered_df['CT'].agg(['min', 'max', 'mean'])
-    bt_stats = df_for_bt['BT'].agg(['min', 'max', 'mean']) if not df_for_bt.empty else filtered_df['BT'].agg(['min', 'max', 'mean'])
-    do_stats = df_non_reserve['DO'].agg(['min', 'max', 'mean']) if not df_non_reserve.empty else filtered_df['DO'].agg(['min', 'max', 'mean'])
-    dd_stats = df_non_reserve['DD'].agg(['min', 'max', 'mean']) if not df_non_reserve.empty else filtered_df['DD'].agg(['min', 'max', 'mean'])
+    ct_stats = (
+        df_non_reserve["CT"].agg(["min", "max", "mean"])
+        if not df_non_reserve.empty
+        else filtered_df["CT"].agg(["min", "max", "mean"])
+    )
+    bt_stats = (
+        df_for_bt["BT"].agg(["min", "max", "mean"])
+        if not df_for_bt.empty
+        else filtered_df["BT"].agg(["min", "max", "mean"])
+    )
+    do_stats = (
+        df_non_reserve["DO"].agg(["min", "max", "mean"])
+        if not df_non_reserve.empty
+        else filtered_df["DO"].agg(["min", "max", "mean"])
+    )
+    dd_stats = (
+        df_non_reserve["DD"].agg(["min", "max", "mean"])
+        if not df_non_reserve.empty
+        else filtered_df["DD"].agg(["min", "max", "mean"])
+    )
 
     # Create summary statistics table
     summary_data = {
-        'Metric': ['Total Lines', 'Credit Time (CT)', 'Block Time (BT)', 'Days Off (DO)', 'Duty Days (DD)'],
-        'Average': [
+        "Metric": [
+            "Total Lines",
+            "Credit Time (CT)",
+            "Block Time (BT)",
+            "Days Off (DO)",
+            "Duty Days (DD)",
+        ],
+        "Average": [
             f"{len(filtered_df)}",
             f"{ct_stats['mean']:.2f} hrs",
             f"{bt_stats['mean']:.2f} hrs",
             f"{do_stats['mean']:.1f} days",
-            f"{dd_stats['mean']:.1f} days"
+            f"{dd_stats['mean']:.1f} days",
         ],
-        'Range': [
-            '—',
+        "Range": [
+            "—",
             f"{ct_stats['min']:.1f} - {ct_stats['max']:.1f} hrs",
             f"{bt_stats['min']:.1f} - {bt_stats['max']:.1f} hrs",
             f"{int(do_stats['min'])} - {int(do_stats['max'])} days",
-            f"{int(dd_stats['min'])} - {int(dd_stats['max'])} days"
-        ]
+            f"{int(dd_stats['min'])} - {int(dd_stats['max'])} days",
+        ],
     }
 
     summary_df = pd.DataFrame(summary_data)
@@ -542,12 +584,27 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
 
         # For pay period analysis: exclude reserve lines from CT/DO/DD, exclude reserve+HSBY from BT
-        pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
-        pp_for_bt = filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_pay_periods
+        pp_non_reserve = (
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)]
+            if reserve_line_numbers
+            else filtered_pay_periods
+        )
+        pp_for_bt = (
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)]
+            if all_exclude_for_bt
+            else filtered_pay_periods
+        )
 
         if not filtered_pay_periods.empty:
             # Build pay period comparison table
-            pp_data = {'Metric': ['Avg Credit Time (CT)', 'Avg Block Time (BT)', 'Avg Days Off (DO)', 'Avg Duty Days (DD)']}
+            pp_data = {
+                "Metric": [
+                    "Avg Credit Time (CT)",
+                    "Avg Block Time (BT)",
+                    "Avg Days Off (DO)",
+                    "Avg Duty Days (DD)",
+                ]
+            }
 
             for period in sorted(filtered_pay_periods["Period"].unique()):
                 period_data_non_reserve = pp_non_reserve[pp_non_reserve["Period"] == period]
@@ -565,11 +622,11 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 else:
                     pp_bt = 0
 
-                pp_data[f'Pay Period {int(period)}'] = [
+                pp_data[f"Pay Period {int(period)}"] = [
                     f"{pp_ct:.2f} hrs",
                     f"{pp_bt:.2f} hrs",
                     f"{pp_do:.1f} days",
-                    f"{pp_dd:.1f} days"
+                    f"{pp_dd:.1f} days",
                 ]
 
             pp_comparison_df = pd.DataFrame(pp_data)
@@ -651,18 +708,20 @@ def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percen
         hover_template = "%{y}<extra></extra>"
 
     # Create bin labels (e.g., "70-75", "75-80")
-    bin_labels = [f"{int(bin_edges[i])}-{int(bin_edges[i+1])}" for i in range(len(bin_edges)-1)]
+    bin_labels = [f"{int(bin_edges[i])}-{int(bin_edges[i+1])}" for i in range(len(bin_edges) - 1)]
 
     # Create Plotly figure
-    fig = go.Figure(data=[
-        go.Bar(
-            x=bin_labels,
-            y=values,
-            marker_color='#1f77b4',
-            opacity=0.7,
-            hovertemplate=hover_template
-        )
-    ])
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=bin_labels,
+                y=values,
+                marker_color="#1f77b4",
+                opacity=0.7,
+                hovertemplate=hover_template,
+            )
+        ]
+    )
 
     # Update layout with configured angle and height
     fig.update_layout(
@@ -671,8 +730,8 @@ def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percen
         xaxis_tickangle=CHART_LABEL_ANGLE,
         height=CHART_HEIGHT_PX,
         margin=dict(l=50, r=50, t=30, b=80),
-        hovermode='x',
-        yaxis=dict(gridcolor='lightgray', gridwidth=0.5)
+        hovermode="x",
+        yaxis=dict(gridcolor="lightgray", gridwidth=0.5),
     )
 
     return fig
@@ -689,19 +748,29 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
 
     if diagnostics and diagnostics.reserve_lines is not None:
         reserve_df = diagnostics.reserve_lines
-        if 'IsReserve' in reserve_df.columns and 'IsHotStandby' in reserve_df.columns:
-            regular_reserve_mask = (reserve_df['IsReserve'] == True) & (reserve_df['IsHotStandby'] == False)
-            reserve_line_numbers = set(reserve_df[regular_reserve_mask]['Line'].tolist())
+        if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
+            regular_reserve_mask = (reserve_df["IsReserve"] == True) & (
+                reserve_df["IsHotStandby"] == False
+            )
+            reserve_line_numbers = set(reserve_df[regular_reserve_mask]["Line"].tolist())
 
-            hsby_mask = reserve_df['IsHotStandby'] == True
-            hsby_line_numbers = set(reserve_df[hsby_mask]['Line'].tolist())
+            hsby_mask = reserve_df["IsHotStandby"] == True
+            hsby_line_numbers = set(reserve_df[hsby_mask]["Line"].tolist())
 
     # For CT, DO, DD: exclude regular reserve (keep HSBY)
-    df_non_reserve = filtered_df[~filtered_df['Line'].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_df
+    df_non_reserve = (
+        filtered_df[~filtered_df["Line"].isin(reserve_line_numbers)]
+        if reserve_line_numbers
+        else filtered_df
+    )
 
     # For BT: exclude both regular reserve AND HSBY
     all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
-    df_for_bt = filtered_df[~filtered_df['Line'].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_df
+    df_for_bt = (
+        filtered_df[~filtered_df["Line"].isin(all_exclude_for_bt)]
+        if all_exclude_for_bt
+        else filtered_df
+    )
 
     # Determine if we have multiple pay periods
     has_multiple_periods = False
@@ -722,14 +791,18 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     col1, col2 = st.columns(2)
     with col1:
         if not df_non_reserve.empty:
-            fig = _create_time_distribution_chart(df_non_reserve["CT"], "Credit Time", is_percentage=False)
+            fig = _create_time_distribution_chart(
+                df_non_reserve["CT"], "Credit Time", is_percentage=False
+            )
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data available (all lines are reserve)")
     with col2:
         if not df_non_reserve.empty:
-            fig = _create_time_distribution_chart(df_non_reserve["CT"], "Credit Time", is_percentage=True)
+            fig = _create_time_distribution_chart(
+                df_non_reserve["CT"], "Credit Time", is_percentage=True
+            )
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
         else:
@@ -742,7 +815,9 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     col1, col2 = st.columns(2)
     with col1:
         if not df_for_bt.empty:
-            fig = _create_time_distribution_chart(df_for_bt["BT"], "Block Time", is_percentage=False)
+            fig = _create_time_distribution_chart(
+                df_for_bt["BT"], "Block Time", is_percentage=False
+            )
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
         else:
@@ -767,19 +842,29 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         # Filter to match filtered lines
         filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
         # Exclude reserve lines
-        pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
+        pp_non_reserve = (
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)]
+            if reserve_line_numbers
+            else filtered_pay_periods
+        )
 
         with col1:
             if not pp_non_reserve.empty:
                 do_int = pp_non_reserve["DO"].round().astype(int)
-                st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
+                st.bar_chart(
+                    do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count"
+                )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
                 st.info("No data available (all lines are reserve)")
         with col2:
             if not pp_non_reserve.empty:
                 do_int = pp_non_reserve["DO"].round().astype(int)
-                st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
+                st.bar_chart(
+                    do_int.value_counts(normalize=True).sort_index() * 100,
+                    x_label="Days Off",
+                    y_label="Percentage",
+                )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
                 st.info("No data available (all lines are reserve)")
@@ -788,14 +873,20 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         with col1:
             if not df_non_reserve.empty:
                 do_int = df_non_reserve["DO"].round().astype(int)
-                st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
+                st.bar_chart(
+                    do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count"
+                )
                 st.caption("*Averaged across pay periods")
             else:
                 st.info("No data available (all lines are reserve)")
         with col2:
             if not df_non_reserve.empty:
                 do_int = df_non_reserve["DO"].round().astype(int)
-                st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
+                st.bar_chart(
+                    do_int.value_counts(normalize=True).sort_index() * 100,
+                    x_label="Days Off",
+                    y_label="Percentage",
+                )
                 st.caption("*Averaged across pay periods")
             else:
                 st.info("No data available (all lines are reserve)")
@@ -811,14 +902,20 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         with col1:
             if not pp_non_reserve.empty:
                 dd_int = pp_non_reserve["DD"].round().astype(int)
-                st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
+                st.bar_chart(
+                    dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count"
+                )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
                 st.info("No data available (all lines are reserve)")
         with col2:
             if not pp_non_reserve.empty:
                 dd_int = pp_non_reserve["DD"].round().astype(int)
-                st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
+                st.bar_chart(
+                    dd_int.value_counts(normalize=True).sort_index() * 100,
+                    x_label="Duty Days",
+                    y_label="Percentage",
+                )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
                 st.info("No data available (all lines are reserve)")
@@ -827,14 +924,20 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         with col1:
             if not df_non_reserve.empty:
                 dd_int = df_non_reserve["DD"].round().astype(int)
-                st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
+                st.bar_chart(
+                    dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count"
+                )
                 st.caption("*Averaged across pay periods")
             else:
                 st.info("No data available (all lines are reserve)")
         with col2:
             if not df_non_reserve.empty:
                 dd_int = df_non_reserve["DD"].round().astype(int)
-                st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
+                st.bar_chart(
+                    dd_int.value_counts(normalize=True).sort_index() * 100,
+                    x_label="Duty Days",
+                    y_label="Percentage",
+                )
                 st.caption("*Averaged across pay periods")
             else:
                 st.info("No data available (all lines are reserve)")
@@ -848,8 +951,16 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         # Get filtered pay periods data
         filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
         # Exclude reserve lines
-        pp_non_reserve = filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)] if reserve_line_numbers else filtered_pay_periods
-        pp_for_bt = filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else filtered_pay_periods
+        pp_non_reserve = (
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)]
+            if reserve_line_numbers
+            else filtered_pay_periods
+        )
+        pp_for_bt = (
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)]
+            if all_exclude_for_bt
+            else filtered_pay_periods
+        )
 
         # Get sorted list of unique periods
         unique_periods = sorted(filtered_pay_periods["Period"].unique())
@@ -867,14 +978,18 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             col1, col2 = st.columns(2)
             with col1:
                 if not period_data_non_reserve.empty:
-                    fig = _create_time_distribution_chart(period_data_non_reserve["CT"], "Credit Time", is_percentage=False)
+                    fig = _create_time_distribution_chart(
+                        period_data_non_reserve["CT"], "Credit Time", is_percentage=False
+                    )
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No data available")
             with col2:
                 if not period_data_non_reserve.empty:
-                    fig = _create_time_distribution_chart(period_data_non_reserve["CT"], "Credit Time", is_percentage=True)
+                    fig = _create_time_distribution_chart(
+                        period_data_non_reserve["CT"], "Credit Time", is_percentage=True
+                    )
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                 else:
@@ -885,14 +1000,18 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             col1, col2 = st.columns(2)
             with col1:
                 if not period_data_for_bt.empty:
-                    fig = _create_time_distribution_chart(period_data_for_bt["BT"], "Block Time", is_percentage=False)
+                    fig = _create_time_distribution_chart(
+                        period_data_for_bt["BT"], "Block Time", is_percentage=False
+                    )
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No data available")
             with col2:
                 if not period_data_for_bt.empty:
-                    fig = _create_time_distribution_chart(period_data_for_bt["BT"], "Block Time", is_percentage=True)
+                    fig = _create_time_distribution_chart(
+                        period_data_for_bt["BT"], "Block Time", is_percentage=True
+                    )
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                 else:
@@ -904,13 +1023,19 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             with col1:
                 if not period_data_non_reserve.empty:
                     do_int = period_data_non_reserve["DO"].round().astype(int)
-                    st.bar_chart(do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count")
+                    st.bar_chart(
+                        do_int.value_counts().sort_index(), x_label="Days Off", y_label="Count"
+                    )
                 else:
                     st.info("No data available")
             with col2:
                 if not period_data_non_reserve.empty:
                     do_int = period_data_non_reserve["DO"].round().astype(int)
-                    st.bar_chart(do_int.value_counts(normalize=True).sort_index() * 100, x_label="Days Off", y_label="Percentage")
+                    st.bar_chart(
+                        do_int.value_counts(normalize=True).sort_index() * 100,
+                        x_label="Days Off",
+                        y_label="Percentage",
+                    )
                 else:
                     st.info("No data available")
 
@@ -920,13 +1045,19 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             with col1:
                 if not period_data_non_reserve.empty:
                     dd_int = period_data_non_reserve["DD"].round().astype(int)
-                    st.bar_chart(dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count")
+                    st.bar_chart(
+                        dd_int.value_counts().sort_index(), x_label="Duty Days", y_label="Count"
+                    )
                 else:
                     st.info("No data available")
             with col2:
                 if not period_data_non_reserve.empty:
                     dd_int = period_data_non_reserve["DD"].round().astype(int)
-                    st.bar_chart(dd_int.value_counts(normalize=True).sort_index() * 100, x_label="Duty Days", y_label="Percentage")
+                    st.bar_chart(
+                        dd_int.value_counts(normalize=True).sort_index() * 100,
+                        x_label="Duty Days",
+                        y_label="Percentage",
+                    )
                 else:
                     st.info("No data available")
 

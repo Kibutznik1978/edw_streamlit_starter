@@ -6,7 +6,8 @@ with HTML-formatted tables showing duty days, flights, and trip summaries.
 """
 
 import streamlit as st
-from edw import parse_trip_for_table, is_edw_trip
+
+from edw import is_edw_trip, parse_trip_for_table
 
 
 def render_trip_details_viewer(trip_text_map: dict, filtered_df, key_prefix: str = "edw"):
@@ -36,7 +37,7 @@ def render_trip_details_viewer(trip_text_map: dict, filtered_df, key_prefix: str
                 "Select a Trip ID to view full pairing details:",
                 options=available_trip_ids,
                 format_func=lambda x: f"Trip {int(x)}",
-                key=f"{key_prefix}_trip_selector"
+                key=f"{key_prefix}_trip_selector",
             )
 
             # Display the selected trip details in an expander
@@ -48,8 +49,8 @@ def render_trip_details_viewer(trip_text_map: dict, filtered_df, key_prefix: str
                     trip_data = parse_trip_for_table(trip_text, is_edw_trip)
 
                     # Display date/frequency if available
-                    if trip_data['date_freq']:
-                        st.caption(trip_data['date_freq'])
+                    if trip_data["date_freq"]:
+                        st.caption(trip_data["date_freq"])
 
                     # Display as styled HTML table
                     st.markdown(_get_trip_table_styles(), unsafe_allow_html=True)
@@ -64,12 +65,14 @@ def render_trip_details_viewer(trip_text_map: dict, filtered_df, key_prefix: str
                             height=400,
                             disabled=True,
                             label_visibility="collapsed",
-                            key=f"{key_prefix}_raw_text"
+                            key=f"{key_prefix}_raw_text",
                         )
             else:
                 st.warning(f"Trip ID {int(selected_trip_id)} not found in trip text map.")
         else:
-            st.info("No trips available in filtered results. Adjust your filters to see trip details.")
+            st.info(
+                "No trips available in filtered results. Adjust your filters to see trip details."
+            )
     else:
         st.info("Run analysis first to view trip details.")
 
@@ -161,9 +164,9 @@ def _build_trip_table_html(trip_data: dict) -> str:
     """
 
     # Add rows for each duty day
-    for duty_idx, duty in enumerate(trip_data['duty_days'], 1):
+    for duty_idx, duty in enumerate(trip_data["duty_days"], 1):
         # Add duty start row (Briefing)
-        if duty.get('duty_start'):
+        if duty.get("duty_start"):
             table_html += "<tr style='background-color: #f9f9f9; font-style: italic;'>"
             table_html += "<td colspan='3'><i>Briefing</i></td>"
             table_html += f"<td>{duty['duty_start']}</td>"  # Depart column
@@ -172,7 +175,7 @@ def _build_trip_table_html(trip_data: dict) -> str:
             table_html += "</tr>"
 
         # Add flights for this duty day
-        for flight_idx, flight in enumerate(duty['flights']):
+        for flight_idx, flight in enumerate(duty["flights"]):
             table_html += "<tr>"
 
             # Day
@@ -205,7 +208,7 @@ def _build_trip_table_html(trip_data: dict) -> str:
             table_html += "</tr>"
 
         # Add duty end row (Debriefing)
-        if duty.get('duty_end'):
+        if duty.get("duty_end"):
             table_html += "<tr style='background-color: #f9f9f9; font-style: italic;'>"
             table_html += "<td colspan='3'><i>Debriefing</i></td>"
             table_html += "<td></td>"  # Depart column
@@ -224,7 +227,7 @@ def _build_trip_table_html(trip_data: dict) -> str:
         table_html += "</tr>"
 
     # Add trip summary section at bottom of table
-    summary = trip_data['trip_summary']
+    summary = trip_data["trip_summary"]
     if summary:
         # Header row for trip summary
         table_html += "<tr style='border-top: 3px solid #333; background-color: #d6eaf8;'>"
@@ -238,31 +241,39 @@ def _build_trip_table_html(trip_data: dict) -> str:
 
         # Row 1: Credit, Blk, Duty Time, TAFB, Duty Days
         table_html += "<tr>"
-        if 'Credit' in summary:
+        if "Credit" in summary:
             table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Credit:</b> {summary['Credit']}</td>"
-        if 'Blk' in summary:
-            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Blk:</b> {summary['Blk']}</td>"
-        if 'Duty Time' in summary:
+        if "Blk" in summary:
+            table_html += (
+                f"<td style='padding: 3px; white-space: nowrap;'><b>Blk:</b> {summary['Blk']}</td>"
+            )
+        if "Duty Time" in summary:
             table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Duty Time:</b> {summary['Duty Time']}</td>"
-        if 'TAFB' in summary:
+        if "TAFB" in summary:
             table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>TAFB:</b> {summary['TAFB']}</td>"
-        if 'Duty Days' in summary:
+        if "Duty Days" in summary:
             table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Duty Days:</b> {summary['Duty Days']}</td>"
         table_html += "</tr>"
 
         # Row 2: Prem, PDiem, LDGS, Crew, Domicile
         table_html += "<tr>"
-        if 'Prem' in summary:
-            prem_val = summary['Prem'] if summary['Prem'].startswith('$') else f"${summary['Prem']}"
-            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Prem:</b> {prem_val}</td>"
-        if 'PDiem' in summary:
-            pdiem_val = summary['PDiem'] if summary['PDiem'].startswith('$') else f"${summary['PDiem']}"
-            table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>PDiem:</b> {pdiem_val}</td>"
-        if 'LDGS' in summary:
+        if "Prem" in summary:
+            prem_val = summary["Prem"] if summary["Prem"].startswith("$") else f"${summary['Prem']}"
+            table_html += (
+                f"<td style='padding: 3px; white-space: nowrap;'><b>Prem:</b> {prem_val}</td>"
+            )
+        if "PDiem" in summary:
+            pdiem_val = (
+                summary["PDiem"] if summary["PDiem"].startswith("$") else f"${summary['PDiem']}"
+            )
+            table_html += (
+                f"<td style='padding: 3px; white-space: nowrap;'><b>PDiem:</b> {pdiem_val}</td>"
+            )
+        if "LDGS" in summary:
             table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>LDGS:</b> {summary['LDGS']}</td>"
-        if 'Crew' in summary:
+        if "Crew" in summary:
             table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Crew:</b> {summary['Crew']}</td>"
-        if 'Domicile' in summary:
+        if "Domicile" in summary:
             table_html += f"<td style='padding: 3px; white-space: nowrap;'><b>Domicile:</b> {summary['Domicile']}</td>"
         table_html += "</tr>"
 

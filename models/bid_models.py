@@ -6,7 +6,7 @@ reserve line information parsed from bid line PDFs.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import List, Optional
 
 
 @dataclass
@@ -19,7 +19,7 @@ class BidLineData:
 
     line_number: int
     credit_time: float  # hours
-    block_time: float   # hours
+    block_time: float  # hours
     days_off: int
     duty_days: int
     is_reserve: bool = False

@@ -2,32 +2,32 @@
 
 import io
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Dict
-from datetime import datetime
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
-from edw import run_edw_report, extract_pdf_header_info
-from pdf_generation import create_edw_pdf_report
-from ui_components import (
-    render_excel_download,
-    render_pdf_download,
-    render_download_section,
-    generate_edw_filename,
-    handle_pdf_generation_error,
-    render_trip_details_viewer,
-)
-from auth import is_admin, get_current_user_id
+from auth import get_current_user_id, is_admin
 from database import (
-    get_supabase_client,
-    save_bid_period,
-    save_pairings,
-    refresh_trends,
     check_duplicate_bid_period,
     check_pairings_exist,
     delete_pairings,
+    get_supabase_client,
+    refresh_trends,
+    save_bid_period,
+    save_pairings,
+)
+from edw import extract_pdf_header_info, run_edw_report
+from pdf_generation import create_edw_pdf_report
+from ui_components import (
+    generate_edw_filename,
+    handle_pdf_generation_error,
+    render_download_section,
+    render_excel_download,
+    render_pdf_download,
+    render_trip_details_viewer,
 )
 
 
@@ -71,7 +71,7 @@ def render_edw_analyzer():
         "Notes (Optional)",
         placeholder="e.g., Final Data, Round 1, Round 2, etc.",
         help="Add any notes about this data set (e.g., whether this is final data or an early round)",
-        key="edw_notes"
+        key="edw_notes",
     )
 
     # Initialize session state for results
@@ -105,9 +105,9 @@ def render_edw_analyzer():
 
         # Use extracted header info
         header = st.session_state.edw_header_info
-        dom = header['domicile']
-        ac = header['fleet_type']
-        bid = header['bid_period']
+        dom = header["domicile"]
+        ac = header["fleet_type"]
+        bid = header["bid_period"]
 
         res = run_edw_report(
             pdf_path,
@@ -209,13 +209,17 @@ def _save_edw_to_database(result_data: Dict, supabase):
                 # Default to current month if parsing fails
                 today = datetime.now()
                 start_date = today.replace(day=1).date()
-                end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+                end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(
+                    day=1
+                ) - pd.Timedelta(days=1)
                 end_date = end_date.date()
         except:
             # Default to current month if parsing fails
             today = datetime.now()
             start_date = today.replace(day=1).date()
-            end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(days=1)
+            end_date = (today.replace(day=28) + pd.Timedelta(days=4)).replace(day=1) - pd.Timedelta(
+                days=1
+            )
             end_date = end_date.date()
 
         # Get current user ID for audit fields
@@ -243,12 +247,12 @@ def _save_edw_to_database(result_data: Dict, supabase):
                 bid_period_data["period"],
                 bid_period_data["domicile"],
                 bid_period_data["aircraft"],
-                bid_period_data["seat"]
+                bid_period_data["seat"],
             )
 
         # Reuse existing or create new bid period
         if existing:
-            bid_period_id = existing['id']
+            bid_period_id = existing["id"]
             st.info(
                 f"ℹ️ Bid period {bid_period_data['period']} {bid_period_data['domicile']} "
                 f"{bid_period_data['aircraft']} {bid_period_data['seat']} already exists.\n\n"
@@ -286,13 +290,17 @@ def _save_edw_to_database(result_data: Dict, supabase):
 
         if pairings_exist:
             # Show confirmation dialog
-            st.warning(f"⚠️ Pairings data already exists for this bid period ({len(pairings_df)} records)")
-            st.markdown("**Do you want to delete the existing pairings and replace with new data?**")
+            st.warning(
+                f"⚠️ Pairings data already exists for this bid period ({len(pairings_df)} records)"
+            )
+            st.markdown(
+                "**Do you want to delete the existing pairings and replace with new data?**"
+            )
 
             col1, col2 = st.columns(2)
 
             # Use session state to track confirmation
-            if 'confirm_replace_pairings' not in st.session_state:
+            if "confirm_replace_pairings" not in st.session_state:
                 st.session_state.confirm_replace_pairings = False
 
             with col1:
@@ -337,6 +345,7 @@ def _save_edw_to_database(result_data: Dict, supabase):
     except Exception as e:
         st.error(f"❌ Error saving to database: {str(e)}")
         import traceback
+
         with st.expander("Show error details"):
             st.code(traceback.format_exc())
 
@@ -396,7 +405,11 @@ def display_edw_results(result_data: Dict):
 
     # Calculate 1-day trip count for display
     original_duty_dist = res["duty_dist"].copy()
-    one_day_trips = original_duty_dist[original_duty_dist["Duty Days"] == 1]["Trips"].sum() if 1 in original_duty_dist["Duty Days"].values else 0
+    one_day_trips = (
+        original_duty_dist[original_duty_dist["Duty Days"] == 1]["Trips"].sum()
+        if 1 in original_duty_dist["Duty Days"].values
+        else 0
+    )
     multi_day_trips = original_duty_dist[original_duty_dist["Duty Days"] != 1]["Trips"].sum()
     total_dist_trips = original_duty_dist["Trips"].sum()
 
@@ -405,7 +418,7 @@ def display_edw_results(result_data: Dict):
         "Exclude 1-day trips (turns)",
         value=False,
         help=f"Remove {one_day_trips} single-day trips ({one_day_trips/total_dist_trips*100:.1f}% of total) to focus on {multi_day_trips} multi-day pairings",
-        key="edw_exclude_turns"
+        key="edw_exclude_turns",
     )
 
     duty_dist = original_duty_dist.copy()
@@ -416,19 +429,25 @@ def display_edw_results(result_data: Dict):
         # Recalculate percentages based on filtered data
         if len(duty_dist) > 0:
             duty_dist["Percent"] = (duty_dist["Trips"] / duty_dist["Trips"].sum() * 100).round(1)
-            st.caption(f"📊 Showing {multi_day_trips} multi-day trips (excluding {one_day_trips} turns)")
+            st.caption(
+                f"📊 Showing {multi_day_trips} multi-day trips (excluding {one_day_trips} turns)"
+            )
 
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Duty Days vs Trips**")
         if len(duty_dist) > 0:
-            st.bar_chart(duty_dist.set_index("Duty Days")["Trips"], x_label="Duty Days", y_label="Trips")
+            st.bar_chart(
+                duty_dist.set_index("Duty Days")["Trips"], x_label="Duty Days", y_label="Trips"
+            )
         else:
             st.info("No trips to display with current filter")
     with col2:
         st.markdown("**Duty Days vs Percentage**")
         if len(duty_dist) > 0:
-            st.bar_chart(duty_dist.set_index("Duty Days")["Percent"], x_label="Duty Days", y_label="Percent")
+            st.bar_chart(
+                duty_dist.set_index("Duty Days")["Percent"], x_label="Duty Days", y_label="Percent"
+            )
         else:
             st.info("No trips to display with current filter")
 
@@ -453,7 +472,7 @@ def display_edw_results(result_data: Dict):
             value=0.0,
             step=0.5,
             help="Filter to show only pairings where the longest duty day exceeds this threshold",
-            key="edw_duty_threshold"
+            key="edw_duty_threshold",
         )
 
     with col_filter2:
@@ -466,7 +485,7 @@ def display_edw_results(result_data: Dict):
             value=0,
             step=1,
             help="Filter to show only pairings where any duty day has this many legs or more",
-            key="edw_legs_threshold"
+            key="edw_legs_threshold",
         )
 
     # Duty Day Criteria Filters
@@ -485,7 +504,7 @@ def display_edw_results(result_data: Dict):
             value=0.0,
             step=0.5,
             help="Show duty days with duration >= this value",
-            key="edw_duty_duration_min"
+            key="edw_duty_duration_min",
         )
 
     with col_dd2:
@@ -497,7 +516,7 @@ def display_edw_results(result_data: Dict):
             value=0,
             step=1,
             help="Show duty days with legs >= this value",
-            key="edw_legs_min"
+            key="edw_legs_min",
         )
 
     with col_dd3:
@@ -507,7 +526,7 @@ def display_edw_results(result_data: Dict):
             ["Any", "EDW Only", "Non-EDW Only"],
             index=0,
             help="Filter by whether the duty day touches the EDW window (02:30-05:00 local)",
-            key="edw_dd_edw_filter"
+            key="edw_dd_edw_filter",
         )
 
     # Match mode
@@ -517,7 +536,7 @@ def display_edw_results(result_data: Dict):
         index=0,
         horizontal=True,
         help="'Any' = at least one duty day meets criteria. 'All' = every duty day meets criteria.",
-        key="edw_match_mode"
+        key="edw_match_mode",
     )
 
     st.markdown("---")
@@ -525,11 +544,21 @@ def display_edw_results(result_data: Dict):
     # Add filters
     col1, col2, col3 = st.columns(3)
     with col1:
-        filter_edw = st.selectbox("Filter by EDW:", ["All", "EDW Only", "Day Only"], key="edw_filter_edw")
+        filter_edw = st.selectbox(
+            "Filter by EDW:", ["All", "EDW Only", "Day Only"], key="edw_filter_edw"
+        )
     with col2:
-        filter_hs = st.selectbox("Filter by Hot Standby:", ["All", "Hot Standby Only", "Exclude Hot Standby"], key="edw_filter_hs")
+        filter_hs = st.selectbox(
+            "Filter by Hot Standby:",
+            ["All", "Hot Standby Only", "Exclude Hot Standby"],
+            key="edw_filter_hs",
+        )
     with col3:
-        sort_by = st.selectbox("Sort by:", ["Trip ID", "Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"], key="edw_sort_by")
+        sort_by = st.selectbox(
+            "Sort by:",
+            ["Trip ID", "Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"],
+            key="edw_sort_by",
+        )
 
     # Apply filters
     filtered_df = df_trips.copy()
@@ -544,17 +573,18 @@ def display_edw_results(result_data: Dict):
 
     # Filter by duty day criteria (combined conditions on same duty day)
     if match_mode != "Disabled":
+
         def duty_day_meets_criteria(duty_day):
             """Check if a single duty day meets all criteria"""
-            duration_ok = duty_day['duration_hours'] >= duty_duration_min
-            legs_ok = duty_day['num_legs'] >= legs_min
+            duration_ok = duty_day["duration_hours"] >= duty_duration_min
+            legs_ok = duty_day["num_legs"] >= legs_min
 
             # Check EDW status
             edw_ok = True
             if duty_day_edw_filter == "EDW Only":
-                edw_ok = duty_day.get('is_edw', False) == True
+                edw_ok = duty_day.get("is_edw", False) == True
             elif duty_day_edw_filter == "Non-EDW Only":
-                edw_ok = duty_day.get('is_edw', False) == False
+                edw_ok = duty_day.get("is_edw", False) == False
             # "Any" means no EDW filter, edw_ok stays True
 
             return duration_ok and legs_ok and edw_ok
@@ -587,9 +617,20 @@ def display_edw_results(result_data: Dict):
         filtered_df = filtered_df[filtered_df["Hot Standby"] == False]
 
     # Sort
-    filtered_df = filtered_df.sort_values(by=sort_by, ascending=False if sort_by in ["Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"] else True)
+    filtered_df = filtered_df.sort_values(
+        by=sort_by,
+        ascending=(
+            False
+            if sort_by
+            in ["Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"]
+            else True
+        ),
+    )
 
-    st.dataframe(filtered_df[[col for col in filtered_df.columns if col != "Duty Day Details"]], hide_index=True)
+    st.dataframe(
+        filtered_df[[col for col in filtered_df.columns if col != "Duty Day Details"]],
+        hide_index=True,
+    )
     st.caption(f"Showing {len(filtered_df)} of {len(df_trips)} pairings")
 
     # === TRIP DETAILS VIEWER ===
@@ -610,9 +651,7 @@ def display_edw_results(result_data: Dict):
         # Excel
         xlsx = out_dir / generate_edw_filename(dom, ac, bid, file_type="xlsx")
         render_excel_download(
-            xlsx,
-            button_label="📊 Download Excel Workbook",
-            key="download_edw_excel"
+            xlsx, button_label="📊 Download Excel Workbook", key="download_edw_excel"
         )
 
     with col2:
@@ -629,34 +668,45 @@ def display_edw_results(result_data: Dict):
                     "Day Trips": result_data["res"]["trip_summary"].loc[3, "Value"],
                 },
                 "weighted_summary": {
-                    "Trip-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[0, "Value"],
-                    "TAFB-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[1, "Value"],
-                    "Duty-day-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[2, "Value"],
+                    "Trip-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[
+                        0, "Value"
+                    ],
+                    "TAFB-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[
+                        1, "Value"
+                    ],
+                    "Duty-day-weighted EDW trip %": result_data["res"]["weighted_summary"].loc[
+                        2, "Value"
+                    ],
                 },
                 "duty_day_stats": [
                     ["Metric", "All", "EDW", "Non-EDW"],
-                    ["Avg Legs/Duty Day",
-                     str(result_data["res"]["duty_day_stats"].loc[0, "All"]),
-                     str(result_data["res"]["duty_day_stats"].loc[0, "EDW"]),
-                     str(result_data["res"]["duty_day_stats"].loc[0, "Non-EDW"])],
-                    ["Avg Duty Day Length",
-                     str(result_data["res"]["duty_day_stats"].loc[1, "All"]),
-                     str(result_data["res"]["duty_day_stats"].loc[1, "EDW"]),
-                     str(result_data["res"]["duty_day_stats"].loc[1, "Non-EDW"])],
-                    ["Avg Block Time",
-                     str(result_data["res"]["duty_day_stats"].loc[2, "All"]),
-                     str(result_data["res"]["duty_day_stats"].loc[2, "EDW"]),
-                     str(result_data["res"]["duty_day_stats"].loc[2, "Non-EDW"])],
-                    ["Avg Credit Time",
-                     str(result_data["res"]["duty_day_stats"].loc[3, "All"]),
-                     str(result_data["res"]["duty_day_stats"].loc[3, "EDW"]),
-                     str(result_data["res"]["duty_day_stats"].loc[3, "Non-EDW"])],
+                    [
+                        "Avg Legs/Duty Day",
+                        str(result_data["res"]["duty_day_stats"].loc[0, "All"]),
+                        str(result_data["res"]["duty_day_stats"].loc[0, "EDW"]),
+                        str(result_data["res"]["duty_day_stats"].loc[0, "Non-EDW"]),
+                    ],
+                    [
+                        "Avg Duty Day Length",
+                        str(result_data["res"]["duty_day_stats"].loc[1, "All"]),
+                        str(result_data["res"]["duty_day_stats"].loc[1, "EDW"]),
+                        str(result_data["res"]["duty_day_stats"].loc[1, "Non-EDW"]),
+                    ],
+                    [
+                        "Avg Block Time",
+                        str(result_data["res"]["duty_day_stats"].loc[2, "All"]),
+                        str(result_data["res"]["duty_day_stats"].loc[2, "EDW"]),
+                        str(result_data["res"]["duty_day_stats"].loc[2, "Non-EDW"]),
+                    ],
+                    [
+                        "Avg Credit Time",
+                        str(result_data["res"]["duty_day_stats"].loc[3, "All"]),
+                        str(result_data["res"]["duty_day_stats"].loc[3, "EDW"]),
+                        str(result_data["res"]["duty_day_stats"].loc[3, "Non-EDW"]),
+                    ],
                 ],
                 "trip_length_distribution": [
-                    {
-                        "duty_days": int(row["Duty Days"]),
-                        "trips": int(row["Trips"])
-                    }
+                    {"duty_days": int(row["Duty Days"]), "trips": int(row["Trips"])}
                     for _, row in result_data["res"]["duty_dist"].iterrows()
                 ],
                 "notes": result_data.get("notes", ""),
@@ -671,26 +721,27 @@ def display_edw_results(result_data: Dict):
                 "muted_hex": "#6B7280",
                 "bg_alt_hex": "#FAFAFA",
                 "logo_path": None,
-                "title_left": f"{dom} {ac} – Bid {bid} | Pairing Analysis Report"
+                "title_left": f"{dom} {ac} – Bid {bid} | Pairing Analysis Report",
             }
 
             # Create temporary file for PDF
-            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
             create_edw_pdf_report(pdf_data, temp_pdf.name, branding)
 
             # Read the PDF bytes
-            with open(temp_pdf.name, 'rb') as f:
+            with open(temp_pdf.name, "rb") as f:
                 pdf_bytes = f.read()
 
             # Clean up temp file
             import os
+
             os.unlink(temp_pdf.name)
 
             render_pdf_download(
                 pdf_bytes,
                 filename=f"{dom}_{ac}_Bid{bid}_Executive_Report.pdf",
                 button_label="📄 Download Executive PDF Report",
-                key="download_edw_pdf"
+                key="download_edw_pdf",
             )
         except Exception as e:
             handle_pdf_generation_error(e, show_traceback=False)

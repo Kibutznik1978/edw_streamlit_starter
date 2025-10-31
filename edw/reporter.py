@@ -9,29 +9,37 @@ This module coordinates the entire analysis workflow:
 """
 
 from pathlib import Path
-import pandas as pd
 
-from .parser import (
-    parse_pairings,
-    parse_trip_id,
-    parse_tafb,
-    parse_duty_days,
-    parse_max_duty_day_length,
-    parse_max_legs_per_duty_day,
-    parse_duty_day_details,
-    parse_trip_frequency,
-)
-from .analyzer import is_edw_trip, is_hot_standby
-from .excel_export import save_edw_excel, build_edw_dataframes
+import pandas as pd
 
 # Import PDF generation from centralized module
 from pdf_generation import create_edw_pdf_report
+
+from .analyzer import is_edw_trip, is_hot_standby
+from .excel_export import build_edw_dataframes, save_edw_excel
+from .parser import (
+    parse_duty_day_details,
+    parse_duty_days,
+    parse_max_duty_day_length,
+    parse_max_legs_per_duty_day,
+    parse_pairings,
+    parse_tafb,
+    parse_trip_frequency,
+    parse_trip_id,
+)
 
 
 # -------------------------------------------------------------------
 # Main Reporting Function
 # -------------------------------------------------------------------
-def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: str, bid_period: str, progress_callback=None):
+def run_edw_report(
+    pdf_path: Path,
+    output_dir: Path,
+    domicile: str,
+    aircraft: str,
+    bid_period: str,
+    progress_callback=None,
+):
     """
     Generate comprehensive EDW report from pairing PDF.
 
@@ -89,18 +97,20 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         max_legs = parse_max_legs_per_duty_day(trip_text)
         duty_day_details = parse_duty_day_details(trip_text, is_edw_trip)
 
-        trip_records.append({
-            "Trip ID": trip_id,
-            "Frequency": frequency,
-            "Hot Standby": hot_standby,
-            "TAFB Hours": round(tafb_hours, 2),
-            "TAFB Days": round(tafb_days, 2),
-            "Duty Days": duty_days,
-            "Max Duty Length": round(max_duty_length, 2),
-            "Max Legs/Duty": max_legs,
-            "EDW": edw_flag,
-            "Duty Day Details": duty_day_details,  # Store list of duty day info
-        })
+        trip_records.append(
+            {
+                "Trip ID": trip_id,
+                "Frequency": frequency,
+                "Hot Standby": hot_standby,
+                "TAFB Hours": round(tafb_hours, 2),
+                "TAFB Days": round(tafb_days, 2),
+                "Duty Days": duty_days,
+                "Max Duty Length": round(max_duty_length, 2),
+                "Max Legs/Duty": max_legs,
+                "EDW": edw_flag,
+                "Duty Day Details": duty_day_details,  # Store list of duty day info
+            }
+        )
 
         # Store raw trip text indexed by Trip ID
         if trip_id is not None:
@@ -132,18 +142,26 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
 
     # Build all statistical dataframes
     stats_dfs = build_edw_dataframes(df_trips)
-    duty_dist = stats_dfs['duty_dist']
-    trip_summary = stats_dfs['trip_summary']
-    weighted_summary = stats_dfs['weighted_summary']
-    duty_day_stats = stats_dfs['duty_day_stats']
-    hot_standby_summary = stats_dfs['hot_standby_summary']
+    duty_dist = stats_dfs["duty_dist"]
+    trip_summary = stats_dfs["trip_summary"]
+    weighted_summary = stats_dfs["weighted_summary"]
+    duty_day_stats = stats_dfs["duty_day_stats"]
+    hot_standby_summary = stats_dfs["hot_standby_summary"]
 
     if progress_callback:
         progress_callback(65, "Generating Excel workbook...")
 
     # Excel export
     excel_path = output_dir / f"{domicile}_{aircraft}_Bid{bid_period}_EDW_Report_Data.xlsx"
-    save_edw_excel(excel_path, df_trips, duty_dist, trip_summary, weighted_summary, duty_day_stats, hot_standby_summary)
+    save_edw_excel(
+        excel_path,
+        df_trips,
+        duty_dist,
+        trip_summary,
+        weighted_summary,
+        duty_day_stats,
+        hot_standby_summary,
+    )
 
     if progress_callback:
         progress_callback(70, "Creating PDF report...")
@@ -153,15 +171,9 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
     pdf_report_path = output_dir / f"{domicile}_{aircraft}_Bid{bid_period}_EDW_Report.pdf"
 
     # Convert DataFrames to formats expected by create_edw_pdf_report
-    trip_summary_dict = {
-        row['Metric']: row['Value']
-        for _, row in trip_summary.iterrows()
-    }
+    trip_summary_dict = {row["Metric"]: row["Value"] for _, row in trip_summary.iterrows()}
 
-    weighted_summary_dict = {
-        row['Metric']: row['Value']
-        for _, row in weighted_summary.iterrows()
-    }
+    weighted_summary_dict = {row["Metric"]: row["Value"] for _, row in weighted_summary.iterrows()}
 
     # Convert duty_day_stats DataFrame to list of lists
     duty_day_stats_list = [list(duty_day_stats.columns)] + duty_day_stats.values.tolist()
@@ -181,14 +193,11 @@ def run_edw_report(pdf_path: Path, output_dir: Path, domicile: str, aircraft: st
         "duty_day_stats": duty_day_stats_list,
         "trip_length_distribution": trip_length_dist,
         "notes": f"Analysis of {len(trips)} pairings",
-        "generated_by": "EDW Pairing Analyzer"
+        "generated_by": "EDW Pairing Analyzer",
     }
 
     # Generate PDF using centralized module
-    create_edw_pdf_report(
-        data=report_data,
-        output_path=str(pdf_report_path)
-    )
+    create_edw_pdf_report(data=report_data, output_path=str(pdf_report_path))
 
     if progress_callback:
         progress_callback(100, "Complete!")

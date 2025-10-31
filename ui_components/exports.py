@@ -1,9 +1,10 @@
 """Reusable export and download components."""
 
-import streamlit as st
-import pandas as pd
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+import pandas as pd
+import streamlit as st
 
 
 def render_csv_download(
@@ -11,7 +12,7 @@ def render_csv_download(
     filename: str,
     button_label: str = "📊 Download CSV",
     key: str = "download_csv",
-    help_text: Optional[str] = None
+    help_text: Optional[str] = None,
 ) -> None:
     """Render a CSV download button.
 
@@ -24,12 +25,7 @@ def render_csv_download(
     """
     csv = df.to_csv(index=False)
     st.download_button(
-        button_label,
-        data=csv,
-        file_name=filename,
-        mime="text/csv",
-        key=key,
-        help=help_text
+        button_label, data=csv, file_name=filename, mime="text/csv", key=key, help=help_text
     )
 
 
@@ -38,7 +34,7 @@ def render_pdf_download(
     filename: str,
     button_label: str = "📄 Download PDF Report",
     key: str = "download_pdf",
-    help_text: Optional[str] = None
+    help_text: Optional[str] = None,
 ) -> None:
     """Render a PDF download button.
 
@@ -55,7 +51,7 @@ def render_pdf_download(
         file_name=filename,
         mime="application/pdf",
         key=key,
-        help=help_text
+        help=help_text,
     )
 
 
@@ -63,7 +59,7 @@ def render_excel_download(
     file_path: Path,
     button_label: str = "📊 Download Excel Workbook",
     key: str = "download_excel",
-    help_text: Optional[str] = None
+    help_text: Optional[str] = None,
 ) -> None:
     """Render an Excel file download button.
 
@@ -79,15 +75,12 @@ def render_excel_download(
         file_name=file_path.name,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key=key,
-        help=help_text
+        help=help_text,
     )
 
 
 def generate_edw_filename(
-    domicile: str,
-    aircraft: str,
-    bid_period: str,
-    file_type: str = "xlsx"
+    domicile: str, aircraft: str, bid_period: str, file_type: str = "xlsx"
 ) -> str:
     """Generate consistent filename for EDW reports.
 
@@ -135,10 +128,7 @@ def render_download_section(title: str = "⬇️ Downloads") -> None:
     st.header(title)
 
 
-def render_two_column_downloads(
-    left_widget_fn,
-    right_widget_fn
-) -> None:
+def render_two_column_downloads(left_widget_fn, right_widget_fn) -> None:
     """Render two download buttons side by side.
 
     Args:
@@ -165,5 +155,6 @@ def handle_pdf_generation_error(error: Exception, show_traceback: bool = True) -
 
     if show_traceback:
         import traceback
+
         with st.expander("📋 Error Details"):
             st.code(traceback.format_exc())

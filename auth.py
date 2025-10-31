@@ -36,14 +36,16 @@ Version: 1.0
 Date: 2025-10-28
 """
 
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
+
 import streamlit as st
 from supabase import Client
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
 
 # =====================================================================
 # SESSION MANAGEMENT
 # =====================================================================
+
 
 def init_auth(supabase: Client) -> Optional[Dict[str, Any]]:
     """
@@ -73,13 +75,13 @@ def init_auth(supabase: Client) -> Optional[Dict[str, Any]]:
         st.write(f"Welcome, {user.email}!")
     """
     # Check if user has an active session
-    if 'supabase_session' not in st.session_state:
+    if "supabase_session" not in st.session_state:
         return None
 
-    session = st.session_state['supabase_session']
+    session = st.session_state["supabase_session"]
 
     # Check if session has expired
-    if not session or not hasattr(session, 'expires_at'):
+    if not session or not hasattr(session, "expires_at"):
         return None
 
     expires_at = datetime.fromtimestamp(session.expires_at)
@@ -90,14 +92,11 @@ def init_auth(supabase: Client) -> Optional[Dict[str, Any]]:
             response = supabase.auth.refresh_session()
 
             # Update session state
-            st.session_state['supabase_session'] = response.session
-            st.session_state['user'] = response.user
+            st.session_state["supabase_session"] = response.session
+            st.session_state["user"] = response.user
 
             # Set session on client
-            supabase.auth.set_session(
-                response.session.access_token,
-                response.session.refresh_token
-            )
+            supabase.auth.set_session(response.session.access_token, response.session.refresh_token)
 
             return response.user
 
@@ -106,7 +105,7 @@ def init_auth(supabase: Client) -> Optional[Dict[str, Any]]:
             logout()
             return None
 
-    return st.session_state.get('user')
+    return st.session_state.get("user")
 
 
 def logout() -> None:
@@ -132,6 +131,7 @@ def logout() -> None:
 # USER ROLE MANAGEMENT
 # =====================================================================
 
+
 def get_user_role(supabase: Client) -> str:
     """
     Get current user's role from profiles table.
@@ -150,29 +150,29 @@ def get_user_role(supabase: Client) -> str:
             st.write("Admin features enabled")
     """
     # Return 'user' if not authenticated
-    if 'user' not in st.session_state:
-        return 'user'
+    if "user" not in st.session_state:
+        return "user"
 
     # Return cached role if available
-    if 'user_role' in st.session_state:
-        return st.session_state['user_role']
+    if "user_role" in st.session_state:
+        return st.session_state["user_role"]
 
     # Fetch role from database
-    user_id = st.session_state['user'].id
+    user_id = st.session_state["user"].id
 
     try:
-        response = supabase.table('profiles').select('role').eq('id', user_id).single().execute()
-        role = response.data['role']
+        response = supabase.table("profiles").select("role").eq("id", user_id).single().execute()
+        role = response.data["role"]
 
         # Cache role in session state
-        st.session_state['user_role'] = role
+        st.session_state["user_role"] = role
 
         return role
 
     except Exception as e:
         # Default to 'user' if query fails
         st.warning(f"Could not fetch user role: {str(e)}")
-        return 'user'
+        return "user"
 
 
 def is_admin(supabase: Client) -> bool:
@@ -190,7 +190,7 @@ def is_admin(supabase: Client) -> bool:
             # Show admin controls
             pass
     """
-    return get_user_role(supabase) == 'admin'
+    return get_user_role(supabase) == "admin"
 
 
 def require_admin(supabase: Client) -> bool:
@@ -215,7 +215,7 @@ def require_admin(supabase: Client) -> bool:
     """
     role = get_user_role(supabase)
 
-    if role != 'admin':
+    if role != "admin":
         st.error("🚫 Admin access required")
         st.info("Contact your administrator to request admin privileges.")
         return False
@@ -226,6 +226,7 @@ def require_admin(supabase: Client) -> bool:
 # =====================================================================
 # LOGIN/SIGNUP UI
 # =====================================================================
+
 
 def login_page(supabase: Client) -> None:
     """
@@ -248,7 +249,8 @@ def login_page(supabase: Client) -> None:
     """
     st.title("🔐 Aero Crew Data - Login")
 
-    st.markdown("""
+    st.markdown(
+        """
     Welcome to the Aero Crew Data analysis platform.
 
     **Features:**
@@ -256,7 +258,8 @@ def login_page(supabase: Client) -> None:
     - Bid Line Analysis
     - Historical Trend Tracking
     - Customizable PDF Reports
-    """)
+    """
+    )
 
     st.markdown("---")
 
@@ -280,19 +283,17 @@ def login_page(supabase: Client) -> None:
 
                 try:
                     # Attempt login
-                    response = supabase.auth.sign_in_with_password({
-                        "email": email,
-                        "password": password
-                    })
+                    response = supabase.auth.sign_in_with_password(
+                        {"email": email, "password": password}
+                    )
 
                     # Store session and user in session state
-                    st.session_state['supabase_session'] = response.session
-                    st.session_state['user'] = response.user
+                    st.session_state["supabase_session"] = response.session
+                    st.session_state["user"] = response.user
 
                     # Set session on client
                     supabase.auth.set_session(
-                        response.session.access_token,
-                        response.session.refresh_token
+                        response.session.access_token, response.session.refresh_token
                     )
 
                     st.success("✅ Login successful!")
@@ -315,21 +316,15 @@ def login_page(supabase: Client) -> None:
         st.markdown("### Create a new account")
 
         with st.form("signup_form"):
-            email = st.text_input(
-                "Email",
-                key="signup_email",
-                placeholder="pilot@airline.com"
-            )
+            email = st.text_input("Email", key="signup_email", placeholder="pilot@airline.com")
             password = st.text_input(
                 "Password",
                 type="password",
                 key="signup_password",
-                placeholder="At least 8 characters"
+                placeholder="At least 8 characters",
             )
             confirm_password = st.text_input(
-                "Confirm Password",
-                type="password",
-                placeholder="Re-enter your password"
+                "Confirm Password", type="password", placeholder="Re-enter your password"
             )
             submitted = st.form_submit_button("Sign Up", type="primary")
 
@@ -349,10 +344,7 @@ def login_page(supabase: Client) -> None:
 
                 try:
                     # Attempt signup
-                    response = supabase.auth.sign_up({
-                        "email": email,
-                        "password": password
-                    })
+                    response = supabase.auth.sign_up({"email": email, "password": password})
 
                     st.success("✅ Account created successfully!")
                     st.info(
@@ -379,14 +371,14 @@ def login_page(supabase: Client) -> None:
     # Footer
     st.markdown("---")
     st.caption(
-        "Need help? Contact your system administrator to request access "
-        "or for admin privileges."
+        "Need help? Contact your system administrator to request access " "or for admin privileges."
     )
 
 
 # =====================================================================
 # USER INFO DISPLAY
 # =====================================================================
+
 
 def show_user_info(supabase: Client) -> None:
     """
@@ -404,7 +396,7 @@ def show_user_info(supabase: Client) -> None:
 
         # This will add user info to the sidebar automatically
     """
-    user = st.session_state.get('user')
+    user = st.session_state.get("user")
 
     if not user:
         return
@@ -417,7 +409,7 @@ def show_user_info(supabase: Client) -> None:
 
     # User role
     role = get_user_role(supabase)
-    role_emoji = "👑" if role == 'admin' else "👥"
+    role_emoji = "👑" if role == "admin" else "👥"
     st.sidebar.markdown(f"{role_emoji} Role: **{role.title()}**")
 
     # Logout button
@@ -437,20 +429,23 @@ def show_user_info(supabase: Client) -> None:
 
         debug_info = debug_jwt_claims()
 
-        if debug_info['error']:
+        if debug_info["error"]:
             st.error(f"Error: {debug_info['error']}")
         else:
-            st.json({
-                'has_session': debug_info['has_session'],
-                'has_access_token': debug_info['has_access_token'],
-                'app_role': debug_info.get('app_role', 'NOT FOUND'),
-                'claims': debug_info.get('claims', {})
-            })
+            st.json(
+                {
+                    "has_session": debug_info["has_session"],
+                    "has_access_token": debug_info["has_access_token"],
+                    "app_role": debug_info.get("app_role", "NOT FOUND"),
+                    "claims": debug_info.get("claims", {}),
+                }
+            )
 
 
 # =====================================================================
 # ADMIN OPERATIONS
 # =====================================================================
+
 
 def promote_user_to_admin(supabase: Client, user_email: str) -> bool:
     """
@@ -494,9 +489,7 @@ def promote_user_to_admin(supabase: Client, user_email: str) -> bool:
             return False
 
         # Update role in profiles table
-        supabase.table('profiles').update({
-            'role': 'admin'
-        }).eq('id', target_user.id).execute()
+        supabase.table("profiles").update({"role": "admin"}).eq("id", target_user.id).execute()
 
         st.success(f"✅ User {user_email} promoted to admin")
         return True
@@ -510,6 +503,7 @@ def promote_user_to_admin(supabase: Client, user_email: str) -> bool:
 # UTILITY FUNCTIONS
 # =====================================================================
 
+
 def get_current_user_id() -> Optional[str]:
     """
     Get current user's ID from session state.
@@ -522,7 +516,7 @@ def get_current_user_id() -> Optional[str]:
         if user_id:
             print(f"Current user ID: {user_id}")
     """
-    user = st.session_state.get('user')
+    user = st.session_state.get("user")
     return user.id if user else None
 
 
@@ -538,7 +532,7 @@ def get_current_user_email() -> Optional[str]:
         if email:
             st.write(f"Logged in as: {email}")
     """
-    user = st.session_state.get('user')
+    user = st.session_state.get("user")
     return user.email if user else None
 
 
@@ -554,4 +548,4 @@ def is_authenticated() -> bool:
             st.warning("Please log in to continue")
             st.stop()
     """
-    return 'user' in st.session_state and st.session_state['user'] is not None
+    return "user" in st.session_state and st.session_state["user"] is not None

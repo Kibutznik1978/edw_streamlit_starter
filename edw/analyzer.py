@@ -6,14 +6,16 @@ trips and hot standby pairings.
 """
 
 import re
-from .parser import extract_local_times
+
 from config import (
-    EDW_START_HOUR,
-    EDW_START_MINUTE,
     EDW_END_HOUR,
     EDW_END_MINUTE,
+    EDW_START_HOUR,
+    EDW_START_MINUTE,
     HOT_STANDBY_MAX_SEGMENTS,
 )
+
+from .parser import extract_local_times
 
 
 def is_edw_trip(trip_text):
@@ -38,9 +40,11 @@ def is_edw_trip(trip_text):
     for t in times:
         hh, mm = map(int, t.split(":"))
         # Check if time falls within EDW range using config constants
-        if (hh == EDW_START_HOUR and mm >= EDW_START_MINUTE) or \
-           (hh > EDW_START_HOUR and hh < EDW_END_HOUR) or \
-           (hh == EDW_END_HOUR and mm == EDW_END_MINUTE):
+        if (
+            (hh == EDW_START_HOUR and mm >= EDW_START_MINUTE)
+            or (hh > EDW_START_HOUR and hh < EDW_END_HOUR)
+            or (hh == EDW_END_HOUR and mm == EDW_END_MINUTE)
+        ):
             return True
     return False
 

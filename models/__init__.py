@@ -10,31 +10,27 @@ Modules:
 - edw_models: EDW analysis trip data and statistics
 """
 
-from .pdf_models import (
-    ReportMetadata,
-    HeaderInfo,
-)
-
 from .bid_models import (
     BidLineData,
     ReserveLineInfo,
 )
-
 from .edw_models import (
-    TripData,
     EDWStatistics,
+    TripData,
+)
+from .pdf_models import (
+    HeaderInfo,
+    ReportMetadata,
 )
 
 __all__ = [
     # PDF Models
-    'ReportMetadata',
-    'HeaderInfo',
-
+    "ReportMetadata",
+    "HeaderInfo",
     # Bid Line Models
-    'BidLineData',
-    'ReserveLineInfo',
-
+    "BidLineData",
+    "ReserveLineInfo",
     # EDW Models
-    'TripData',
-    'EDWStatistics',
+    "TripData",
+    "EDWStatistics",
 ]

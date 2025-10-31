@@ -11,31 +11,42 @@ Creates professional 3-page PDF reports with:
 """
 
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
 
 # ReportLab imports
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image,
-    PageBreak, HRFlowable, KeepTogether
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib import colors
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.platypus import (
+    HRFlowable,
+    Image,
+    KeepTogether,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+)
 
 # Import from our pdf_generation modules
 from .base import (
-    DEFAULT_BRANDING, hex_to_reportlab_color,
-    draw_header, draw_footer, make_kpi_row, make_styled_table
+    DEFAULT_BRANDING,
+    draw_footer,
+    draw_header,
+    hex_to_reportlab_color,
+    make_kpi_row,
+    make_styled_table,
 )
 from .charts import (
-    save_edw_pie_chart, save_trip_length_bar_chart,
-    save_trip_length_percentage_bar_chart,
-    save_edw_percentages_comparison_chart,
-    save_weighted_method_pie_chart,
     save_duty_day_grouped_bar_chart,
-    save_duty_day_radar_chart
+    save_duty_day_radar_chart,
+    save_edw_percentages_comparison_chart,
+    save_edw_pie_chart,
+    save_trip_length_bar_chart,
+    save_trip_length_percentage_bar_chart,
+    save_weighted_method_pie_chart,
 )
 
 
@@ -65,23 +76,23 @@ def _make_weighted_summary_table(weighted_summary: Dict[str, str], branding: Dic
     rule_color = hex_to_reportlab_color(branding["rule_hex"])
     bg_alt_color = hex_to_reportlab_color(branding["bg_alt_hex"])
 
-    style = TableStyle([
-        # Header row
-        ('BACKGROUND', (0, 0), (-1, 0), accent_color),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#111827")),
-        ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 10),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-
-        # Grid
-        ('GRID', (0, 0), (-1, -1), 0.5, rule_color),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-
-        # Zebra striping
-        ('BACKGROUND', (0, 2), (-1, 2), bg_alt_color),
-    ])
+    style = TableStyle(
+        [
+            # Header row
+            ("BACKGROUND", (0, 0), (-1, 0), accent_color),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 10),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            # Grid
+            ("GRID", (0, 0), (-1, -1), 0.5, rule_color),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            # Zebra striping
+            ("BACKGROUND", (0, 2), (-1, 2), bg_alt_color),
+        ]
+    )
 
     table.setStyle(style)
     return table
@@ -108,24 +119,24 @@ def _make_duty_day_stats_table(duty_day_stats, branding: Dict[str, Any]):
     rule_color = hex_to_reportlab_color(branding["rule_hex"])
     bg_alt_color = hex_to_reportlab_color(branding["bg_alt_hex"])
 
-    style = TableStyle([
-        # Header row
-        ('BACKGROUND', (0, 0), (-1, 0), accent_color),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#111827")),
-        ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 10),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
-
-        # Grid
-        ('GRID', (0, 0), (-1, -1), 0.5, rule_color),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-
-        # Zebra striping (every other row after header)
-        ('BACKGROUND', (0, 2), (-1, 2), bg_alt_color),
-        ('BACKGROUND', (0, 4), (-1, 4), bg_alt_color),
-    ])
+    style = TableStyle(
+        [
+            # Header row
+            ("BACKGROUND", (0, 0), (-1, 0), accent_color),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 10),
+            ("ALIGN", (0, 0), (0, -1), "LEFT"),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            # Grid
+            ("GRID", (0, 0), (-1, -1), 0.5, rule_color),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            # Zebra striping (every other row after header)
+            ("BACKGROUND", (0, 2), (-1, 2), bg_alt_color),
+            ("BACKGROUND", (0, 4), (-1, 4), bg_alt_color),
+        ]
+    )
 
     table.setStyle(style)
     return table
@@ -161,32 +172,31 @@ def _make_trip_length_table(trip_length_distribution, total_trips: int, branding
     rule_color = hex_to_reportlab_color(branding["rule_hex"])
     bg_alt_color = hex_to_reportlab_color(branding["bg_alt_hex"])
 
-    style = TableStyle([
-        # Header row
-        ('BACKGROUND', (0, 0), (-1, 0), accent_color),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#111827")),
-        ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 10),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-
-        # Grid
-        ('GRID', (0, 0), (-1, -1), 0.5, rule_color),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ])
+    style = TableStyle(
+        [
+            # Header row
+            ("BACKGROUND", (0, 0), (-1, 0), accent_color),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 10),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            # Grid
+            ("GRID", (0, 0), (-1, -1), 0.5, rule_color),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]
+    )
 
     # Add zebra striping
     for i in range(2, len(data), 2):
-        style.add('BACKGROUND', (0, i), (-1, i), bg_alt_color)
+        style.add("BACKGROUND", (0, i), (-1, i), bg_alt_color)
 
     table.setStyle(style)
     return table
 
 
 def create_edw_pdf_report(
-    data: Dict[str, Any],
-    output_path: str,
-    branding: Optional[Dict[str, Any]] = None
+    data: Dict[str, Any], output_path: str, branding: Optional[Dict[str, Any]] = None
 ) -> None:
     """
     Generate a professional 3-page EDW analysis report PDF.
@@ -209,8 +219,14 @@ def create_edw_pdf_report(
         IOError: If output path is not writable
     """
     # Validate required data keys
-    required_keys = ["title", "subtitle", "trip_summary", "weighted_summary",
-                     "duty_day_stats", "trip_length_distribution"]
+    required_keys = [
+        "title",
+        "subtitle",
+        "trip_summary",
+        "weighted_summary",
+        "duty_day_stats",
+        "trip_length_distribution",
+    ]
     missing_keys = [key for key in required_keys if key not in data]
     if missing_keys:
         raise ValueError(f"Missing required data keys: {missing_keys}")
@@ -225,47 +241,47 @@ def create_edw_pdf_report(
         leftMargin=36,
         rightMargin=36,
         topMargin=60,  # Space for header
-        bottomMargin=50  # Space for footer
+        bottomMargin=50,  # Space for footer
     )
 
     # Prepare styles
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
+        "CustomTitle",
+        parent=styles["Heading1"],
         fontSize=20,
         leading=24,
         textColor=colors.HexColor("#111827"),
         spaceAfter=6,
-        alignment=TA_CENTER
+        alignment=TA_CENTER,
     )
 
     subtitle_style = ParagraphStyle(
-        'CustomSubtitle',
-        parent=styles['Normal'],
+        "CustomSubtitle",
+        parent=styles["Normal"],
         fontSize=12,
         textColor=hex_to_reportlab_color(branding["muted_hex"]),
         spaceAfter=20,
-        alignment=TA_CENTER
+        alignment=TA_CENTER,
     )
 
     heading2_style = ParagraphStyle(
-        'CustomHeading2',
-        parent=styles['Heading2'],
+        "CustomHeading2",
+        parent=styles["Heading2"],
         fontSize=14,
         leading=18,
         textColor=colors.HexColor("#111827"),
         spaceAfter=6,
-        spaceBefore=12
+        spaceBefore=12,
     )
 
     body_style = ParagraphStyle(
-        'CustomBody',
-        parent=styles['Normal'],
+        "CustomBody",
+        parent=styles["Normal"],
         fontSize=10,
         textColor=hex_to_reportlab_color(branding["muted_hex"]),
-        spaceAfter=12
+        spaceAfter=12,
     )
 
     # Build story (content flow)
@@ -290,7 +306,7 @@ def create_edw_pdf_report(
             thickness=1,
             color=hex_to_reportlab_color(branding["rule_hex"]),
             spaceAfter=16,
-            spaceBefore=4
+            spaceBefore=4,
         )
         story.append(hr)
 
@@ -306,19 +322,26 @@ def create_edw_pdf_report(
         donut_path = save_edw_pie_chart(edw_trips, non_edw_trips)
         temp_files.append(donut_path)
 
-        bar_path = save_trip_length_bar_chart(data["trip_length_distribution"], "Trip Length Distribution")
+        bar_path = save_trip_length_bar_chart(
+            data["trip_length_distribution"], "Trip Length Distribution"
+        )
         temp_files.append(bar_path)
 
         # Place charts side by side
         from reportlab.platypus import Table, TableStyle
-        donut_img = Image(donut_path, width=2.5*inch, height=2.5*inch)
-        bar_img = Image(bar_path, width=3*inch, height=2.5*inch)
 
-        chart_table = Table([[donut_img, bar_img]], colWidths=[2.75*inch, 3.25*inch])
-        chart_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ]))
+        donut_img = Image(donut_path, width=2.5 * inch, height=2.5 * inch)
+        bar_img = Image(bar_path, width=3 * inch, height=2.5 * inch)
+
+        chart_table = Table([[donut_img, bar_img]], colWidths=[2.75 * inch, 3.25 * inch])
+        chart_table.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ]
+            )
+        )
         story.append(chart_table)
         story.append(Spacer(1, 20))
 
@@ -336,7 +359,7 @@ def create_edw_pdf_report(
         duty_section = [
             Paragraph("Duty Day Statistics", heading2_style),
             Spacer(1, 8),
-            _make_duty_day_stats_table(data["duty_day_stats"], branding)
+            _make_duty_day_stats_table(data["duty_day_stats"], branding),
         ]
         story.append(KeepTogether(duty_section))
         story.append(Spacer(1, 16))
@@ -349,18 +372,21 @@ def create_edw_pdf_report(
         temp_files.append(radar_chart_path)
 
         # Place both charts side by side
-        grouped_bar_img = Image(grouped_bar_path, width=4*inch, height=2.6*inch)
-        radar_chart_img = Image(radar_chart_path, width=2.5*inch, height=2.5*inch)
+        grouped_bar_img = Image(grouped_bar_path, width=4 * inch, height=2.6 * inch)
+        radar_chart_img = Image(radar_chart_path, width=2.5 * inch, height=2.5 * inch)
 
         chart_comparison_table = Table(
-            [[grouped_bar_img, radar_chart_img]],
-            colWidths=[4.2*inch, 2.8*inch]
+            [[grouped_bar_img, radar_chart_img]], colWidths=[4.2 * inch, 2.8 * inch]
         )
-        chart_comparison_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ]))
+        chart_comparison_table.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                    ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ]
+            )
+        )
         story.append(chart_comparison_table)
 
         # Notes if provided
@@ -372,46 +398,42 @@ def create_edw_pdf_report(
         story.append(PageBreak())
 
         story.append(Paragraph("Trip Length Breakdown", heading2_style))
-        story.append(Paragraph(
-            "Distribution by Duty Days (Hot Standby excluded)",
-            body_style
-        ))
+        story.append(Paragraph("Distribution by Duty Days (Hot Standby excluded)", body_style))
         story.append(Spacer(1, 12))
 
         # Trip length table
         trip_table = _make_trip_length_table(
-            data["trip_length_distribution"],
-            total_trips,
-            branding
+            data["trip_length_distribution"], total_trips, branding
         )
         story.append(trip_table)
         story.append(Spacer(1, 20))
 
         # Trip length charts - both absolute numbers and percentages
         bar_path_large = save_trip_length_bar_chart(
-            data["trip_length_distribution"],
-            "Trip Length Distribution (Absolute Numbers)"
+            data["trip_length_distribution"], "Trip Length Distribution (Absolute Numbers)"
         )
         temp_files.append(bar_path_large)
 
         bar_pct_path = save_trip_length_percentage_bar_chart(
-            data["trip_length_distribution"],
-            "Trip Length Distribution (Percentage)"
+            data["trip_length_distribution"], "Trip Length Distribution (Percentage)"
         )
         temp_files.append(bar_pct_path)
 
         # Place charts side by side
-        bar_img_large = Image(bar_path_large, width=3.5*inch, height=3*inch)
-        bar_pct_img = Image(bar_pct_path, width=3.5*inch, height=3*inch)
+        bar_img_large = Image(bar_path_large, width=3.5 * inch, height=3 * inch)
+        bar_pct_img = Image(bar_pct_path, width=3.5 * inch, height=3 * inch)
 
         trip_charts_table = Table(
-            [[bar_img_large, bar_pct_img]],
-            colWidths=[3.6*inch, 3.6*inch]
+            [[bar_img_large, bar_pct_img]], colWidths=[3.6 * inch, 3.6 * inch]
         )
-        trip_charts_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ]))
+        trip_charts_table.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ]
+            )
+        )
         story.append(trip_charts_table)
         story.append(Spacer(1, 24))
 
@@ -419,18 +441,21 @@ def create_edw_pdf_report(
         story.append(hr)
 
         # Filter out single-day trips
-        multi_day_trips = [item for item in data["trip_length_distribution"] if item["duty_days"] > 1]
+        multi_day_trips = [
+            item for item in data["trip_length_distribution"] if item["duty_days"] > 1
+        ]
         total_multi_day = sum(item["trips"] for item in multi_day_trips)
 
         if multi_day_trips:
             # Multi-day trip analysis section
             multi_day_section = []
 
-            multi_day_section.append(Paragraph("Trip Length Analysis (Single-Day Trips Excluded)", heading2_style))
-            multi_day_section.append(Paragraph(
-                "Focus on multi-day pairings by removing 1-day trips",
-                body_style
-            ))
+            multi_day_section.append(
+                Paragraph("Trip Length Analysis (Single-Day Trips Excluded)", heading2_style)
+            )
+            multi_day_section.append(
+                Paragraph("Focus on multi-day pairings by removing 1-day trips", body_style)
+            )
             multi_day_section.append(Spacer(1, 12))
 
             # Multi-day only table
@@ -448,21 +473,23 @@ def create_edw_pdf_report(
             multi_day_table = Table(multi_day_data, colWidths=[120, 120, 120])
 
             # Apply table style
-            table_style = TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), accent_color),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#111827")),
-                ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 10),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('GRID', (0, 0), (-1, -1), 0.5, rule_color),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('TOPPADDING', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ])
+            table_style = TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), accent_color),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+                    ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 10),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, rule_color),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 8),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ("FONTSIZE", (0, 1), (-1, -1), 10),
+                ]
+            )
 
             # Add zebra striping
             for i in range(2, len(multi_day_data), 2):
-                table_style.add('BACKGROUND', (0, i), (-1, i), bg_alt_color)
+                table_style.add("BACKGROUND", (0, i), (-1, i), bg_alt_color)
 
             multi_day_table.setStyle(table_style)
             multi_day_section.append(multi_day_table)
@@ -470,36 +497,39 @@ def create_edw_pdf_report(
 
             # Charts for multi-day trips
             multi_bar_path = save_trip_length_bar_chart(
-                multi_day_trips,
-                "Multi-Day Trips (Absolute Numbers)"
+                multi_day_trips, "Multi-Day Trips (Absolute Numbers)"
             )
             temp_files.append(multi_bar_path)
 
             multi_bar_pct_path = save_trip_length_percentage_bar_chart(
-                multi_day_trips,
-                "Multi-Day Trips (Percentage)"
+                multi_day_trips, "Multi-Day Trips (Percentage)"
             )
             temp_files.append(multi_bar_pct_path)
 
             # Place charts side by side
-            multi_bar_img = Image(multi_bar_path, width=3.5*inch, height=3*inch)
-            multi_bar_pct_img = Image(multi_bar_pct_path, width=3.5*inch, height=3*inch)
+            multi_bar_img = Image(multi_bar_path, width=3.5 * inch, height=3 * inch)
+            multi_bar_pct_img = Image(multi_bar_pct_path, width=3.5 * inch, height=3 * inch)
 
             multi_charts_table = Table(
-                [[multi_bar_img, multi_bar_pct_img]],
-                colWidths=[3.6*inch, 3.6*inch]
+                [[multi_bar_img, multi_bar_pct_img]], colWidths=[3.6 * inch, 3.6 * inch]
             )
-            multi_charts_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ]))
+            multi_charts_table.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ]
+                )
+            )
             multi_day_section.append(multi_charts_table)
 
             # Add entire section as KeepTogether
             story.append(KeepTogether(multi_day_section))
             story.append(Spacer(1, 20))
         else:
-            story.append(Paragraph("Trip Length Analysis (Single-Day Trips Excluded)", heading2_style))
+            story.append(
+                Paragraph("Trip Length Analysis (Single-Day Trips Excluded)", heading2_style)
+            )
             story.append(Paragraph("<i>No multi-day trips found in dataset.</i>", body_style))
             story.append(Spacer(1, 20))
 
@@ -507,17 +537,16 @@ def create_edw_pdf_report(
         story.append(PageBreak())
 
         story.append(Paragraph("EDW Percentages Analysis", heading2_style))
-        story.append(Paragraph(
-            "Comparison of EDW metrics across different weighting methods",
-            body_style
-        ))
+        story.append(
+            Paragraph("Comparison of EDW metrics across different weighting methods", body_style)
+        )
         story.append(Spacer(1, 12))
 
         # EDW Percentages comparison bar chart
         edw_pct_bar_path = save_edw_percentages_comparison_chart(data["weighted_summary"])
         temp_files.append(edw_pct_bar_path)
 
-        edw_pct_bar_img = Image(edw_pct_bar_path, width=5*inch, height=3.5*inch)
+        edw_pct_bar_img = Image(edw_pct_bar_path, width=5 * inch, height=3.5 * inch)
         story.append(edw_pct_bar_img)
         story.append(Spacer(1, 24))
 
@@ -527,7 +556,7 @@ def create_edw_pdf_report(
             thickness=1,
             color=hex_to_reportlab_color(branding["rule_hex"]),
             spaceAfter=16,
-            spaceBefore=4
+            spaceBefore=4,
         )
         story.append(hr)
 
@@ -537,9 +566,13 @@ def create_edw_pdf_report(
 
         # Extract percentages for pie charts
         percentages = {}
-        for key in ["Trip-weighted EDW trip %", "TAFB-weighted EDW trip %", "Duty-day-weighted EDW trip %"]:
+        for key in [
+            "Trip-weighted EDW trip %",
+            "TAFB-weighted EDW trip %",
+            "Duty-day-weighted EDW trip %",
+        ]:
             value_str = data["weighted_summary"].get(key, "0%")
-            value_str = value_str.replace('%', '').strip()
+            value_str = value_str.replace("%", "").strip()
             try:
                 percentages[key] = float(value_str)
             except ValueError:
@@ -547,39 +580,37 @@ def create_edw_pdf_report(
 
         # Create three pie charts
         trip_pie_path = save_weighted_method_pie_chart(
-            percentages["Trip-weighted EDW trip %"],
-            "Trip-Weighted",
-            "trip"
+            percentages["Trip-weighted EDW trip %"], "Trip-Weighted", "trip"
         )
         temp_files.append(trip_pie_path)
 
         tafb_pie_path = save_weighted_method_pie_chart(
-            percentages["TAFB-weighted EDW trip %"],
-            "TAFB-Weighted",
-            "tafb"
+            percentages["TAFB-weighted EDW trip %"], "TAFB-Weighted", "tafb"
         )
         temp_files.append(tafb_pie_path)
 
         duty_pie_path = save_weighted_method_pie_chart(
-            percentages["Duty-day-weighted EDW trip %"],
-            "Duty Day-Weighted",
-            "duty"
+            percentages["Duty-day-weighted EDW trip %"], "Duty Day-Weighted", "duty"
         )
         temp_files.append(duty_pie_path)
 
         # Place three pie charts in a row
-        trip_pie_img = Image(trip_pie_path, width=2*inch, height=2*inch)
-        tafb_pie_img = Image(tafb_pie_path, width=2*inch, height=2*inch)
-        duty_pie_img = Image(duty_pie_path, width=2*inch, height=2*inch)
+        trip_pie_img = Image(trip_pie_path, width=2 * inch, height=2 * inch)
+        tafb_pie_img = Image(tafb_pie_path, width=2 * inch, height=2 * inch)
+        duty_pie_img = Image(duty_pie_path, width=2 * inch, height=2 * inch)
 
         pie_table = Table(
             [[trip_pie_img, tafb_pie_img, duty_pie_img]],
-            colWidths=[2.1*inch, 2.1*inch, 2.1*inch]
+            colWidths=[2.1 * inch, 2.1 * inch, 2.1 * inch],
         )
-        pie_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ]))
+        pie_table.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ]
+            )
+        )
         story.append(pie_table)
         story.append(Spacer(1, 20))
 

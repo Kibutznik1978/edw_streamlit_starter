@@ -6,7 +6,7 @@ shared across EDW and Bid Line PDF generation.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Iterable
+from typing import Dict, Iterable, Optional
 
 
 @dataclass

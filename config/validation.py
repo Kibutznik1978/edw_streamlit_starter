@@ -78,6 +78,7 @@ READONLY_COLUMNS: List[str] = ["Line"]
 # Validation Functions
 # =============================================================================
 
+
 def is_valid_ct_bt_relationship(ct: float, bt: float) -> bool:
     """
     Check if CT/BT relationship is valid.

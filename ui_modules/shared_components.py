@@ -1,7 +1,8 @@
 """Shared UI components used across multiple pages."""
 
+from typing import Any, Dict, Optional
+
 import streamlit as st
-from typing import Dict, Any, Optional
 
 
 def display_header_info(header_info: Dict[str, Any]) -> None:
@@ -52,7 +53,9 @@ def show_error_details(error: Exception) -> None:
         st.code(traceback.format_exc())
 
 
-def progress_bar_callback(current: int, total: int, progress_bar, status_text, message_prefix: str = "Processing") -> None:
+def progress_bar_callback(
+    current: int, total: int, progress_bar, status_text, message_prefix: str = "Processing"
+) -> None:
     """Standard progress bar update callback.
 
     Args:

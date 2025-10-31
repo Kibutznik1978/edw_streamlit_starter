@@ -1,8 +1,9 @@
 """Reusable filter components for Streamlit UI."""
 
-import streamlit as st
+from typing import Any, Dict, Tuple
+
 import pandas as pd
-from typing import Tuple, Dict, Any
+import streamlit as st
 
 
 def create_metric_range_filter(
@@ -11,7 +12,7 @@ def create_metric_range_filter(
     max_value: float,
     step: float = 1.0,
     key: str = None,
-    is_integer: bool = False
+    is_integer: bool = False,
 ) -> Tuple[float, float]:
     """Create a range slider filter for a metric.
 
@@ -41,7 +42,7 @@ def create_metric_range_filter(
         max_value=max_value,
         value=(min_value, max_value),
         step=step,
-        key=key
+        key=key,
     )
 
     return selected_range
@@ -63,67 +64,46 @@ def create_bid_line_filters(df: pd.DataFrame) -> Dict[str, Tuple[float, float]]:
     ct_min = float(df["CT"].min())
     ct_max = float(df["CT"].max())
     ct_range = create_metric_range_filter(
-        "Credit Time (CT)",
-        ct_min,
-        ct_max,
-        step=0.1,
-        key="ct_filter",
-        is_integer=False
+        "Credit Time (CT)", ct_min, ct_max, step=0.1, key="ct_filter", is_integer=False
     )
 
     # BT Filter
     bt_min = float(df["BT"].min())
     bt_max = float(df["BT"].max())
     bt_range = create_metric_range_filter(
-        "Block Time (BT)",
-        bt_min,
-        bt_max,
-        step=0.1,
-        key="bt_filter",
-        is_integer=False
+        "Block Time (BT)", bt_min, bt_max, step=0.1, key="bt_filter", is_integer=False
     )
 
     # DO Filter
     do_min = int(df["DO"].min())
     do_max = int(df["DO"].max())
     do_range = create_metric_range_filter(
-        "Days Off (DO)",
-        do_min,
-        do_max,
-        step=1,
-        key="do_filter",
-        is_integer=True
+        "Days Off (DO)", do_min, do_max, step=1, key="do_filter", is_integer=True
     )
 
     # DD Filter
     dd_min = int(df["DD"].min())
     dd_max = int(df["DD"].max())
     dd_range = create_metric_range_filter(
-        "Duty Days (DD)",
-        dd_min,
-        dd_max,
-        step=1,
-        key="dd_filter",
-        is_integer=True
+        "Duty Days (DD)", dd_min, dd_max, step=1, key="dd_filter", is_integer=True
     )
 
     return {
-        'ct': ct_range,
-        'bt': bt_range,
-        'do': do_range,
-        'dd': dd_range,
-        'defaults': {
-            'ct': (ct_min, ct_max),
-            'bt': (bt_min, bt_max),
-            'do': (do_min, do_max),
-            'dd': (dd_min, dd_max)
-        }
+        "ct": ct_range,
+        "bt": bt_range,
+        "do": do_range,
+        "dd": dd_range,
+        "defaults": {
+            "ct": (ct_min, ct_max),
+            "bt": (bt_min, bt_max),
+            "do": (do_min, do_max),
+            "dd": (dd_min, dd_max),
+        },
     }
 
 
 def apply_dataframe_filters(
-    df: pd.DataFrame,
-    filter_ranges: Dict[str, Tuple[float, float]]
+    df: pd.DataFrame, filter_ranges: Dict[str, Tuple[float, float]]
 ) -> pd.DataFrame:
     """Apply filter ranges to a DataFrame.
 
@@ -134,16 +114,20 @@ def apply_dataframe_filters(
     Returns:
         Filtered DataFrame
     """
-    ct_range = filter_ranges['ct']
-    bt_range = filter_ranges['bt']
-    do_range = filter_ranges['do']
-    dd_range = filter_ranges['dd']
+    ct_range = filter_ranges["ct"]
+    bt_range = filter_ranges["bt"]
+    do_range = filter_ranges["do"]
+    dd_range = filter_ranges["dd"]
 
     filtered_df = df[
-        (df["CT"] >= ct_range[0]) & (df["CT"] <= ct_range[1]) &
-        (df["BT"] >= bt_range[0]) & (df["BT"] <= bt_range[1]) &
-        (df["DO"] >= do_range[0]) & (df["DO"] <= do_range[1]) &
-        (df["DD"] >= dd_range[0]) & (df["DD"] <= dd_range[1])
+        (df["CT"] >= ct_range[0])
+        & (df["CT"] <= ct_range[1])
+        & (df["BT"] >= bt_range[0])
+        & (df["BT"] <= bt_range[1])
+        & (df["DO"] >= do_range[0])
+        & (df["DO"] <= do_range[1])
+        & (df["DD"] >= dd_range[0])
+        & (df["DD"] <= dd_range[1])
     ]
 
     return filtered_df
@@ -158,13 +142,13 @@ def is_filter_active(filter_ranges: Dict[str, Tuple[float, float]]) -> bool:
     Returns:
         True if any filter is different from its default range
     """
-    defaults = filter_ranges.get('defaults', {})
+    defaults = filter_ranges.get("defaults", {})
 
     return (
-        filter_ranges['ct'] != defaults.get('ct') or
-        filter_ranges['bt'] != defaults.get('bt') or
-        filter_ranges['do'] != defaults.get('do') or
-        filter_ranges['dd'] != defaults.get('dd')
+        filter_ranges["ct"] != defaults.get("ct")
+        or filter_ranges["bt"] != defaults.get("bt")
+        or filter_ranges["do"] != defaults.get("do")
+        or filter_ranges["dd"] != defaults.get("dd")
     )
 
 

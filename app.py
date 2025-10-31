@@ -13,29 +13,27 @@ Phase 2: Authentication Integration
 
 import streamlit as st
 
-from ui_modules import (
-    render_edw_analyzer,
-    render_bid_line_analyzer,
-    render_historical_trends
-)
 from auth import init_auth, login_page, show_user_info
 from database import get_supabase_client
+from ui_modules import (
+    render_bid_line_analyzer,
+    render_edw_analyzer,
+    render_historical_trends,
+)
 
-
-#==============================================================================
+# ==============================================================================
 # APP CONFIGURATION
-#==============================================================================
+# ==============================================================================
 
 st.set_page_config(
-    page_title="Pairing Analyzer Tool 1.0",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Pairing Analyzer Tool 1.0", layout="wide", initial_sidebar_state="expanded"
 )
 
 
-#==============================================================================
+# ==============================================================================
 # MAIN APPLICATION
-#==============================================================================
+# ==============================================================================
+
 
 def main():
     """Main application entry point with authentication and tab navigation."""
@@ -64,11 +62,9 @@ def main():
     st.caption("Comprehensive analysis tool for airline bid packets and pairings")
 
     # Create main tabs
-    tab1, tab2, tab3 = st.tabs([
-        "📊 EDW Pairing Analyzer",
-        "📋 Bid Line Analyzer",
-        "📈 Historical Trends"
-    ])
+    tab1, tab2, tab3 = st.tabs(
+        ["📊 EDW Pairing Analyzer", "📋 Bid Line Analyzer", "📈 Historical Trends"]
+    )
 
     with tab1:
         render_edw_analyzer()

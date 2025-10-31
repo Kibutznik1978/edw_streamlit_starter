@@ -1,15 +1,26 @@
 """Reusable data editor components with validation and change tracking."""
 
+from typing import Dict, List, Optional
+
 import pandas as pd
 import streamlit as st
-from typing import List, Dict, Optional
 
 from config.validation import (
-    CT_MIN_HOURS, CT_MAX_HOURS, CT_WARNING_THRESHOLD_HOURS,
-    BT_MIN_HOURS, BT_MAX_HOURS, BT_WARNING_THRESHOLD_HOURS,
-    DO_MIN_DAYS, DO_MAX_DAYS, DO_WARNING_THRESHOLD_DAYS,
-    DD_MIN_DAYS, DD_MAX_DAYS, DD_WARNING_THRESHOLD_DAYS,
-    DO_PLUS_DD_MAX_DAYS, EDITABLE_COLUMNS, READONLY_COLUMNS
+    BT_MAX_HOURS,
+    BT_MIN_HOURS,
+    BT_WARNING_THRESHOLD_HOURS,
+    CT_MAX_HOURS,
+    CT_MIN_HOURS,
+    CT_WARNING_THRESHOLD_HOURS,
+    DD_MAX_DAYS,
+    DD_MIN_DAYS,
+    DD_WARNING_THRESHOLD_DAYS,
+    DO_MAX_DAYS,
+    DO_MIN_DAYS,
+    DO_PLUS_DD_MAX_DAYS,
+    DO_WARNING_THRESHOLD_DAYS,
+    EDITABLE_COLUMNS,
+    READONLY_COLUMNS,
 )
 
 
@@ -31,9 +42,7 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
         disabled=READONLY_COLUMNS,  # Line number is read-only
         column_config={
             "Line": st.column_config.NumberColumn(
-                "Line",
-                help="Bid line number (read-only)",
-                width="small"
+                "Line", help="Bid line number (read-only)", width="small"
             ),
             "CT": st.column_config.NumberColumn(
                 "CT",
@@ -41,7 +50,7 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
                 min_value=CT_MIN_HOURS,
                 max_value=CT_MAX_HOURS,
                 step=0.1,
-                width="small"
+                width="small",
             ),
             "BT": st.column_config.NumberColumn(
                 "BT",
@@ -49,7 +58,7 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
                 min_value=BT_MIN_HOURS,
                 max_value=BT_MAX_HOURS,
                 step=0.1,
-                width="small"
+                width="small",
             ),
             "DO": st.column_config.NumberColumn(
                 "DO",
@@ -57,7 +66,7 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
                 min_value=DO_MIN_DAYS,
                 max_value=DO_MAX_DAYS,
                 step=1,
-                width="small"
+                width="small",
             ),
             "DD": st.column_config.NumberColumn(
                 "DD",
@@ -65,10 +74,10 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
                 min_value=DD_MIN_DAYS,
                 max_value=DD_MAX_DAYS,
                 step=1,
-                width="small"
+                width="small",
             ),
         },
-        key=key
+        key=key,
     )
 
     return edited_df
@@ -106,15 +115,19 @@ def detect_changes(original_df: pd.DataFrame, edited_df: pd.DataFrame) -> pd.Dat
             orig_val = original_df.loc[idx, col]
             edit_val = edited_df.loc[idx, col]
 
-            changes.append({
-                "Line": line_num,
-                "Column": col,
-                "Original": orig_val if not pd.isna(orig_val) else "N/A",
-                "Current": edit_val if not pd.isna(edit_val) else "N/A"
-            })
+            changes.append(
+                {
+                    "Line": line_num,
+                    "Column": col,
+                    "Original": orig_val if not pd.isna(orig_val) else "N/A",
+                    "Current": edit_val if not pd.isna(edit_val) else "N/A",
+                }
+            )
 
-    return pd.DataFrame(changes) if changes else pd.DataFrame(
-        columns=["Line", "Column", "Original", "Current"]
+    return (
+        pd.DataFrame(changes)
+        if changes
+        else pd.DataFrame(columns=["Line", "Column", "Original", "Current"])
     )
 
 
@@ -155,15 +168,15 @@ def validate_bid_line_edits(df: pd.DataFrame) -> List[str]:
     # Check if DO + DD exceeds month (using config threshold)
     if ((df["DO"] + df["DD"]) > DO_PLUS_DD_MAX_DAYS).any():
         invalid_sum_lines = df[(df["DO"] + df["DD"]) > DO_PLUS_DD_MAX_DAYS]["Line"].tolist()
-        warnings.append(f"Lines where DO + DD > {DO_PLUS_DD_MAX_DAYS} (exceeds month): {invalid_sum_lines}")
+        warnings.append(
+            f"Lines where DO + DD > {DO_PLUS_DD_MAX_DAYS} (exceeds month): {invalid_sum_lines}"
+        )
 
     return warnings
 
 
 def render_change_summary(
-    original_df: pd.DataFrame,
-    edited_df: pd.DataFrame,
-    show_validation: bool = True
+    original_df: pd.DataFrame, edited_df: pd.DataFrame, show_validation: bool = True
 ) -> int:
     """Render summary of changes with expandable details and validation warnings.
 
@@ -200,9 +213,7 @@ def render_change_summary(
 
 
 def render_reset_button(
-    session_state_key_edited: str,
-    session_state_key_original: str,
-    button_key: str = "reset_edits"
+    session_state_key_edited: str, session_state_key_original: str, button_key: str = "reset_edits"
 ) -> None:
     """Render a button to reset edited data to original.
 
@@ -213,9 +224,9 @@ def render_reset_button(
     """
     if st.button("🔄 Reset to Original Data", key=button_key):
         if session_state_key_original in st.session_state:
-            st.session_state[session_state_key_edited] = (
-                st.session_state[session_state_key_original].copy()
-            )
+            st.session_state[session_state_key_edited] = st.session_state[
+                session_state_key_original
+            ].copy()
             st.rerun()
 
 
@@ -231,9 +242,7 @@ def render_editor_header(show_all_data: bool = True) -> None:
 
 
 def render_filter_status_message(
-    df_all: pd.DataFrame,
-    df_filtered: pd.DataFrame,
-    filters_active: bool
+    df_all: pd.DataFrame, df_filtered: pd.DataFrame, filters_active: bool
 ) -> None:
     """Render informational message about filter status.
 
