@@ -17,6 +17,7 @@ from auth import init_auth, login_page, show_user_info
 from database import get_supabase_client
 from ui_modules import (
     render_bid_line_analyzer,
+    render_database_explorer,
     render_edw_analyzer,
     render_historical_trends,
 )
@@ -62,8 +63,13 @@ def main():
     st.caption("Comprehensive analysis tool for airline bid packets and pairings")
 
     # Create main tabs
-    tab1, tab2, tab3 = st.tabs(
-        ["📊 EDW Pairing Analyzer", "📋 Bid Line Analyzer", "📈 Historical Trends"]
+    tab1, tab2, tab3, tab4 = st.tabs(
+        [
+            "📊 EDW Pairing Analyzer",
+            "📋 Bid Line Analyzer",
+            "🔍 Database Explorer",
+            "📈 Historical Trends",
+        ]
     )
 
     with tab1:
@@ -73,6 +79,9 @@ def main():
         render_bid_line_analyzer()
 
     with tab3:
+        render_database_explorer()
+
+    with tab4:
         render_historical_trends()
 
 

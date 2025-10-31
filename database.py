@@ -552,9 +552,18 @@ def save_pairings(bid_period_id: str, pairings_df: pd.DataFrame) -> int:
     # Convert to list of dicts
     records = pairings_df.to_dict("records")
 
-    # Add bid_period_id to each record
+    # Get current user ID for audit fields
+    user_id = None
+    if hasattr(st, "session_state") and "user" in st.session_state:
+        user = st.session_state["user"]
+        user_id = user.id if hasattr(user, "id") else None
+
+    # Add bid_period_id and audit fields to each record
     for record in records:
         record["bid_period_id"] = bid_period_id
+        if user_id:
+            record["created_by"] = user_id
+            record["updated_by"] = user_id
 
     # Bulk insert with batching
     BATCH_SIZE = 1000
@@ -679,9 +688,18 @@ def save_bid_lines(bid_period_id: str, bid_lines_df: pd.DataFrame) -> int:
     # Convert to list of dicts
     records = bid_lines_df.to_dict("records")
 
-    # Add bid_period_id to each record
+    # Get current user ID for audit fields
+    user_id = None
+    if hasattr(st, "session_state") and "user" in st.session_state:
+        user = st.session_state["user"]
+        user_id = user.id if hasattr(user, "id") else None
+
+    # Add bid_period_id and audit fields to each record
     for record in records:
         record["bid_period_id"] = bid_period_id
+        if user_id:
+            record["created_by"] = user_id
+            record["updated_by"] = user_id
 
     # Bulk insert with batching
     BATCH_SIZE = 1000

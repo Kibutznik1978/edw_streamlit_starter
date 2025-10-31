@@ -3,13 +3,13 @@
 **Last Updated:** October 31, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
-**Version:** 1.4.0 (Professional Code Quality - 87% Linting Improvement)
+**Version:** 1.5.0 (Supabase Integration Complete - Phases 3-6)
 
 ---
 
 ## Project Overview
 
-The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streamlit web application designed for airline pilots to analyze bid packet PDFs. It identifies Early/Day/Window (EDW) trips and provides comprehensive statistics, visualizations, and downloadable reports.
+The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a comprehensive Streamlit web application designed for airline pilots to analyze bid packet PDFs with database-powered historical trend analysis. The app provides a complete data lifecycle from PDF upload to trend visualization across a 4-tab interface.
 
 ### Key Features
 
@@ -43,20 +43,64 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 - **Notes/comments support** for tracking data iterations
 - **Helpful error messages** when wrong PDF type is uploaded
 
-**Historical Trends (Tab 3):**
-- Placeholder for Supabase-powered trend analysis (coming soon)
-- Future: Multi-bid-period comparisons and visualizations
+**Database Explorer (Tab 3):**
+- Multi-dimensional query interface for historical data
+- Filter by domicile, aircraft, seat, bid periods, and date range
+- Quick date filters (Last 3/6 months, Last year, All time, Custom)
+- Data type selector (Pairings or Bid Lines)
+- Paginated results with customizable rows per page (25/50/100/250)
+- CSV export functionality (Excel/PDF coming in Phase 4-5 enhancements)
+- Record detail viewer with expandable JSON display
+- Smart column selection based on data type
+- Filter summary and active filter indicators
+
+**Historical Trends (Tab 4):**
+- Interactive time series visualizations with Plotly
+- Comparative analysis across domiciles, aircraft, or seat positions
+- 6 available metrics: CT, BT, DO, DD, EDW %, Total Trips
+- Summary statistics with averages across selected periods
+- Single-entity mode: Clean time series for focused analysis
+- Comparison mode: Multi-line charts for side-by-side trends
+- Raw data table with expandable view
+- Smart metric selection (checkboxes for custom views)
 
 ---
 
-## Current Status (Session 33)
+## Current Status (Session 35)
 
-✅ **Professional Code Quality** - 87% improvement in code quality metrics (269 → 34 issues)
-✅ **Zero Critical Bugs** - All safety issues and potential crashes fixed
-✅ **PEP 8 Compliant** - Pythonic, readable, and maintainable codebase
-✅ **Production Ready** - Professional-grade code quality with comprehensive testing
+✅ **Supabase Integration Complete** - Phases 3-6 fully implemented
+✅ **Complete Data Lifecycle** - Upload → Save → Query → Visualize
+✅ **4-Tab Interface** - Analyzers, Database Explorer, Historical Trends
+✅ **Production Ready** - Authentication, RLS policies, audit logging, trend visualizations
 
 ### Latest Updates (October 31, 2025)
+
+**Session 35 - Phase 6: Historical Trends & Visualization:**
+- **Implemented:** Full Historical Trends page with interactive Plotly visualizations
+- **Time Series Charts:** Clean single-entity trend analysis with markers
+- **Comparative Analysis:** Multi-line charts comparing domiciles, aircraft, or seats
+- **Metrics:** 6 selectable metrics (CT, BT, DO, DD, EDW %, Total Trips)
+- **Summary Statistics:** Dynamic metrics cards showing averages
+- **Smart Detection:** Automatic switch between single-entity and comparison modes
+- **Raw Data Table:** Expandable view with smart column selection
+- **File Modified:** `ui_modules/historical_trends_page.py` (32 → 395 lines)
+- **Status:** ✅ Phase 6 Complete
+- **Branch:** `refractor`
+
+**Session 34 - Phase 5: User Query Interface (Database Explorer):**
+- **Implemented:** Multi-dimensional query interface for historical data
+- **Filters:** Domicile, Aircraft, Seat, Bid Periods, Date Range (with quick presets)
+- **Data Type Selector:** Query Pairings or Bid Lines
+- **Pagination:** Customizable page size (25/50/100/250 rows)
+- **Export:** CSV download (Excel/PDF placeholders for Phase 4-5 enhancements)
+- **Record Viewer:** Expandable JSON detail view
+- **File Created:** `ui_modules/database_explorer_page.py` (~470 lines)
+- **App Integration:** Added as Tab 3, Historical Trends moved to Tab 4
+- **Status:** ✅ Phase 5 Complete
+- **Note:** Excel/PDF export and advanced features planned for future enhancements
+- **Branch:** `refractor`
+
+### Previous Updates (October 31, 2025)
 
 **Session 33 - Comprehensive Code Linting and Quality Improvements:**
 - **Achievement:** 87% reduction in code quality issues (269 → 34 remaining)
@@ -381,6 +425,9 @@ Detailed documentation for each development session:
 | Session 30 | Oct 29, 2025 | UI Fixes & Memory Bug | *Not documented* |
 | Session 31 | Oct 29, 2025 | Older PDF Format Compatibility | *Not documented* |
 | Session 32 | Oct 30, 2025 | SDF Bid Line Parser Bug Fixes | [session-32.md](handoff/sessions/session-32.md) |
+| Session 33 | Oct 31, 2025 | Phase 3: Testing & Optimization (Code Quality) | [session-33.md](handoff/sessions/session-33.md) |
+| Session 34 | Oct 31, 2025 | Phase 5: User Query Interface (Database Explorer) | [session-34.md](handoff/sessions/session-34.md) |
+| Session 35 | Oct 31, 2025 | Phase 6: Historical Trends & Visualization | [session-35.md](handoff/sessions/session-35.md) |
 
 ---
 

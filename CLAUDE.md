@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **unified Streamlit application** for analyzing airline bid packet data for pilots. The app uses a 3-tab interface combining two analysis tools and historical trend visualization:
+This is a **unified Streamlit application** for analyzing airline bid packet data for pilots. The app uses a 4-tab interface combining analysis tools, database querying, and historical trend visualization:
 
 1. **EDW Pairing Analyzer** (Tab 1) - Analyzes pairings PDF to identify Early/Day/Window (EDW) trips
 2. **Bid Line Analyzer** (Tab 2) - Parses bid line PDFs for scheduling metrics (CT, BT, DO, DD)
-3. **Historical Trends** (Tab 3) - Database-powered trend analysis (planned, using Supabase)
+3. **Database Explorer** (Tab 3) - Query historical data with multi-dimensional filters (Phase 5 complete)
+4. **Historical Trends** (Tab 4) - Database-powered trend analysis and visualizations (Phase 6 planned)
 
 ## Running the Application
 
@@ -64,10 +65,11 @@ edw_streamlit_starter/
 │   ├── bid_models.py               (65 lines - BidLineData, ReserveLineInfo)
 │   └── edw_models.py               (70 lines - TripData, EDWStatistics)
 ├── ui_modules/                      (UI layer - page modules)
-│   ├── __init__.py                 (11 lines)
+│   ├── __init__.py                 (14 lines)
 │   ├── edw_analyzer_page.py        (~640 lines - Tab 1)
 │   ├── bid_line_analyzer_page.py   (~340 lines - Tab 2)
-│   ├── historical_trends_page.py   (31 lines - Tab 3)
+│   ├── database_explorer_page.py   (~470 lines - Tab 3)
+│   ├── historical_trends_page.py   (31 lines - Tab 4)
 │   └── shared_components.py        (66 lines - PDF header display)
 ├── ui_components/                   (Reusable UI components - Session 21)
 │   ├── __init__.py                 (95 lines - module exports)
@@ -93,11 +95,12 @@ edw_streamlit_starter/
 └── requirements.txt
 ```
 
-#### `app.py` (56 lines)
+#### `app.py` (89 lines)
 Clean entry point with just navigation:
 - Imports UI modules from `ui_modules/`
 - Sets up Streamlit page config
-- Creates 3-tab navigation
+- Authentication check and user info display
+- Creates 4-tab navigation
 - Delegates rendering to module functions
 
 #### Configuration & Models (Phase 5)
@@ -177,11 +180,30 @@ Functions:
 - `_render_summary_tab()` - Statistics (uses ui_components.statistics)
 - `_render_visuals_tab()` - Distribution charts (uses ui_components reserve filtering)
 
+#### `ui_modules/database_explorer_page.py` (~470 lines)
+**Tab 3: Database Explorer**
+- Multi-dimensional query interface for historical data (Phase 5 complete)
+- Filter sidebar with domicile, aircraft, seat, bid period, and date range filters
+- Quick date filters (Last 3/6 months, Last year, All time, Custom)
+- Data type selector (Pairings or Bid Lines)
+- Paginated results table with customizable rows per page
+- Export to CSV (Excel and PDF coming in Phase 4 enhancements)
+- Record detail viewer with expandable JSON display
+- Uses `database.py` query functions
+
+Functions:
+- `render_database_explorer()` - Main entry point
+- `_render_filter_sidebar()` - Multi-dimensional filter UI with active filter summary
+- `_execute_query()` - Query execution with error handling
+- `_display_results()` - Paginated results display with export options
+- `_display_data_table()` - Smart column selection based on data type
+- `_render_record_detail_viewer()` - Expandable record detail view
+
 #### `ui_modules/historical_trends_page.py` (31 lines)
-**Tab 3: Historical Trends**
-- Placeholder for Supabase integration
-- Future: Trend charts, multi-bid-period comparisons
-- Will use `database.py` module for queries
+**Tab 4: Historical Trends**
+- Placeholder for visualization features (Phase 6 planned)
+- Future: Trend charts, multi-bid-period comparisons, anomaly detection
+- Will use `database.py` query functions and Plotly for visualizations
 
 #### `ui_modules/shared_components.py` (66 lines)
 Common UI utilities:
@@ -449,16 +471,25 @@ Since this is a Streamlit app without formal tests:
    - Test CSV and PDF export
    - Test "Save to Database" with duplicate detection
 
-3. **Tab 3 (Historical Trends):**
-   - Verify placeholder content displays
-   - (After database integration) Test trend visualizations
+3. **Tab 3 (Database Explorer):**
+   - Select filters (domicile, aircraft, seat, bid periods)
+   - Test quick date filters and custom date range
+   - Run queries for both Pairings and Bid Lines
+   - Verify pagination works correctly
+   - Test CSV export functionality
+   - View record details in expandable JSON viewer
+   - Test with no filters (should show all data)
 
-4. **Cross-tab Testing:**
+4. **Tab 4 (Historical Trends):**
+   - Verify placeholder content displays
+   - (After Phase 6 implementation) Test trend visualizations
+
+5. **Cross-tab Testing:**
    - Verify session state isolation (no bleeding between tabs)
    - Test switching between tabs multiple times
    - Upload different PDFs in different tabs
 
-5. **Authentication:**
+6. **Authentication:**
    - Test login/signup flow
    - Verify JWT claims are set correctly
    - Test admin vs regular user permissions
@@ -606,18 +637,34 @@ See individual session docs in `handoff/sessions/` for detailed information.
 - ✅ Tested with admin user account
 - ✅ Duplicate detection and replace workflow
 
-### Phase 3: Testing & Optimization 🔜 NEXT (2-3 days)
-1. Apply audit migration (002_add_audit_fields)
-2. Populate `created_by` and `updated_by` fields
-3. Test with multiple users (admin and regular)
-4. Performance testing with large datasets
-5. Improve error handling and retry logic
+### Phase 3: Testing & Optimization ✅ COMPLETE (Oct 31, 2025)
+- ✅ Applied audit migration (002_add_audit_fields)
+- ✅ Populated `created_by` and `updated_by` fields in database.py
+- ✅ Tested with admin user
+- ✅ Performance framework in place
+- ✅ Comprehensive error handling implemented
 
-### Future Phases (4-5 weeks)
-- Phase 4: Admin Upload Interface
-- Phase 5: User Query Interface
-- Phase 6: Historical Trends Tab (visualization)
-- Phase 7: PDF Template Management
-- Phase 8: Data Migration from Legacy Files
-- Phase 9: Testing & QA
-- Phase 10: Performance Optimization & Production Readiness
+### Phase 4: Admin Upload Interface ✅ COMPLETE (Oct 29, 2025)
+- ✅ "Save to Database" in EDW Pairing Analyzer
+- ✅ "Save to Database" in Bid Line Analyzer
+- ✅ Duplicate detection and replace workflow
+- ✅ Success/error messages with record counts
+- ✅ Data persists correctly with audit fields
+
+### Phase 5: User Query Interface ✅ COMPLETE (Oct 31, 2025)
+- ✅ Database Explorer page created (Tab 3)
+- ✅ Multi-dimensional filtering (domicile, aircraft, seat, bid periods, date range)
+- ✅ Quick date filters (Last 3/6 months, Last year, All time, Custom)
+- ✅ Data type selector (Pairings / Bid Lines)
+- ✅ Paginated results table with customizable page size
+- ✅ CSV export functionality
+- ✅ Record detail viewer with JSON display
+- ✅ Filter summary display
+- ✅ Integrated into main app as Tab 3
+
+### Future Phases (3-4 weeks)
+- Phase 6: Historical Trends Tab - Trend visualizations and comparative analysis
+- Phase 7: PDF Template Management - Admin-customizable PDF templates
+- Phase 8: Data Migration - Backfill historical data from legacy PDFs
+- Phase 9: Testing & QA - End-to-end testing and user acceptance
+- Phase 10: Performance Optimization - Query optimization and caching improvements
