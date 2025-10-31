@@ -213,7 +213,7 @@ def _save_edw_to_database(result_data: Dict, supabase):
                     day=1
                 ) - pd.Timedelta(days=1)
                 end_date = end_date.date()
-        except:
+        except Exception:
             # Default to current month if parsing fails
             today = datetime.now()
             start_date = today.replace(day=1).date()

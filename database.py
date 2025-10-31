@@ -133,7 +133,12 @@ def debug_jwt_claims() -> Dict[str, Any]:
 
     import jwt
 
-    result = {"has_session": False, "has_access_token": False, "claims": None, "error": None}
+    result: Dict[str, Any] = {
+        "has_session": False,
+        "has_access_token": False,
+        "claims": None,
+        "error": None,
+    }
 
     try:
         if hasattr(st, "session_state") and "supabase_session" in st.session_state:

@@ -858,6 +858,11 @@ def parse_trip_for_table(trip_text, is_edw_func):
             is_single_line = False
             has_day_pattern = re.match(r"^\d+\s+\(", line)
 
+            # Initialize multi-line format variables (used only if not single-line)
+            day_info = None
+            flight_num = ""
+            data_start_offset = 0
+
             # Check if this is single-line format (all data on one line)
             if has_day_pattern and re.search(r"(UPS|GT|DH)", line, re.IGNORECASE):
                 # Single-line format: "1 (Su)Su UPS5969 ONT-SDF (06)14:30 ..."
