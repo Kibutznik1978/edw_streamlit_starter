@@ -1,6 +1,6 @@
 """Reusable data editor components with validation and change tracking."""
 
-from typing import Dict, List, Optional
+from typing import List
 
 import pandas as pd
 import streamlit as st

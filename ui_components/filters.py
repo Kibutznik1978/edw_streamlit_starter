@@ -1,6 +1,6 @@
 """Reusable filter components for Streamlit UI."""
 
-from typing import Any, Dict, Tuple
+from typing import Dict, Tuple
 
 import pandas as pd
 import streamlit as st

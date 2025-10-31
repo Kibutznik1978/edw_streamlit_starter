@@ -13,7 +13,7 @@ Creates professional 3-page PDF reports with:
 import math
 import os
 import tempfile
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 from reportlab.lib import colors

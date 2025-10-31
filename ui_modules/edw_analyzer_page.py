@@ -1,6 +1,5 @@
 """EDW Pairing Analyzer page (Tab 1)."""
 
-import io
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -171,7 +170,6 @@ def _render_save_to_database_button():
         return
 
     result_data = st.session_state.edw_results
-    header = result_data["header_info"]
 
     st.divider()
 

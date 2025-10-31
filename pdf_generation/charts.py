@@ -8,7 +8,6 @@ Contains:
 - Bid line-specific charts (distributions, buy-up analysis)
 """
 
-import math
 import tempfile
 from typing import Dict, List, Optional
 

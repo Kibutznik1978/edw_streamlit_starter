@@ -1,7 +1,7 @@
 """Reusable export and download components."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import pandas as pd
 import streamlit as st

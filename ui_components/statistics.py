@@ -1,6 +1,6 @@
 """Reusable statistics and metrics display components."""
 
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Optional, Set, Tuple
 
 import pandas as pd
 import streamlit as st

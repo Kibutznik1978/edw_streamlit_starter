@@ -37,7 +37,6 @@ from .base import (
     draw_header,
     hex_to_reportlab_color,
     make_kpi_row,
-    make_styled_table,
 )
 from .charts import (
     save_duty_day_grouped_bar_chart,

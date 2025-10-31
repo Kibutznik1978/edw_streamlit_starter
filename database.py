@@ -129,8 +129,6 @@ def debug_jwt_claims() -> Dict[str, Any]:
     Returns:
         Dictionary with JWT claims and debug info
     """
-    import json
-
     import jwt
 
     result: Dict[str, Any] = {

@@ -1,6 +1,6 @@
 """Shared UI components used across multiple pages."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import streamlit as st
 
