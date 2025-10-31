@@ -1,9 +1,9 @@
 # EDW Pairing Analyzer - Handoff Document
 
-**Last Updated:** October 27, 2025
+**Last Updated:** October 30, 2025
 **Project:** EDW Streamlit Starter
 **Repository:** https://github.com/Kibutznik1978/edw_streamlit_starter
-**Version:** 1.3 (Production Ready - Fully Refactored)
+**Version:** 1.3.1 (Production Ready - Parser Bug Fixes)
 
 ---
 
@@ -49,13 +49,32 @@ The **Pairing Analyzer Tool 1.0** (formerly "EDW Pairing Analyzer") is a Streaml
 
 ---
 
-## Current Status (Session 25)
+## Current Status (Session 32)
 
-✅ **Phase 6 Cleanup Complete** - Removed obsolete files and finalized modularization
+✅ **Critical Parser Bug Fixes** - Fixed reserve line detection and exclusion logic
+✅ **Reserve Lines Properly Excluded** - Reserve lines no longer included in average calculations
 ✅ **All 6 Refactoring Phases Complete** - Codebase fully optimized and production-ready!
-✅ **Pay Period Distribution Breakdown** - Added comprehensive per-period analysis for all metrics
 
-### Latest Updates (October 27, 2025)
+### Latest Updates (October 30, 2025)
+
+**Session 32 - SDF Bid Line Parser Bug Fixes:**
+- **Fixed:** Boolean logic bug in `_detect_reserve_line()` causing `None` values
+  - Changed: `(ct_zero and dd_fourteen)` → `bool(ct_zero and dd_fourteen)`
+  - Impact: All lines were incorrectly returning `is_reserve = None` instead of `True`/`False`
+- **Fixed:** Reserve lines included in main DataFrame (skewing averages)
+  - Added exclusion logic similar to VTO line handling
+  - Reserve lines now tracked in diagnostics only, excluded from averages
+- **Fixed:** VTO lines misclassified as reserve lines (both have CT:0, BT:0, DD:14)
+  - Added early return in `_detect_reserve_line()` to check VTO pattern first
+- **Fixed:** Reserve line tracking lost after exclusion
+  - Moved reserve detection before empty record check in `_parse_line_blocks()`
+- **Testing:** Comprehensive test suite created (7 test scripts)
+  - SDF Bid2601: 258 regular lines, 38 reserve lines, 83 VTO lines (all correct)
+- **Files Modified:** `bid_parser.py` (5 changes across 4 locations)
+- **Documentation:** Created `EXCLUSION_LOGIC.md` explaining how exclusion works
+- **Branch:** `refractor`
+
+### Previous Updates (October 27, 2025)
 
 **Session 25 - Pay Period Distribution Breakdown:**
 - **Added:** Pay period breakdown functionality to Bid Line Analyzer
@@ -329,6 +348,14 @@ Detailed documentation for each development session:
 | Session 22 | Oct 27, 2025 | Distribution Chart Fixes | [session-22.md](handoff/sessions/session-22.md) |
 | Session 23 | Oct 27, 2025 | Phase 5: Configuration & Models Extraction | [session-23.md](handoff/sessions/session-23.md) |
 | Session 24 | Oct 27, 2025 | Phase 6: Codebase Cleanup & Distribution Chart Bug Fixes | [session-24.md](handoff/sessions/session-24.md) |
+| Session 25 | Oct 27, 2025 | Pay Period Distribution Breakdown | *Not documented* |
+| Session 26 | Oct 29, 2025 | Database Schema Deployment | *Not documented* |
+| Session 27 | Oct 29, 2025 | Supabase Integration Phase 1 | *Not documented* |
+| Session 28 | Oct 29, 2025 | Authentication & Database Save | *Not documented* |
+| Session 29 | Oct 29, 2025 | Duplicate Trip Parsing Fix | *Not documented* |
+| Session 30 | Oct 29, 2025 | UI Fixes & Memory Bug | *Not documented* |
+| Session 31 | Oct 29, 2025 | Older PDF Format Compatibility | *Not documented* |
+| Session 32 | Oct 30, 2025 | SDF Bid Line Parser Bug Fixes | [session-32.md](handoff/sessions/session-32.md) |
 
 ---
 

@@ -512,6 +512,23 @@ The Bid Line Analyzer supports inline data editing to fix missing or incorrect p
 
 ### Latest Sessions (Detailed)
 
+**Session 32 (October 30, 2025) - SDF Bid Line Parser Bug Fixes:**
+- **Fixed:** Critical boolean logic bug in reserve line detection
+  - `_detect_reserve_line()` was returning `None` instead of `False` for regular lines
+  - Root cause: `(ct_zero and dd_fourteen)` evaluated to `None` when ct_zero was `None`
+  - Solution: Wrapped expressions in `bool()` to prevent None propagation
+- **Fixed:** Reserve lines included in main DataFrame (skewing averages)
+  - Added exclusion logic in both pay period and fallback parsing paths
+  - Reserve lines now tracked in diagnostics only, not in main data
+  - Impact: SDF Bid2601 now shows 258 regular lines (was 296 with reserves)
+- **Fixed:** VTO lines misclassified as reserve lines
+  - Added early VTO check in `_detect_reserve_line()` to prevent false positives
+  - Both VTO and reserve lines have CT:0, BT:0, DD:14 patterns
+- **Implementation:** Modified 4 locations in `bid_parser.py`
+- **Testing:** Created comprehensive test suite (7 scripts), all passing
+- **Documentation:** Created `EXCLUSION_LOGIC.md` explaining reserve/VTO exclusion
+- See `handoff/sessions/session-32.md` for detailed analysis
+
 **Session 31 (October 29, 2025) - Older PDF Format Compatibility & Trip Summary Parsing:**
 - **Fixed:** Debriefing time parsing for older PDFs without "Briefing/Debriefing" labels
 - **Fixed:** Premium and Per Diem fields missing from trip summary display

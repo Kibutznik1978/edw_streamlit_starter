@@ -254,6 +254,10 @@ def _detect_reserve_line(block: str) -> Tuple[bool, bool, int, int]:
     Returns:
         Tuple of (is_reserve, is_hot_standby, captain_slots, fo_slots)
     """
+    # VTO lines are NOT reserve lines - check this first
+    if _VTO_PATTERN_RE.search(block):
+        return False, False, 0, 0
+
     # Check for Hot Standby patterns first (HSBY, HOT STANDBY, etc.)
     is_hot_standby = bool(_HOT_STANDBY_RE.search(block))
 
@@ -273,7 +277,8 @@ def _detect_reserve_line(block: str) -> Tuple[bool, bool, int, int]:
     has_zero_credit_block = bool(ct_zero and bt_zero)
 
     # Also consider DD:14 even if CT/BT aren't explicitly zero (might be malformed)
-    has_reserve_metrics = has_zero_credit_block or (ct_zero and dd_fourteen) or (bt_zero and dd_fourteen)
+    # Use bool() to prevent None propagation in boolean expressions
+    has_reserve_metrics = has_zero_credit_block or bool(ct_zero and dd_fourteen) or bool(bt_zero and dd_fourteen)
 
     is_reserve = has_reserve_days or has_shiftable_reserve or has_reserve_metrics
 
@@ -408,12 +413,14 @@ def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[Li
     merged_segments = _merge_headerless_segments(segments[1:])
 
     for block in merged_segments:
-        block_records, block_warnings = _parse_block_text(block, page_number)
-        if block_records:
-            records.extend(block_records)
+        # First, try to extract line number from block (needed for reserve tracking)
+        header_match = _BLOCK_HEADER_RE.search(block)
 
-            # Detect reserve line status for this block
-            line_id = block_records[0]["Line"]  # All records in block have same line ID
+        block_records, block_warnings = _parse_block_text(block, page_number)
+
+        # Track reserve line status even if records are empty (excluded reserve lines)
+        if header_match:
+            line_id = int(header_match.group("line"))
             is_reserve, is_hot_standby, captain_slots, fo_slots = _detect_reserve_line(block)
             reserve_info.append({
                 "Line": line_id,
@@ -422,6 +429,10 @@ def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[Li
                 "CaptainSlots": captain_slots,
                 "FOSlots": fo_slots,
             })
+
+        if block_records:
+            records.extend(block_records)
+
         warnings.extend(block_warnings)
 
     return records, warnings, reserve_info
@@ -527,6 +538,11 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
             # This is a VTO line but not split (both periods are VTO) - skip it
             return [], []
         else:
+            # Check if this is a reserve line - skip it (reserve lines tracked in diagnostics only)
+            is_reserve, _, _, _ = _detect_reserve_line(block)
+            if is_reserve:
+                return [], []
+
             # Regular line with no VTO
             for record in period_records:
                 record["VTOType"] = None
@@ -539,17 +555,15 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
     if _VTO_PATTERN_RE.search(block):
         return [], []
 
+    # Skip reserve lines in fallback (reserve lines tracked in diagnostics only)
+    is_reserve, _, _, _ = _detect_reserve_line(block)
+    if is_reserve:
+        return [], []
+
     ct_value = _extract_time_field(block, "CT")
     bt_value = _extract_time_field(block, "BT")
     do_value = _extract_int_field(block, "DO")
     dd_value = _extract_int_field(block, "DD")
-
-    # Check if this is a reserve line (CT=0, BT=0, or has reserve indicators)
-    is_reserve, _, _, _ = _detect_reserve_line(block)
-
-    # For reserve lines, DO (Days Off) might be missing - that's okay, default to 0
-    if is_reserve and do_value is None:
-        do_value = 0
 
     fields_missing = [label for label, value in [("CT", ct_value), ("BT", bt_value), ("DO", do_value), ("DD", dd_value)] if value is None]
     if fields_missing:
