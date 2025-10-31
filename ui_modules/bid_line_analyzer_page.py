@@ -495,13 +495,11 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         reserve_df = diagnostics.reserve_lines
         if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
             # Regular reserve lines (not HSBY): exclude from everything
-            regular_reserve_mask = (reserve_df["IsReserve"] == True) & (
-                reserve_df["IsHotStandby"] == False
-            )
+            regular_reserve_mask = reserve_df["IsReserve"] & ~reserve_df["IsHotStandby"]
             reserve_line_numbers = set(reserve_df[regular_reserve_mask]["Line"].tolist())
 
             # HSBY lines: exclude only from BT
-            hsby_mask = reserve_df["IsHotStandby"] == True
+            hsby_mask = reserve_df["IsHotStandby"]
             hsby_line_numbers = set(reserve_df[hsby_mask]["Line"].tolist())
 
     # For CT, DO, DD: exclude regular reserve (keep HSBY)
@@ -640,8 +638,8 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         reserve_df = diagnostics.reserve_lines
         # Filter to only show reserve lines in the filtered dataset
         reserve_in_view = reserve_df[reserve_df["Line"].isin(filtered_df["Line"])]
-        # Only show actual reserve lines (IsReserve == True)
-        reserve_in_view = reserve_in_view[reserve_in_view["IsReserve"] == True]
+        # Only show actual reserve lines (IsReserve is True)
+        reserve_in_view = reserve_in_view[reserve_in_view["IsReserve"]]
 
         if not reserve_in_view.empty:
             total_reserve = len(reserve_in_view)
@@ -749,12 +747,10 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     if diagnostics and diagnostics.reserve_lines is not None:
         reserve_df = diagnostics.reserve_lines
         if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
-            regular_reserve_mask = (reserve_df["IsReserve"] == True) & (
-                reserve_df["IsHotStandby"] == False
-            )
+            regular_reserve_mask = reserve_df["IsReserve"] & ~reserve_df["IsHotStandby"]
             reserve_line_numbers = set(reserve_df[regular_reserve_mask]["Line"].tolist())
 
-            hsby_mask = reserve_df["IsHotStandby"] == True
+            hsby_mask = reserve_df["IsHotStandby"]
             hsby_line_numbers = set(reserve_df[hsby_mask]["Line"].tolist())
 
     # For CT, DO, DD: exclude regular reserve (keep HSBY)

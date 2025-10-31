@@ -22,13 +22,11 @@ def extract_reserve_line_numbers(diagnostics) -> Tuple[Set[int], Set[int]]:
         reserve_df = diagnostics.reserve_lines
         if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
             # Regular reserve lines (not HSBY): exclude from everything
-            regular_reserve_mask = (reserve_df["IsReserve"] == True) & (
-                reserve_df["IsHotStandby"] == False
-            )
+            regular_reserve_mask = reserve_df["IsReserve"] & ~reserve_df["IsHotStandby"]
             reserve_line_numbers = set(reserve_df[regular_reserve_mask]["Line"].tolist())
 
             # HSBY lines: exclude only from BT
-            hsby_mask = reserve_df["IsHotStandby"] == True
+            hsby_mask = reserve_df["IsHotStandby"]
             hsby_line_numbers = set(reserve_df[hsby_mask]["Line"].tolist())
 
     return reserve_line_numbers, hsby_line_numbers
@@ -216,10 +214,8 @@ def render_reserve_summary(
 
     # Count by type
     if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
-        regular_reserve = reserve_df[
-            (reserve_df["IsReserve"] == True) & (reserve_df["IsHotStandby"] == False)
-        ]
-        hsby = reserve_df[reserve_df["IsHotStandby"] == True]
+        regular_reserve = reserve_df[reserve_df["IsReserve"] & ~reserve_df["IsHotStandby"]]
+        hsby = reserve_df[reserve_df["IsHotStandby"]]
 
         col1, col2 = st.columns(2)
 

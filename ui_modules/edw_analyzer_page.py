@@ -582,9 +582,9 @@ def display_edw_results(result_data: Dict):
             # Check EDW status
             edw_ok = True
             if duty_day_edw_filter == "EDW Only":
-                edw_ok = duty_day.get("is_edw", False) == True
+                edw_ok = duty_day.get("is_edw", False)
             elif duty_day_edw_filter == "Non-EDW Only":
-                edw_ok = duty_day.get("is_edw", False) == False
+                edw_ok = not duty_day.get("is_edw", False)
             # "Any" means no EDW filter, edw_ok stays True
 
             return duration_ok and legs_ok and edw_ok
@@ -606,15 +606,15 @@ def display_edw_results(result_data: Dict):
 
     # Filter by EDW status
     if filter_edw == "EDW Only":
-        filtered_df = filtered_df[filtered_df["EDW"] == True]
+        filtered_df = filtered_df[filtered_df["EDW"]]
     elif filter_edw == "Day Only":
-        filtered_df = filtered_df[filtered_df["EDW"] == False]
+        filtered_df = filtered_df[~filtered_df["EDW"]]
 
     # Filter by Hot Standby status
     if filter_hs == "Hot Standby Only":
-        filtered_df = filtered_df[filtered_df["Hot Standby"] == True]
+        filtered_df = filtered_df[filtered_df["Hot Standby"]]
     elif filter_hs == "Exclude Hot Standby":
-        filtered_df = filtered_df[filtered_df["Hot Standby"] == False]
+        filtered_df = filtered_df[~filtered_df["Hot Standby"]]
 
     # Sort
     filtered_df = filtered_df.sort_values(

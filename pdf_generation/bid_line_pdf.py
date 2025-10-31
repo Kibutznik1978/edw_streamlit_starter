@@ -158,13 +158,11 @@ def create_bid_line_pdf_report(
     if reserve_lines is not None and not reserve_lines.empty:
         if "IsReserve" in reserve_lines.columns and "IsHotStandby" in reserve_lines.columns:
             # Regular reserve lines (not HSBY): exclude from everything
-            regular_reserve_mask = (reserve_lines["IsReserve"] == True) & (
-                reserve_lines["IsHotStandby"] == False
-            )
+            regular_reserve_mask = reserve_lines["IsReserve"] & ~reserve_lines["IsHotStandby"]
             reserve_line_numbers = set(reserve_lines[regular_reserve_mask]["Line"].tolist())
 
             # HSBY lines: exclude only from BT
-            hsby_mask = reserve_lines["IsHotStandby"] == True
+            hsby_mask = reserve_lines["IsHotStandby"]
             hsby_line_numbers = set(reserve_lines[hsby_mask]["Line"].tolist())
 
     # Filter dataframes
@@ -422,7 +420,7 @@ def create_bid_line_pdf_report(
         # Reserve Line Statistics
         if reserve_lines is not None and not reserve_lines.empty:
             reserve_subset = reserve_lines[reserve_lines["Line"].isin(df["Line"])].copy()
-            reserve_subset = reserve_subset[reserve_subset["IsReserve"] == True]
+            reserve_subset = reserve_subset[reserve_subset["IsReserve"]]
 
             if not reserve_subset.empty:
                 story.append(Paragraph("Reserve Lines Analysis", heading2_style))
