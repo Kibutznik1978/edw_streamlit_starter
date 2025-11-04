@@ -18,6 +18,97 @@ from ui_components import render_csv_download, render_no_results_state, render_i
 
 
 # ==============================================================================
+# CACHED FUNCTIONS (Performance Optimization)
+# ==============================================================================
+
+
+@st.cache_data(ttl=60, show_spinner="Loading bid periods...")
+def _get_bid_periods_cached():
+    """
+    Get bid periods with 60-second cache.
+
+    This caches the bid periods list for 60 seconds to prevent redundant
+    database queries when rendering filters.
+
+    Returns:
+        DataFrame of bid periods
+    """
+    return get_bid_periods()
+
+
+@st.cache_data(ttl=30, show_spinner="Querying database...")
+def _query_pairings_cached(
+    domiciles: tuple,
+    aircraft: tuple,
+    seats: tuple,
+    periods: tuple,
+    start_date: str,
+    end_date: str,
+    limit: int
+):
+    """
+    Query pairings with 30-second cache.
+
+    Note: Using tuples for list arguments because lists aren't hashable
+    for caching. The cache expires after 30 seconds to ensure fresh data.
+
+    Returns:
+        Tuple of (DataFrame, total_count)
+    """
+    db_filters = {
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+    if domiciles:
+        db_filters["domiciles"] = list(domiciles)
+    if aircraft:
+        db_filters["aircraft"] = list(aircraft)
+    if seats:
+        db_filters["seats"] = list(seats)
+    if periods:
+        db_filters["periods"] = list(periods)
+
+    return query_pairings(db_filters, limit=limit)
+
+
+@st.cache_data(ttl=30, show_spinner="Querying database...")
+def _query_bid_lines_cached(
+    domiciles: tuple,
+    aircraft: tuple,
+    seats: tuple,
+    periods: tuple,
+    start_date: str,
+    end_date: str,
+    limit: int
+):
+    """
+    Query bid lines with 30-second cache.
+
+    Note: Using tuples for list arguments because lists aren't hashable
+    for caching. The cache expires after 30 seconds to ensure fresh data.
+
+    Returns:
+        Tuple of (DataFrame, total_count)
+    """
+    db_filters = {
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+    if domiciles:
+        db_filters["domiciles"] = list(domiciles)
+    if aircraft:
+        db_filters["aircraft"] = list(aircraft)
+    if seats:
+        db_filters["seats"] = list(seats)
+    if periods:
+        db_filters["periods"] = list(periods)
+
+    return query_bid_lines(db_filters, limit=limit)
+
+
+# ==============================================================================
 # MAIN RENDER FUNCTION
 # ==============================================================================
 
@@ -61,9 +152,9 @@ def render_database_explorer():
 
 def _render_inline_filters() -> Dict[str, Any]:
     """Render inline filter controls and return selected filter values."""
-    # Get available bid periods for filter options
+    # Get available bid periods for filter options (CACHED - 60 second TTL)
     try:
-        bid_periods_df = get_bid_periods()
+        bid_periods_df = _get_bid_periods_cached()
 
         if bid_periods_df.empty:
             st.warning(
@@ -238,29 +329,26 @@ def _render_inline_filters() -> Dict[str, Any]:
 
 
 def _execute_query(filters: Dict[str, Any]) -> Optional[pd.DataFrame]:
-    """Execute query based on selected filters."""
+    """Execute query based on selected filters (with caching for performance)."""
     try:
-        # Build query filters for database functions
-        db_filters = {}
+        # Convert lists to tuples for caching (lists aren't hashable)
+        domiciles = tuple(filters.get("domiciles", []))
+        aircraft = tuple(filters.get("aircraft", []))
+        seats = tuple(filters.get("seats", []))
+        periods = tuple(filters.get("periods", []))
+        start_date = str(filters["start_date"])
+        end_date = str(filters["end_date"])
+        limit = filters["limit"]
 
-        if filters.get("domiciles"):
-            db_filters["domiciles"] = filters["domiciles"]
-        if filters.get("aircraft"):
-            db_filters["aircraft"] = filters["aircraft"]
-        if filters.get("seats"):
-            db_filters["seats"] = filters["seats"]
-        if filters.get("periods"):
-            db_filters["periods"] = filters["periods"]
-
-        # Add date range
-        db_filters["start_date"] = filters["start_date"]
-        db_filters["end_date"] = filters["end_date"]
-
-        # Execute appropriate query
+        # Execute appropriate cached query
         if filters["data_type"] == "Pairings":
-            df, total_count = query_pairings(db_filters, limit=filters["limit"])
+            df, total_count = _query_pairings_cached(
+                domiciles, aircraft, seats, periods, start_date, end_date, limit
+            )
         else:  # Bid Lines
-            df, total_count = query_bid_lines(db_filters, limit=filters["limit"])
+            df, total_count = _query_bid_lines_cached(
+                domiciles, aircraft, seats, periods, start_date, end_date, limit
+            )
 
         # Add metadata
         if not df.empty:

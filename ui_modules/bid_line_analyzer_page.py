@@ -39,6 +39,59 @@ from ui_components import (
 )
 
 
+# ===================================================================
+# CACHED FUNCTIONS (Performance Optimization)
+# ===================================================================
+
+
+@st.cache_data(show_spinner="Extracting header information...")
+def _extract_header_cached(file_bytes: bytes, filename: str) -> dict:
+    """
+    Extract header info from PDF with caching.
+
+    This function caches the result so header extraction only happens once
+    per file, preventing expensive re-parsing on every widget interaction.
+
+    Args:
+        file_bytes: Raw PDF file bytes
+        filename: Original filename (for temp file creation)
+
+    Returns:
+        Dictionary with header information
+    """
+    tmpdir = Path(tempfile.mkdtemp())
+    pdf_path = tmpdir / filename
+    pdf_path.write_bytes(file_bytes)
+
+    with open(pdf_path, "rb") as f:
+        return extract_bid_line_header_info(f)
+
+
+@st.cache_data(show_spinner="Parsing bid lines...")
+def _parse_bid_lines_cached(file_bytes: bytes, filename: str):
+    """
+    Parse bid lines from PDF with caching.
+
+    This function caches the result so parsing only happens once per file,
+    dramatically improving performance when filters or other widgets change.
+
+    Args:
+        file_bytes: Raw PDF file bytes
+        filename: Original filename (for temp file creation)
+
+    Returns:
+        Tuple of (DataFrame, diagnostics)
+    """
+    tmpdir = Path(tempfile.mkdtemp())
+    pdf_path = tmpdir / filename
+    pdf_path.write_bytes(file_bytes)
+
+    # Note: progress callback doesn't work with caching
+    # Results are instant after first parse anyway
+    with open(pdf_path, "rb") as f:
+        return parse_bid_lines(f, progress_callback=None)
+
+
 def render_bid_line_analyzer():
     """Render the Bid Line Analyzer tab."""
 
@@ -55,16 +108,13 @@ def render_bid_line_analyzer():
     if "bidline_header_info" not in st.session_state:
         st.session_state.bidline_header_info = None
 
-    # Extract header info when file is uploaded
+    # Extract header info when file is uploaded (CACHED - only runs once per file)
     if uploaded_file is not None:
-        # Save to temp file to extract header info
-        tmpdir = Path(tempfile.mkdtemp())
-        pdf_path = tmpdir / uploaded_file.name
-        pdf_path.write_bytes(uploaded_file.getvalue())
-
-        # Extract header information
-        with open(pdf_path, "rb") as f:
-            header_info = extract_bid_line_header_info(f)
+        # Use cached extraction - this only runs once per unique file
+        header_info = _extract_header_cached(
+            uploaded_file.getvalue(),
+            uploaded_file.name
+        )
         st.session_state.bidline_header_info = header_info
 
         # Display extracted information in an info box
@@ -97,20 +147,12 @@ def render_bid_line_analyzer():
             )
             st.stop()
 
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        def update_progress(current, total):
-            progress_bar.progress(current / total)
-            status_text.text(f"Processing page {current} of {total}...")
-
-        tmpdir = Path(tempfile.mkdtemp())
-        pdf_path = tmpdir / uploaded_file.name
-        pdf_path.write_bytes(uploaded_file.getvalue())
-
         try:
-            with open(pdf_path, "rb") as f:
-                df, diagnostics = parse_bid_lines(f, progress_callback=update_progress)
+            # Use cached parsing - after first parse, results are instant!
+            df, diagnostics = _parse_bid_lines_cached(
+                uploaded_file.getvalue(),
+                uploaded_file.name
+            )
 
             # Store original parsed data (never modified)
             st.session_state.bidline_original_df = df.copy()
@@ -119,9 +161,6 @@ def render_bid_line_analyzer():
             st.session_state.bidline_edited_df = df.copy()
 
             st.session_state.bidline_diagnostics = diagnostics
-
-            progress_bar.empty()
-            status_text.empty()
 
             st.success(f"✅ Parsed {len(df)} bid lines successfully!")
 

@@ -31,6 +31,76 @@ from ui_components import (
 )
 
 
+# ===================================================================
+# CACHED FUNCTIONS (Performance Optimization)
+# ===================================================================
+
+
+@st.cache_data(show_spinner="Extracting header information...")
+def _extract_edw_header_cached(file_bytes: bytes, filename: str) -> dict:
+    """
+    Extract header info from EDW PDF with caching.
+
+    This function caches the result so header extraction only happens once
+    per file, preventing expensive re-parsing on every widget interaction.
+
+    Args:
+        file_bytes: Raw PDF file bytes
+        filename: Original filename (for temp file creation)
+
+    Returns:
+        Dictionary with header information
+    """
+    tmpdir = Path(tempfile.mkdtemp())
+    pdf_path = tmpdir / filename
+    pdf_path.write_bytes(file_bytes)
+
+    return extract_pdf_header_info(pdf_path)
+
+
+@st.cache_data(show_spinner="Running EDW analysis...")
+def _run_edw_report_cached(
+    file_bytes: bytes,
+    filename: str,
+    domicile: str,
+    aircraft: str,
+    bid_period: str
+):
+    """
+    Run EDW report analysis with caching.
+
+    This function caches the result so the expensive PDF parsing and analysis
+    only happens once per file, dramatically improving performance.
+
+    Args:
+        file_bytes: Raw PDF file bytes
+        filename: Original filename
+        domicile: Domicile code
+        aircraft: Aircraft type
+        bid_period: Bid period identifier
+
+    Returns:
+        EDW analysis results dictionary
+    """
+    tmpdir = Path(tempfile.mkdtemp())
+    pdf_path = tmpdir / filename
+    pdf_path.write_bytes(file_bytes)
+
+    out_dir = tmpdir / "outputs"
+    out_dir.mkdir(exist_ok=True)
+
+    # Note: progress callback doesn't work with caching
+    # Results are instant after first analysis anyway
+    return run_edw_report(
+        pdf_path,
+        out_dir,
+        domicile=domicile,
+        aircraft=aircraft,
+        bid_period=bid_period,
+        progress_callback=None,
+    )
+
+
 def render_edw_analyzer():
     """Render the EDW Pairing Analyzer tab."""
 
@@ -45,15 +115,13 @@ def render_edw_analyzer():
     if "edw_header_info" not in st.session_state:
         st.session_state.edw_header_info = None
 
-    # Extract header info when file is uploaded
+    # Extract header info when file is uploaded (CACHED - only runs once per file)
     if uploaded is not None:
-        # Save to temp file to extract header info
-        tmpdir = Path(tempfile.mkdtemp())
-        pdf_path = tmpdir / uploaded.name
-        pdf_path.write_bytes(uploaded.getvalue())
-
-        # Extract header information
-        header_info = extract_pdf_header_info(pdf_path)
+        # Use cached extraction - this only runs once per unique file
+        header_info = _extract_edw_header_cached(
+            uploaded.getvalue(),
+            uploaded.name
+        )
         st.session_state.edw_header_info = header_info
 
         # Display extracted information in an info box
@@ -91,41 +159,26 @@ def render_edw_analyzer():
             st.error("Could not extract header information from PDF. Please check the PDF format.")
             st.stop()
 
-        # Create progress bar
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        def update_progress(progress, message):
-            progress_bar.progress(progress / 100)
-            status_text.text(message)
-
-        tmpdir = Path(tempfile.mkdtemp())
-        pdf_path = tmpdir / uploaded.name
-        pdf_path.write_bytes(uploaded.getvalue())
-
-        out_dir = tmpdir / "outputs"
-        out_dir.mkdir(exist_ok=True)
-
         # Use extracted header info
         header = st.session_state.edw_header_info
         dom = header["domicile"]
         ac = header["fleet_type"]
         bid = header["bid_period"]
 
-        res = run_edw_report(
-            pdf_path,
-            out_dir,
+        # Use cached analysis - after first run, results are instant!
+        res = _run_edw_report_cached(
+            uploaded.getvalue(),
+            uploaded.name,
             domicile=dom,
             aircraft=ac,
             bid_period=bid,
-            progress_callback=update_progress,
         )
 
-        # Clear progress indicators
-        progress_bar.empty()
-        status_text.empty()
-
         # Store results in session state
+        tmpdir = Path(tempfile.mkdtemp())
+        out_dir = tmpdir / "outputs"
+        out_dir.mkdir(exist_ok=True)
+
         st.session_state.edw_results = {
             "res": res,
             "out_dir": out_dir,
