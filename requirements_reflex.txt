@@ -1,0 +1,25 @@
+# Reflex Application Dependencies
+# This file contains additional dependencies for the Reflex version
+
+# Core Reflex framework
+reflex>=0.4.0
+
+# Shared dependencies (already in requirements.txt)
+# These are needed by both Streamlit and Reflex versions:
+# - pandas
+# - plotly
+# - PyPDF2
+# - pdfplumber
+# - openpyxl
+# - reportlab
+# - Pillow
+# - supabase
+# - python-dotenv
+
+# Additional dependencies for Reflex-specific features
+# (Add as needed during migration)
+
+# Development tools
+black
+isort
+pylint
