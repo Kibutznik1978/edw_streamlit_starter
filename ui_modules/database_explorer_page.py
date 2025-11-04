@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from database import get_bid_periods, query_pairings, query_bid_lines
-from ui_components import render_csv_download, render_no_results_state
+from ui_components import render_csv_download, render_no_results_state, render_inline_filter_panel
 
 
 # ==============================================================================
@@ -33,94 +33,95 @@ def render_database_explorer():
     if "query_filters" not in st.session_state:
         st.session_state["query_filters"] = {}
 
-    # Render filters and get selected values
-    filters = _render_filter_sidebar()
+    # Render inline filter panel
+    with render_inline_filter_panel("Query Filters", icon="🔍", expanded=True):
+        filters = _render_inline_filters()
 
-    # Main content area
-    col1, col2 = st.columns([3, 1])
-
-    with col1:
-        st.subheader("Query Results")
-
-    with col2:
-        if st.button("🔎 Run Query", type="primary", key="query_run_button"):
+        # Query button inside filter panel
+        st.markdown("---")
+        if st.button("🔎 Run Query", type="primary", key="query_run_button", use_container_width=True):
             with st.spinner("Querying database..."):
                 st.session_state["query_results"] = _execute_query(filters)
                 st.session_state["query_filters"] = filters
 
     # Display results if available
     if st.session_state["query_results"] is not None:
+        st.subheader("Query Results")
         _display_results(st.session_state["query_results"], filters)
     else:
         st.info(
-            "👈 Select filters in the sidebar and click **Run Query** to view results"
+            "ℹ️ Expand the filter panel above and click **Run Query** to view results"
         )
 
 
 # ==============================================================================
-# FILTER SIDEBAR
+# INLINE FILTERS
 # ==============================================================================
 
 
-def _render_filter_sidebar() -> Dict[str, Any]:
-    """Render filter sidebar and return selected filter values."""
-    st.sidebar.header("🔍 Query Filters")
-
+def _render_inline_filters() -> Dict[str, Any]:
+    """Render inline filter controls and return selected filter values."""
     # Get available bid periods for filter options
     try:
         bid_periods_df = get_bid_periods()
 
         if bid_periods_df.empty:
-            st.sidebar.warning(
+            st.warning(
                 "⚠️ No bid periods found in database. Upload data first."
             )
             return {}
 
     except Exception as e:
-        st.sidebar.error(f"❌ Error loading bid periods: {str(e)}")
+        st.error(f"❌ Error loading bid periods: {str(e)}")
         return {}
 
     # Data Type Selection
-    st.sidebar.markdown("### Data Type")
-    data_type = st.sidebar.radio(
+    st.markdown("**Data Type**")
+    data_type = st.radio(
         "Select data type to query:",
         ["Pairings", "Bid Lines"],
         key="query_data_type",
         help="Choose which type of data to query from the database",
+        horizontal=True
     )
 
-    # Domicile Filter
-    st.sidebar.markdown("### Filters")
-    domiciles = st.sidebar.multiselect(
-        "Domicile",
-        options=sorted(bid_periods_df["domicile"].unique()),
-        default=[],
-        key="query_domiciles",
-        help="Select one or more domiciles (leave empty for all)",
-    )
+    st.markdown("---")
 
-    # Aircraft Filter
-    aircraft = st.sidebar.multiselect(
-        "Aircraft",
-        options=sorted(bid_periods_df["aircraft"].unique()),
-        default=[],
-        key="query_aircraft",
-        help="Select one or more aircraft types (leave empty for all)",
-    )
+    # Filters in columns
+    st.markdown("**Filters**")
+    col1, col2, col3 = st.columns(3)
 
-    # Seat Filter
-    seats = st.sidebar.multiselect(
-        "Seat Position",
-        options=["CA", "FO"],
-        default=[],
-        format_func=lambda x: "Captain" if x == "CA" else "First Officer",
-        key="query_seats",
-        help="Select seat positions (leave empty for all)",
-    )
+    with col1:
+        domiciles = st.multiselect(
+            "Domicile",
+            options=sorted(bid_periods_df["domicile"].unique()),
+            default=[],
+            key="query_domiciles",
+            help="Select one or more domiciles (leave empty for all)",
+        )
+
+    with col2:
+        aircraft = st.multiselect(
+            "Aircraft",
+            options=sorted(bid_periods_df["aircraft"].unique()),
+            default=[],
+            key="query_aircraft",
+            help="Select one or more aircraft types (leave empty for all)",
+        )
+
+    with col3:
+        seats = st.multiselect(
+            "Seat Position",
+            options=["CA", "FO"],
+            default=[],
+            format_func=lambda x: "Captain" if x == "CA" else "First Officer",
+            key="query_seats",
+            help="Select seat positions (leave empty for all)",
+        )
 
     # Bid Period Filter
     bid_periods_list = sorted(bid_periods_df["period"].unique(), reverse=True)
-    selected_periods = st.sidebar.multiselect(
+    selected_periods = st.multiselect(
         "Bid Periods",
         options=bid_periods_list,
         default=[],
@@ -128,9 +129,11 @@ def _render_filter_sidebar() -> Dict[str, Any]:
         help="Select specific bid periods (leave empty for all)",
     )
 
+    st.markdown("---")
+
     # Date Range
-    st.sidebar.markdown("### Date Range")
-    quick_filter = st.sidebar.selectbox(
+    st.markdown("**Date Range**")
+    quick_filter = st.selectbox(
         "Quick Filter",
         ["Custom", "Last 3 months", "Last 6 months", "Last year", "All time"],
         key="query_quick_filter",
@@ -140,29 +143,29 @@ def _render_filter_sidebar() -> Dict[str, Any]:
     if quick_filter == "Last 3 months":
         start_date = datetime.now() - timedelta(days=90)
         end_date = datetime.now()
-        st.sidebar.caption(
+        st.caption(
             f"📅 {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
         )
     elif quick_filter == "Last 6 months":
         start_date = datetime.now() - timedelta(days=180)
         end_date = datetime.now()
-        st.sidebar.caption(
+        st.caption(
             f"📅 {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
         )
     elif quick_filter == "Last year":
         start_date = datetime.now() - timedelta(days=365)
         end_date = datetime.now()
-        st.sidebar.caption(
+        st.caption(
             f"📅 {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
         )
     elif quick_filter == "All time":
         start_date = pd.to_datetime(bid_periods_df["start_date"]).min()
         end_date = pd.to_datetime(bid_periods_df["end_date"]).max()
-        st.sidebar.caption(
+        st.caption(
             f"📅 {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
         )
     else:  # Custom
-        col1, col2 = st.sidebar.columns(2)
+        col1, col2 = st.columns(2)
         with col1:
             start_date = st.date_input(
                 "Start Date",
@@ -175,7 +178,7 @@ def _render_filter_sidebar() -> Dict[str, Any]:
             )
 
     # Advanced Options
-    with st.sidebar.expander("⚙️ Advanced Options"):
+    with st.expander("⚙️ Advanced Options"):
         limit = st.number_input(
             "Max Results",
             min_value=100,
@@ -207,8 +210,6 @@ def _render_filter_sidebar() -> Dict[str, Any]:
     }
 
     # Show filter summary
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Filter Summary")
     active_filters = []
     if domiciles:
         active_filters.append(f"Domiciles: {', '.join(domiciles)}")
@@ -222,10 +223,11 @@ def _render_filter_sidebar() -> Dict[str, Any]:
         active_filters.append(f"Periods: {', '.join(selected_periods)}")
 
     if active_filters:
+        st.caption("**Active Filters:**")
         for f in active_filters:
-            st.sidebar.caption(f"• {f}")
+            st.caption(f"• {f}")
     else:
-        st.sidebar.caption("_No filters applied (all data)_")
+        st.caption("_No filters applied (all data)_")
 
     return filters
 

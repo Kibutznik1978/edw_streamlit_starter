@@ -25,16 +25,14 @@ from pdf_generation import ReportMetadata, create_bid_line_pdf_report
 from ui_components import (
     apply_dataframe_filters,
     create_bid_line_editor,
-    create_bid_line_filters,
     handle_pdf_generation_error,
     is_filter_active,
     render_change_summary,
     render_csv_download,
     render_download_section,
     render_editor_header,
-    render_filter_reset_button,
     render_filter_status_message,
-    render_filter_summary,
+    render_inline_filter_panel,
     render_no_upload_state,
     render_pdf_download,
     render_reset_button,
@@ -373,6 +371,82 @@ def _save_bid_lines_to_database(df: pd.DataFrame, header_info: dict, supabase):
             st.code(traceback.format_exc())
 
 
+def _create_inline_bid_line_filters(df: pd.DataFrame) -> dict:
+    """Create inline filter controls for bid line data.
+
+    Args:
+        df: DataFrame with CT, BT, DO, DD columns
+
+    Returns:
+        Dictionary with filter ranges
+    """
+    # Get min/max for each metric
+    ct_min = float(df["CT"].min())
+    ct_max = float(df["CT"].max())
+    bt_min = float(df["BT"].min())
+    bt_max = float(df["BT"].max())
+    do_min = int(df["DO"].min())
+    do_max = int(df["DO"].max())
+    dd_min = int(df["DD"].min())
+    dd_max = int(df["DD"].max())
+
+    # Create 4-column layout for filters
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        ct_range = st.slider(
+            "Credit Time (CT)",
+            min_value=ct_min,
+            max_value=ct_max,
+            value=(ct_min, ct_max),
+            step=0.1,
+            key="inline_ct_filter"
+        )
+
+    with col2:
+        bt_range = st.slider(
+            "Block Time (BT)",
+            min_value=bt_min,
+            max_value=bt_max,
+            value=(bt_min, bt_max),
+            step=0.1,
+            key="inline_bt_filter"
+        )
+
+    with col3:
+        do_range = st.slider(
+            "Days Off (DO)",
+            min_value=do_min,
+            max_value=do_max,
+            value=(do_min, do_max),
+            step=1,
+            key="inline_do_filter"
+        )
+
+    with col4:
+        dd_range = st.slider(
+            "Duty Days (DD)",
+            min_value=dd_min,
+            max_value=dd_max,
+            value=(dd_min, dd_max),
+            step=1,
+            key="inline_dd_filter"
+        )
+
+    return {
+        "ct": ct_range,
+        "bt": bt_range,
+        "do": do_range,
+        "dd": dd_range,
+        "defaults": {
+            "ct": (ct_min, ct_max),
+            "bt": (bt_min, bt_max),
+            "do": (do_min, do_max),
+            "dd": (dd_min, dd_max),
+        },
+    }
+
+
 def _display_bid_line_results():
     """Display bid line analysis results with filters and visualizations."""
 
@@ -382,14 +456,18 @@ def _display_bid_line_results():
 
     st.divider()
 
-    # === FILTER SIDEBAR ===
-    filter_ranges = create_bid_line_filters(df)
-    filtered_df = apply_dataframe_filters(df, filter_ranges)
-    render_filter_summary(df, filtered_df)
+    # === INLINE FILTER PANEL ===
+    with render_inline_filter_panel("Filter Bid Lines", icon="🔍", expanded=False):
+        filter_ranges = _create_inline_bid_line_filters(df)
 
-    # Reset filters button
-    if render_filter_reset_button(key="reset_filters"):
-        st.rerun()
+    # Apply filters
+    filtered_df = apply_dataframe_filters(df, filter_ranges)
+
+    # Show filter summary
+    if len(filtered_df) != len(df):
+        st.caption(f"_Showing **{len(filtered_df)}** of **{len(df)}** lines after filtering_")
+    else:
+        st.caption(f"_Showing all **{len(df)}** lines (no filters applied)_")
 
     # Check if filters are actively applied
     filters_active = is_filter_active(filter_ranges)

@@ -16,6 +16,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 from database import get_historical_trends, get_bid_periods
+from ui_components import render_inline_filter_panel
 
 
 # ==============================================================================
@@ -34,15 +35,13 @@ def render_historical_trends():
     if "trends_data" not in st.session_state:
         st.session_state["trends_data"] = None
 
-    # Render filter controls
-    filters = _render_filter_controls()
+    # Render inline filter panel
+    with render_inline_filter_panel("Trend Filters", icon="📊", expanded=True):
+        filters = _render_inline_filters()
 
-    # Load data button
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.subheader("Trend Analysis")
-    with col2:
-        if st.button("📊 Load Trends", type="primary", key="load_trends_button"):
+        # Load button inside filter panel
+        st.markdown("---")
+        if st.button("📊 Load Trends", type="primary", key="load_trends_button", use_container_width=True):
             with st.spinner("Loading trend data..."):
                 st.session_state["trends_data"] = _load_trend_data(filters)
 
@@ -55,83 +54,94 @@ def render_historical_trends():
                 "⚠️ No trend data available for the selected filters. Try uploading bid period data first."
             )
         else:
+            st.subheader("Trend Analysis")
             _display_trends(df, filters)
     else:
         st.info(
-            "👈 Select filters in the sidebar and click **Load Trends** to view analysis"
+            "ℹ️ Expand the filter panel above and click **Load Trends** to view analysis"
         )
 
 
 # ==============================================================================
-# FILTER CONTROLS
+# INLINE FILTERS
 # ==============================================================================
 
 
-def _render_filter_controls() -> dict:
-    """Render sidebar filter controls and return selected values."""
-    st.sidebar.header("📊 Trend Filters")
-
+def _render_inline_filters() -> dict:
+    """Render inline filter controls and return selected values."""
     # Get available bid periods for filter options
     try:
         bid_periods_df = get_bid_periods()
 
         if bid_periods_df.empty:
-            st.sidebar.warning("⚠️ No bid periods in database")
+            st.warning("⚠️ No bid periods in database")
             return {}
 
     except Exception as e:
-        st.sidebar.error(f"❌ Error loading data: {str(e)}")
+        st.error(f"❌ Error loading data: {str(e)}")
         return {}
 
-    # Domicile Filter
-    domiciles = sorted(bid_periods_df["domicile"].unique())
-    selected_domicile = st.sidebar.selectbox(
-        "Domicile",
-        options=["All"] + domiciles,
-        key="trends_domicile",
-        help="Select a domicile to analyze (or 'All' for comparison)",
-    )
+    # Filters in columns
+    col1, col2, col3 = st.columns(3)
 
-    # Aircraft Filter
-    aircraft_list = sorted(bid_periods_df["aircraft"].unique())
-    selected_aircraft = st.sidebar.selectbox(
-        "Aircraft",
-        options=["All"] + aircraft_list,
-        key="trends_aircraft",
-        help="Select an aircraft type (or 'All' for comparison)",
-    )
+    with col1:
+        # Domicile Filter
+        domiciles = sorted(bid_periods_df["domicile"].unique())
+        selected_domicile = st.selectbox(
+            "Domicile",
+            options=["All"] + domiciles,
+            key="trends_domicile",
+            help="Select a domicile to analyze (or 'All' for comparison)",
+        )
 
-    # Seat Filter
-    selected_seat = st.sidebar.selectbox(
-        "Seat Position",
-        options=["All", "CA", "FO"],
-        format_func=lambda x: (
-            "All" if x == "All" else ("Captain" if x == "CA" else "First Officer")
-        ),
-        key="trends_seat",
-        help="Select seat position (or 'All' for comparison)",
-    )
+    with col2:
+        # Aircraft Filter
+        aircraft_list = sorted(bid_periods_df["aircraft"].unique())
+        selected_aircraft = st.selectbox(
+            "Aircraft",
+            options=["All"] + aircraft_list,
+            key="trends_aircraft",
+            help="Select an aircraft type (or 'All' for comparison)",
+        )
+
+    with col3:
+        # Seat Filter
+        selected_seat = st.selectbox(
+            "Seat Position",
+            options=["All", "CA", "FO"],
+            format_func=lambda x: (
+                "All" if x == "All" else ("Captain" if x == "CA" else "First Officer")
+            ),
+            key="trends_seat",
+            help="Select seat position (or 'All' for comparison)",
+        )
+
+    st.markdown("---")
 
     # Metric Selection
-    st.sidebar.markdown("### Metrics to Display")
+    st.markdown("**Metrics to Display**")
 
     selected_metrics = []
 
-    st.sidebar.markdown("**Bid Line Metrics:**")
-    if st.sidebar.checkbox("Credit Time (CT)", value=True, key="metric_ct"):
-        selected_metrics.append("ct_avg")
-    if st.sidebar.checkbox("Block Time (BT)", value=True, key="metric_bt"):
-        selected_metrics.append("bt_avg")
-    if st.sidebar.checkbox("Days Off (DO)", value=False, key="metric_do"):
-        selected_metrics.append("do_avg")
-    if st.sidebar.checkbox("Duty Days (DD)", value=False, key="metric_dd"):
-        selected_metrics.append("dd_avg")
+    col1, col2 = st.columns(2)
 
-    st.sidebar.markdown("**Pairing Metrics:**")
-    if st.sidebar.checkbox("EDW Trip %", value=True, key="metric_edw_pct"):
-        selected_metrics.append("edw_trip_pct")
-    if st.sidebar.checkbox("Total Trips", value=False, key="metric_trips"):
-        selected_metrics.append("total_trips_detail")
+    with col1:
+        st.markdown("**Bid Line Metrics:**")
+        if st.checkbox("Credit Time (CT)", value=True, key="metric_ct"):
+            selected_metrics.append("ct_avg")
+        if st.checkbox("Block Time (BT)", value=True, key="metric_bt"):
+            selected_metrics.append("bt_avg")
+        if st.checkbox("Days Off (DO)", value=False, key="metric_do"):
+            selected_metrics.append("do_avg")
+        if st.checkbox("Duty Days (DD)", value=False, key="metric_dd"):
+            selected_metrics.append("dd_avg")
+
+    with col2:
+        st.markdown("**Pairing Metrics:**")
+        if st.checkbox("EDW Trip %", value=True, key="metric_edw_pct"):
+            selected_metrics.append("edw_trip_pct")
+        if st.checkbox("Total Trips", value=False, key="metric_trips"):
+            selected_metrics.append("total_trips_detail")
 
     # Build filters dict
     filters = {
@@ -142,12 +152,7 @@ def _render_filter_controls() -> dict:
     }
 
     # Show filter summary
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Filter Summary")
-    st.sidebar.caption(f"**Domicile:** {selected_domicile}")
-    st.sidebar.caption(f"**Aircraft:** {selected_aircraft}")
-    st.sidebar.caption(f"**Seat:** {selected_seat}")
-    st.sidebar.caption(f"**Metrics:** {len(selected_metrics)} selected")
+    st.caption(f"**Domicile:** {selected_domicile} | **Aircraft:** {selected_aircraft} | **Seat:** {selected_seat} | **Metrics:** {len(selected_metrics)} selected")
 
     return filters
 

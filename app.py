@@ -28,7 +28,7 @@ from ui_modules import (
 # ==============================================================================
 
 st.set_page_config(
-    page_title="Pairing Analyzer Tool 1.0", layout="wide", initial_sidebar_state="expanded"
+    page_title="Pairing Analyzer Tool 1.0", layout="wide", initial_sidebar_state="collapsed"
 )
 
 

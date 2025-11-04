@@ -7,6 +7,7 @@ Modules:
     branding: Branded headers and styling components
     empty_states: Branded empty state messages
     filters: Range sliders and filter logic
+    inline_filters: Inline filter panels (replaces sidebar pattern)
     data_editor: Data editor with validation and change tracking
     exports: Download buttons and file generation
     statistics: Metrics display and pay period analysis
@@ -63,6 +64,14 @@ from .filters import (
     render_filter_summary,
 )
 
+# Import from inline_filters module
+from .inline_filters import (
+    render_inline_filter_panel,
+    render_filter_actions,
+    render_inline_section_header,
+    render_filter_summary as render_inline_filter_summary,
+)
+
 # Import from statistics module
 from .statistics import (
     calculate_metric_stats,
@@ -97,6 +106,11 @@ __all__ = [
     "is_filter_active",
     "render_filter_summary",
     "render_filter_reset_button",
+    # Inline Filters
+    "render_inline_filter_panel",
+    "render_filter_actions",
+    "render_inline_section_header",
+    "render_inline_filter_summary",
     # Data Editor
     "create_bid_line_editor",
     "detect_changes",
