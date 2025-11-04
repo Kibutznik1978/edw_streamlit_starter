@@ -1,6 +1,8 @@
 /.DS_Store
 /.venv
-/__pycache__
+__pycache__/
+*.pyc
+*.pyo
 
 # Debug and test files
 /debug/
