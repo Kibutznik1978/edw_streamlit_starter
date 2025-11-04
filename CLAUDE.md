@@ -10,6 +10,33 @@ This is a **unified Streamlit application** for analyzing airline bid packet dat
 2. **Bid Line Analyzer** (Tab 2) - Parses bid line PDFs for scheduling metrics (CT, BT, DO, DD)
 3. **Historical Trends** (Tab 3) - Database-powered trend analysis (planned, using Supabase)
 
+## Python Requirements
+
+**Required Python Version:** **3.11+** (Project uses Python 3.11.1)
+
+**Important:** This project requires Python 3.11 or higher. Python 3.10 may work but is not tested.
+
+The Python 3.11 requirement applies to:
+- Streamlit application (main branch)
+- Reflex migration development (reflex-migration branch)
+
+**Why Python 3.11?**
+- Reflex framework requires Python 3.10+ (discovered during migration)
+- Python 3.9 reaches EOL October 2025
+- Modern typing support and performance improvements
+- Full compatibility with all project dependencies
+
+**Checking Your Python Version:**
+```bash
+python --version  # Should show Python 3.11.x
+python3.11 --version  # Check if Python 3.11 is available
+```
+
+**Installing Python 3.11:**
+- macOS: `brew install python@3.11`
+- Ubuntu: `sudo apt install python3.11`
+- Windows: Download from python.org
+
 ## Running the Application
 
 Start the Streamlit app:
@@ -28,17 +55,35 @@ The app will be available at `http://localhost:8501` (or `8502` if port in use).
 
 ## Development Setup
 
-1. Activate virtual environment (if not already active):
+**Prerequisites:**
+- Python 3.11+ installed (check with `python --version`)
+- Git
+
+**Setup Steps:**
+
+1. **Create virtual environment** (first time only):
+```bash
+# Ensure you're using Python 3.11
+python3.11 -m venv .venv
+```
+
+2. **Activate virtual environment:**
 ```bash
 source .venv/bin/activate
 ```
 
-2. Install dependencies:
+3. **Verify Python version:**
 ```bash
+python --version  # Should show Python 3.11.x
+```
+
+4. **Install dependencies:**
+```bash
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-3. (Optional) For database integration:
+5. **(Optional) For database integration:**
    - Create Supabase project at https://supabase.com
    - Copy `.env.example` to `.env`
    - Fill in `SUPABASE_URL` and `SUPABASE_ANON_KEY`
@@ -232,7 +277,8 @@ Since this is a Streamlit app without formal tests:
 
 ## Common Issues
 
-- **Virtual Environment**: Always activate `.venv` before running app or installing dependencies
+- **Python Version**: Project requires Python 3.11+. If you see typing errors or import issues, check `python --version`. Python 3.9 is NOT supported (EOL October 2025). See "Python Requirements" section above for details.
+- **Virtual Environment**: Always activate `.venv` before running app or installing dependencies. Recreate with Python 3.11 if needed: `rm -rf .venv && python3.11 -m venv .venv`
 - **Port Conflicts**: If port 8501 is in use, Streamlit will auto-increment (8502, 8503, etc.)
 - **Wrong PDF Upload**: Both analyzers now provide helpful error messages if the wrong PDF type is uploaded:
   - **Tab 1 (EDW Pairing Analyzer)**: Detects bid line PDFs and suggests uploading to Tab 2

@@ -1,3 +1,6 @@
+assets/external/
+.states
+.web
 # Reflex-specific ignores
 
 # Reflex build artifacts

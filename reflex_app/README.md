@@ -6,28 +6,68 @@ This is the **Reflex version** of the Aero Crew Data Analyzer application, curre
 
 🚧 **UNDER CONSTRUCTION** - Phase 0 (Week 1)
 
+**Current Phase:** Phase 0 - Proof of Concept Testing
+**Progress:** 30% - Infrastructure complete, POC testing ready to begin
+**Branch:** `reflex-migration`
+**Last Updated:** November 4, 2025
+
 This application is being developed in parallel with the existing Streamlit version on the `reflex-migration` branch.
 
 ## Quick Start
 
 ### Prerequisites
 
-1. Python 3.9+ with virtual environment
-2. Reflex installed (`pip install reflex`)
-3. All shared dependencies from `requirements.txt`
+**IMPORTANT:** Python 3.11+ is required for Reflex
 
-### Installation
+1. **Python 3.11+** (Reflex requires Python 3.10+, project uses 3.11.1)
+   ```bash
+   python --version  # Should show Python 3.11.x
+   ```
+
+2. **Git** (for cloning and branch management)
+
+3. **Virtual environment** (recommended)
+
+### First-Time Setup
 
 ```bash
-# From project root
+# 1. Ensure you're on the reflex-migration branch
+git checkout reflex-migration
+
+# 2. Create virtual environment with Python 3.11 (if not already created)
+python3.11 -m venv .venv
+
+# 3. Activate virtual environment
+source .venv/bin/activate  # macOS/Linux
+# OR
+.venv\Scripts\activate  # Windows
+
+# 4. Verify Python version
+python --version  # Should show Python 3.11.x
+
+# 5. Upgrade pip
+pip install --upgrade pip
+
+# 6. Install Streamlit dependencies (shared backend modules)
+pip install -r requirements.txt
+
+# 7. Install Reflex and dev dependencies
+pip install -r requirements_reflex.txt
+
+# 8. Navigate to Reflex app directory
 cd reflex_app
 
-# Install Reflex dependencies
-pip install -r ../requirements_reflex.txt
-
-# Initialize Reflex (first time only)
+# 9. Initialize Reflex (first time only)
 reflex init
 ```
+
+### Installation Complete! ✅
+
+You should now have:
+- ✅ Python 3.11.1 virtual environment
+- ✅ All Streamlit dependencies installed
+- ✅ Reflex 0.8.18 installed
+- ✅ Reflex app initialized
 
 ### Running the App
 
