@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from database import get_bid_periods, query_pairings, query_bid_lines
-from ui_components import render_csv_download
+from ui_components import render_csv_download, render_no_results_state
 
 
 # ==============================================================================
@@ -24,8 +24,8 @@ from ui_components import render_csv_download
 
 def render_database_explorer():
     """Main entry point for Database Explorer page."""
-    st.title("🔍 Database Explorer")
-    st.markdown("Query and analyze historical bid period data")
+    st.header("🔍 Database Explorer")
+    st.caption("Query and analyze historical bid period data")
 
     # Initialize session state
     if "query_results" not in st.session_state:
@@ -40,7 +40,7 @@ def render_database_explorer():
     col1, col2 = st.columns([3, 1])
 
     with col1:
-        st.markdown("### Query Results")
+        st.subheader("Query Results")
 
     with col2:
         if st.button("🔎 Run Query", type="primary", key="query_run_button"):
@@ -281,7 +281,15 @@ def _execute_query(filters: Dict[str, Any]) -> Optional[pd.DataFrame]:
 def _display_results(df: pd.DataFrame, filters: Dict[str, Any]):
     """Display query results with export options and pagination."""
     if df is None or df.empty:
-        st.warning("⚠️ No results found for the selected filters")
+        # Use branded empty state component
+        render_no_results_state(
+            context="for the selected filters",
+            suggestions=[
+                "Broaden your date range",
+                "Remove some filters",
+                "Try selecting 'All' for domicile or aircraft"
+            ]
+        )
         return
 
     # Get metadata
@@ -297,7 +305,7 @@ def _display_results(df: pd.DataFrame, filters: Dict[str, Any]):
         )
 
     # Export options
-    st.markdown("#### Export Options")
+    st.markdown("**Export Options**")
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -319,7 +327,7 @@ def _display_results(df: pd.DataFrame, filters: Dict[str, Any]):
     st.markdown("---")
 
     # Pagination controls
-    st.markdown("#### Results Table")
+    st.markdown("**Results Table**")
     page_size = st.selectbox(
         "Rows per page:", [25, 50, 100, 250], index=1, key="query_page_size"
     )
@@ -347,7 +355,7 @@ def _display_results(df: pd.DataFrame, filters: Dict[str, Any]):
 
     # Record detail viewer
     st.markdown("---")
-    st.markdown("#### Record Details")
+    st.markdown("**Record Details**")
     _render_record_detail_viewer(df)
 
 
@@ -388,7 +396,7 @@ def _display_data_table(df: pd.DataFrame, data_type: str):
     # Display dataframe
     st.dataframe(
         display_df,
-        use_container_width=True,
+        width="stretch",
         height=400,
         hide_index=True,
     )

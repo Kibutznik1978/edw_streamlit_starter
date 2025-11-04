@@ -15,6 +15,7 @@ import streamlit as st
 
 from auth import init_auth, login_page, show_user_info
 from database import get_supabase_client
+from ui_components import apply_brand_styling, render_app_header
 from ui_modules import (
     render_bid_line_analyzer,
     render_database_explorer,
@@ -58,9 +59,12 @@ def main():
     # User is authenticated - show user info in sidebar
     show_user_info(supabase)
 
-    # Continue with main application
-    st.title("✈️ Pairing Analyzer Tool 1.0")
-    st.caption("Comprehensive analysis tool for airline bid packets and pairings")
+    # Apply brand styling
+    apply_brand_styling()
+
+    # Render branded header
+    render_app_header()
+    st.divider()
 
     # Create main tabs
     tab1, tab2, tab3, tab4 = st.tabs(

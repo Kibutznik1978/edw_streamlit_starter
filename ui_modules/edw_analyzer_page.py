@@ -25,6 +25,7 @@ from ui_components import (
     handle_pdf_generation_error,
     render_download_section,
     render_excel_download,
+    render_no_upload_state,
     render_pdf_download,
     render_trip_details_viewer,
 )
@@ -80,7 +81,10 @@ def render_edw_analyzer():
     run = st.button("Run Analysis", disabled=(uploaded is None), key="edw_run")
     if run:
         if uploaded is None:
-            st.warning("Please upload a PDF first.")
+            render_no_upload_state(
+                upload_type="pairing PDF",
+                file_description="pairing PDF from your computer"
+            )
             st.stop()
 
         if st.session_state.edw_header_info is None:
@@ -398,56 +402,56 @@ def display_edw_results(result_data: Dict):
     # === CHARTS SECTION ===
     st.header("📈 Visualizations")
 
-    # Duty Day Distribution
-    st.subheader("Trip Length Distribution (excludes Hot Standby)")
+    with st.expander("📊 Trip Length Distribution", expanded=True):
+        st.caption("*Excludes Hot Standby")
 
-    # Calculate 1-day trip count for display
-    original_duty_dist = res["duty_dist"].copy()
-    one_day_trips = (
-        original_duty_dist[original_duty_dist["Duty Days"] == 1]["Trips"].sum()
-        if 1 in original_duty_dist["Duty Days"].values
-        else 0
-    )
-    multi_day_trips = original_duty_dist[original_duty_dist["Duty Days"] != 1]["Trips"].sum()
-    total_dist_trips = original_duty_dist["Trips"].sum()
+        # Calculate 1-day trip count for display
+        original_duty_dist = res["duty_dist"].copy()
+        one_day_trips = (
+            original_duty_dist[original_duty_dist["Duty Days"] == 1]["Trips"].sum()
+            if 1 in original_duty_dist["Duty Days"].values
+            else 0
+        )
+        multi_day_trips = original_duty_dist[original_duty_dist["Duty Days"] != 1]["Trips"].sum()
+        total_dist_trips = original_duty_dist["Trips"].sum()
 
-    # Toggle to exclude 1-day trips
-    exclude_turns = st.checkbox(
-        "Exclude 1-day trips (turns)",
-        value=False,
-        help=f"Remove {one_day_trips} single-day trips ({one_day_trips/total_dist_trips*100:.1f}% of total) to focus on {multi_day_trips} multi-day pairings",
-        key="edw_exclude_turns",
-    )
+        # Toggle to exclude 1-day trips
+        exclude_turns = st.checkbox(
+            "Exclude 1-day trips (turns)",
+            value=False,
+            help=f"Remove {one_day_trips} single-day trips ({one_day_trips/total_dist_trips*100:.1f}% of total) to focus on {multi_day_trips} multi-day pairings",
+            key="edw_exclude_turns",
+        )
 
-    duty_dist = original_duty_dist.copy()
+        duty_dist = original_duty_dist.copy()
 
-    # Filter out 1-day trips if checkbox is checked
-    if exclude_turns:
-        duty_dist = duty_dist[duty_dist["Duty Days"] != 1].copy()
-        # Recalculate percentages based on filtered data
-        if len(duty_dist) > 0:
-            duty_dist["Percent"] = (duty_dist["Trips"] / duty_dist["Trips"].sum() * 100).round(1)
-            st.caption(
-                f"📊 Showing {multi_day_trips} multi-day trips (excluding {one_day_trips} turns)"
-            )
+        # Filter out 1-day trips if checkbox is checked
+        if exclude_turns:
+            duty_dist = duty_dist[duty_dist["Duty Days"] != 1].copy()
+            # Recalculate percentages based on filtered data
+            if len(duty_dist) > 0:
+                duty_dist["Percent"] = (duty_dist["Trips"] / duty_dist["Trips"].sum() * 100).round(1)
+                st.caption(
+                    f"📊 Showing {multi_day_trips} multi-day trips (excluding {one_day_trips} turns)"
+                )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**Duty Days vs Trips**")
-        if len(duty_dist) > 0:
-            st.bar_chart(
-                duty_dist.set_index("Duty Days")["Trips"], x_label="Duty Days", y_label="Trips"
-            )
-        else:
-            st.info("No trips to display with current filter")
-    with col2:
-        st.markdown("**Duty Days vs Percentage**")
-        if len(duty_dist) > 0:
-            st.bar_chart(
-                duty_dist.set_index("Duty Days")["Percent"], x_label="Duty Days", y_label="Percent"
-            )
-        else:
-            st.info("No trips to display with current filter")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Duty Days vs Trips**")
+            if len(duty_dist) > 0:
+                st.bar_chart(
+                    duty_dist.set_index("Duty Days")["Trips"], x_label="Duty Days", y_label="Trips"
+                )
+            else:
+                st.info("No trips to display with current filter")
+        with col2:
+            st.markdown("**Duty Days vs Percentage**")
+            if len(duty_dist) > 0:
+                st.bar_chart(
+                    duty_dist.set_index("Duty Days")["Percent"], x_label="Duty Days", y_label="Percent"
+                )
+            else:
+                st.info("No trips to display with current filter")
 
     st.divider()
 
@@ -456,7 +460,7 @@ def display_edw_results(result_data: Dict):
     df_trips = res["df_trips"]
 
     # Filters section
-    st.subheader("Advanced Filters")
+    st.subheader("Filters")
 
     col_filter1, col_filter2 = st.columns(2)
 
@@ -488,8 +492,8 @@ def display_edw_results(result_data: Dict):
 
     # Duty Day Criteria Filters
     st.markdown("---")
-    st.markdown("**🔍 Duty Day Criteria** - Find duty days matching multiple conditions")
-    st.caption("Filter pairings where a single duty day meets ALL selected criteria below")
+    st.markdown("**Duty Day Criteria**")
+    st.caption("🔍 Find duty days matching multiple conditions • Filter pairings where a single duty day meets ALL selected criteria below")
 
     col_dd1, col_dd2, col_dd3 = st.columns(3)
 

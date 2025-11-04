@@ -542,8 +542,6 @@ def save_pairings(bid_period_id: str, pairings_df: pd.DataFrame) -> int:
     deduped_count = len(pairings_df)
 
     if original_count != deduped_count:
-        import streamlit as st
-
         st.warning(
             f"⚠️ Removed {original_count - deduped_count} duplicate trip(s). "
             f"Inserting {deduped_count} unique pairings."
@@ -558,12 +556,19 @@ def save_pairings(bid_period_id: str, pairings_df: pd.DataFrame) -> int:
         user = st.session_state["user"]
         user_id = user.id if hasattr(user, "id") else None
 
-    # Add bid_period_id and audit fields to each record
+    # Add bid_period_id and audit fields, and clean NaN/Inf values
+    import math
     for record in records:
         record["bid_period_id"] = bid_period_id
         if user_id:
             record["created_by"] = user_id
             record["updated_by"] = user_id
+
+        # Replace NaN and Inf values with None for JSON serialization
+        for key, value in list(record.items()):
+            if isinstance(value, float):
+                if math.isnan(value) or math.isinf(value):
+                    record[key] = None
 
     # Bulk insert with batching
     BATCH_SIZE = 1000
@@ -678,8 +683,6 @@ def save_bid_lines(bid_period_id: str, bid_lines_df: pd.DataFrame) -> int:
     deduped_count = len(bid_lines_df)
 
     if original_count != deduped_count:
-        import streamlit as st
-
         st.warning(
             f"⚠️ Removed {original_count - deduped_count} duplicate line(s). "
             f"Inserting {deduped_count} unique bid lines."
@@ -694,12 +697,19 @@ def save_bid_lines(bid_period_id: str, bid_lines_df: pd.DataFrame) -> int:
         user = st.session_state["user"]
         user_id = user.id if hasattr(user, "id") else None
 
-    # Add bid_period_id and audit fields to each record
+    # Add bid_period_id and audit fields, and clean NaN/Inf values
+    import math
     for record in records:
         record["bid_period_id"] = bid_period_id
         if user_id:
             record["created_by"] = user_id
             record["updated_by"] = user_id
+
+        # Replace NaN and Inf values with None for JSON serialization
+        for key, value in list(record.items()):
+            if isinstance(value, float):
+                if math.isnan(value) or math.isinf(value):
+                    record[key] = None
 
     # Bulk insert with batching
     BATCH_SIZE = 1000

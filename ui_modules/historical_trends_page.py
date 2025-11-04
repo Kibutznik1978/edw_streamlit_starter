@@ -25,8 +25,8 @@ from database import get_historical_trends, get_bid_periods
 
 def render_historical_trends():
     """Main entry point for Historical Trends page."""
-    st.title("📈 Historical Trends")
-    st.markdown(
+    st.header("📈 Historical Trends")
+    st.caption(
         "Analyze trends and patterns across bid periods with interactive visualizations"
     )
 
@@ -40,7 +40,7 @@ def render_historical_trends():
     # Load data button
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("### Trend Analysis")
+        st.subheader("Trend Analysis")
     with col2:
         if st.button("📊 Load Trends", type="primary", key="load_trends_button"):
             with st.spinner("Loading trend data..."):
@@ -200,7 +200,7 @@ def _display_trends(df: pd.DataFrame, filters: dict):
     st.markdown("---")
 
     # Time series charts
-    st.markdown("### 📈 Trend Analysis")
+    st.subheader("📈 Trend Analysis")
 
     # Determine if we're comparing multiple entities
     is_comparison = (
@@ -222,7 +222,7 @@ def _display_trends(df: pd.DataFrame, filters: dict):
 
 def _display_summary_stats(df: pd.DataFrame, filters: dict):
     """Display summary statistics for the selected data."""
-    st.markdown("### 📊 Summary Statistics")
+    st.subheader("📊 Summary Statistics")
 
     # Determine what we're analyzing
     if filters.get("domicile") and filters.get("aircraft") and filters.get("seat"):
@@ -282,7 +282,7 @@ def _display_summary_stats(df: pd.DataFrame, filters: dict):
 
 def _display_time_series_charts(df: pd.DataFrame, metrics: List[str], filters: dict):
     """Display time series charts for a single entity."""
-    st.markdown("#### Time Series Trends")
+    st.markdown("**Time Series Trends**")
 
     # Create metric label map
     metric_labels = {
@@ -311,12 +311,12 @@ def _display_time_series_charts(df: pd.DataFrame, metrics: List[str], filters: d
                 height=400,
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
 
 def _display_comparison_charts(df: pd.DataFrame, metrics: List[str], filters: dict):
     """Display comparison charts across multiple entities."""
-    st.markdown("#### Comparative Analysis")
+    st.markdown("**Comparative Analysis**")
 
     # Determine comparison dimension
     if filters.get("domicile") is None:
@@ -362,7 +362,7 @@ def _display_comparison_charts(df: pd.DataFrame, metrics: List[str], filters: di
                 legend_title=color_by.title(),
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
 
 def _display_data_table(df: pd.DataFrame):
@@ -389,6 +389,6 @@ def _display_data_table(df: pd.DataFrame):
 
         st.dataframe(
             df[display_cols],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )

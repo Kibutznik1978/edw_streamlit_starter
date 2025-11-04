@@ -35,6 +35,7 @@ from ui_components import (
     render_filter_reset_button,
     render_filter_status_message,
     render_filter_summary,
+    render_no_upload_state,
     render_pdf_download,
     render_reset_button,
 )
@@ -92,7 +93,10 @@ def render_bid_line_analyzer():
 
     if run_button:
         if uploaded_file is None:
-            st.warning("Please upload a PDF first.")
+            render_no_upload_state(
+                upload_type="bid line PDF",
+                file_description="bid line PDF from your computer"
+            )
             st.stop()
 
         progress_bar = st.progress(0)
@@ -564,7 +568,7 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     }
 
     summary_df = pd.DataFrame(summary_data)
-    st.dataframe(summary_df, hide_index=True, use_container_width=True)
+    st.dataframe(summary_df, hide_index=True, width="stretch")
 
     # Add note about reserve line exclusions
     st.caption("*Reserve lines excluded from averages. HSBY lines excluded from Block Time only.")
@@ -627,7 +631,7 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 ]
 
             pp_comparison_df = pd.DataFrame(pp_data)
-            st.dataframe(pp_comparison_df, hide_index=True, use_container_width=True)
+            st.dataframe(pp_comparison_df, hide_index=True, width="stretch")
 
     # Reserve Line Statistics
     if diagnostics and diagnostics.reserve_lines is not None:
@@ -737,7 +741,7 @@ def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percen
 def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics):
     """Render the Visuals tab with charts."""
 
-    st.subheader("📊 Distribution Charts")
+    st.header("📊 Distribution Charts")
 
     # Use diagnostics.reserve_lines to filter out reserve lines
     reserve_line_numbers = set()
@@ -777,12 +781,12 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         has_multiple_periods = len(unique_periods) > 1
 
     # Overall Distributions Section
-    st.markdown("### Overall Distributions")
+    st.subheader("Overall Distributions")
     if has_multiple_periods:
         st.caption("Combined data across all pay periods")
 
     # CT Distribution (5-hour buckets with angled labels)
-    st.markdown("**Credit Time (CT) Distribution**")
+    st.markdown("**Credit Time (CT)**")
     col1, col2 = st.columns(2)
     with col1:
         if not df_non_reserve.empty:
@@ -790,7 +794,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 df_non_reserve["CT"], "Credit Time", is_percentage=False
             )
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
         else:
             st.info("No data available (all lines are reserve)")
     with col2:
@@ -799,14 +803,14 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 df_non_reserve["CT"], "Credit Time", is_percentage=True
             )
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
         else:
             st.info("No data available (all lines are reserve)")
 
     st.divider()
 
     # BT Distribution (5-hour buckets with angled labels)
-    st.markdown("**Block Time (BT) Distribution**")
+    st.markdown("**Block Time (BT)**")
     col1, col2 = st.columns(2)
     with col1:
         if not df_for_bt.empty:
@@ -814,21 +818,21 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 df_for_bt["BT"], "Block Time", is_percentage=False
             )
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
         else:
             st.info("No data available (all lines excluded)")
     with col2:
         if not df_for_bt.empty:
             fig = _create_time_distribution_chart(df_for_bt["BT"], "Block Time", is_percentage=True)
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
         else:
             st.info("No data available (all lines excluded)")
 
     st.divider()
 
     # DO Distribution (whole numbers only) - Use pay periods data for accurate counts
-    st.markdown("**Days Off (DO) Distribution**")
+    st.markdown("**Days Off (DO)**")
     col1, col2 = st.columns(2)
 
     # Get pay periods data if available (shows each period separately, not averaged)
@@ -889,7 +893,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     st.divider()
 
     # DD Distribution (whole numbers only) - Use pay periods data for accurate counts
-    st.markdown("**Duty Days (DD) Distribution**")
+    st.markdown("**Duty Days (DD)**")
     col1, col2 = st.columns(2)
 
     # Get pay periods data if available (shows each period separately, not averaged)
@@ -940,7 +944,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     # Pay Period Breakdown Section (only if multiple pay periods exist)
     if has_multiple_periods and pay_periods_df is not None:
         st.divider()
-        st.markdown("### Pay Period Breakdown")
+        st.subheader("Pay Period Breakdown")
         st.caption("Individual distributions for each pay period")
 
         # Get filtered pay periods data
@@ -977,7 +981,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                         period_data_non_reserve["CT"], "Credit Time", is_percentage=False
                     )
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                 else:
                     st.info("No data available")
             with col2:
@@ -986,7 +990,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                         period_data_non_reserve["CT"], "Credit Time", is_percentage=True
                     )
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                 else:
                     st.info("No data available")
 
@@ -999,7 +1003,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                         period_data_for_bt["BT"], "Block Time", is_percentage=False
                     )
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                 else:
                     st.info("No data available")
             with col2:
@@ -1008,7 +1012,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                         period_data_for_bt["BT"], "Block Time", is_percentage=True
                     )
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                 else:
                     st.info("No data available")
 

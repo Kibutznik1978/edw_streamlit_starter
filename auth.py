@@ -413,7 +413,7 @@ def show_user_info(supabase: Client) -> None:
     st.sidebar.markdown(f"{role_emoji} Role: **{role.title()}**")
 
     # Logout button
-    if st.sidebar.button("🚪 Logout", type="secondary", use_container_width=True):
+    if st.sidebar.button("🚪 Logout", type="secondary", width="stretch"):
         # Sign out from Supabase
         try:
             supabase.auth.sign_out()

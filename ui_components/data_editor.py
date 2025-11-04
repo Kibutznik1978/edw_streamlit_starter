@@ -37,7 +37,7 @@ def create_bid_line_editor(df: pd.DataFrame, key: str = "bidline_data_editor") -
     edited_df = st.data_editor(
         df,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         num_rows="fixed",
         disabled=READONLY_COLUMNS,  # Line number is read-only
         column_config={
@@ -199,7 +199,7 @@ def render_change_summary(
 
         # Show changed cells
         with st.expander("📝 View edited cells", expanded=False):
-            st.dataframe(changes, hide_index=True, use_container_width=True)
+            st.dataframe(changes, hide_index=True, width="stretch")
 
         # Add validation warnings
         if show_validation:
