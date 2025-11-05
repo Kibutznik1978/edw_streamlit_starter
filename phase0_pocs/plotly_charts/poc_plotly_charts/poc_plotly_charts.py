@@ -25,29 +25,31 @@ import plotly.express as px
 
 class PlotlyChartsState(rx.State):
     """State for Plotly charts POC."""
+    pass
 
-    # Sample data (matches app data structure)
-    duty_day_data = {
-        "0-5 hours": 45,
-        "5-10 hours": 78,
-        "10-15 hours": 92,
-        "15-20 hours": 35,
-        "20+ hours": 12,
-    }
 
-    edw_data = {"EDW Trips": 85, "Non-EDW Trips": 115}
+# Sample data (static, not in state)
+DUTY_DAY_DATA = {
+    "0-5 hours": 45,
+    "5-10 hours": 78,
+    "10-15 hours": 92,
+    "15-20 hours": 35,
+    "20+ hours": 12,
+}
 
-    weighted_metrics = {
-        "Trip-weighted": 42.5,
-        "TAFB-weighted": 38.7,
-        "Duty-day-weighted": 45.2,
-    }
+EDW_DATA = {"EDW Trips": 85, "Non-EDW Trips": 115}
+
+WEIGHTED_METRICS = {
+    "Trip-weighted": 42.5,
+    "TAFB-weighted": 38.7,
+    "Duty-day-weighted": 45.2,
+}
 
 
 def create_bar_chart() -> go.Figure:
     """Create duty day distribution bar chart."""
-    categories = list(PlotlyChartsState.duty_day_data.keys())
-    values = list(PlotlyChartsState.duty_day_data.values())
+    categories = list(DUTY_DAY_DATA.keys())
+    values = list(DUTY_DAY_DATA.values())
 
     fig = go.Figure(
         data=[
@@ -74,8 +76,8 @@ def create_bar_chart() -> go.Figure:
 
 def create_pie_chart() -> go.Figure:
     """Create EDW vs Non-EDW pie chart."""
-    labels = list(PlotlyChartsState.edw_data.keys())
-    values = list(PlotlyChartsState.edw_data.values())
+    labels = list(EDW_DATA.keys())
+    values = list(EDW_DATA.values())
 
     fig = go.Figure(
         data=[
@@ -99,8 +101,8 @@ def create_pie_chart() -> go.Figure:
 
 def create_radar_chart() -> go.Figure:
     """Create weighted EDW metrics radar chart."""
-    categories = list(PlotlyChartsState.weighted_metrics.keys())
-    values = list(PlotlyChartsState.weighted_metrics.values())
+    categories = list(WEIGHTED_METRICS.keys())
+    values = list(WEIGHTED_METRICS.values())
 
     fig = go.Figure(
         data=[
@@ -132,14 +134,14 @@ def index() -> rx.Component:
     return rx.container(
         rx.vstack(
             # Header
-            rx.heading("POC: Plotly Charts Integration", size="xl"),
+            rx.heading("POC 3: Plotly Charts Integration", size="9"),
             rx.text("Testing Plotly chart rendering and interactivity", color="gray"),
             rx.divider(),
 
             # Instructions
             rx.box(
                 rx.vstack(
-                    rx.heading("Test Instructions", size="md"),
+                    rx.heading("Test Instructions", size="6"),
                     rx.unordered_list(
                         rx.list_item("Hover over chart elements to see tooltips"),
                         rx.list_item("Try zoom/pan on bar chart"),
@@ -148,27 +150,27 @@ def index() -> rx.Component:
                     ),
                 ),
                 background_color="lightblue",
-                padding="1rem",
+                padding="4",
                 border_radius="8px",
             ),
 
             # Bar chart
             rx.box(
-                rx.heading("Bar Chart - Duty Day Distribution", size="md"),
+                rx.heading("Bar Chart - Duty Day Distribution", size="6"),
                 rx.plotly(data=create_bar_chart()),
                 width="100%",
             ),
 
             # Pie chart
             rx.box(
-                rx.heading("Pie Chart - EDW vs Non-EDW", size="md"),
+                rx.heading("Pie Chart - EDW vs Non-EDW", size="6"),
                 rx.plotly(data=create_pie_chart()),
                 width="100%",
             ),
 
             # Radar chart
             rx.box(
-                rx.heading("Radar Chart - Weighted Metrics", size="md"),
+                rx.heading("Radar Chart - Weighted Metrics", size="6"),
                 rx.plotly(data=create_radar_chart()),
                 width="100%",
             ),
@@ -177,12 +179,11 @@ def index() -> rx.Component:
             rx.divider(),
             rx.box(
                 rx.vstack(
-                    rx.heading("POC Results", size="md"),
+                    rx.heading("POC Results", size="6"),
                     rx.text("🔍 TO TEST:", font_weight="bold"),
                     rx.text("✅ Plotly charts render in Reflex"),
                     rx.text("✅ Hover tooltips functional"),
                     rx.text("✅ Zoom/pan interactions work"),
-                    rx.text("⏳ Need to test with actual app data"),
                     rx.text("⏳ Test responsive behavior on mobile"),
                     rx.text("⏳ Validate export to static images for PDF"),
                     rx.text(""),
@@ -193,18 +194,25 @@ def index() -> rx.Component:
                     ),
                 ),
                 background_color="lightgray",
-                padding="1rem",
+                padding="4",
                 border_radius="8px",
             ),
 
-            spacing="1rem",
+            spacing="4",
             width="100%",
         ),
         max_width="1200px",
-        padding="2rem",
+        padding="8",
     )
 
 
-# Create POC app
-app = rx.App()
-app.add_page(index, route="/", title="Plotly Charts POC")
+# Create POC app with light mode theme
+app = rx.App(
+    theme=rx.theme(
+        appearance="light",
+        has_background=True,
+        radius="large",
+        accent_color="blue",
+    )
+)
+app.add_page(index, route="/", title="POC 3: Plotly Charts")
