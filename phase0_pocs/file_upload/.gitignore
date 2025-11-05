@@ -1,0 +1,13 @@
+*.py[cod]
+assets/external/
+.web
+.states
+# Reflex generated files
+.web/
+__pycache__/
+*.db
+*.db-shm
+*.db-wal
+reflex.db
+*.pyc
+.DS_Store
