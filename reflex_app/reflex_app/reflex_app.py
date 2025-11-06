@@ -8,7 +8,7 @@ import reflex as rx
 from .auth.auth_state import AuthState
 from .auth.components import login_page, navbar, unauthorized_page
 from .database.base_state import DatabaseState
-from .edw.components import upload_component, header_component, summary_component, charts_component
+from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component
 from .edw.edw_state import EDWState
 
 
@@ -47,7 +47,9 @@ def edw_analyzer_tab() -> rx.Component:
         # Duty day distribution charts
         charts_component(),
 
-        # TODO: Add filtering UI (Task 3.6)
+        # Advanced filtering controls
+        filters_component(),
+
         # TODO: Add trip details viewer (Task 3.7)
         # TODO: Add trip records table (Task 3.8)
 
