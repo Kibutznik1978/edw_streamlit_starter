@@ -9,6 +9,8 @@ from typing import Optional, Dict, List, Any
 from pathlib import Path
 import tempfile
 import pandas as pd
+import sys
+import os
 
 from ..database.base_state import DatabaseState
 
@@ -237,7 +239,12 @@ class EDWState(DatabaseState):
             self.processing_message = "Extracting PDF text..."
 
             # Import EDW reporter functions (lazy import to avoid circular dependencies)
-            from ...edw_reporter import (
+            # Add project root to path to import edw_reporter from parent directory
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+
+            from edw_reporter import (
                 extract_pdf_header_info,
                 run_edw_report
             )
