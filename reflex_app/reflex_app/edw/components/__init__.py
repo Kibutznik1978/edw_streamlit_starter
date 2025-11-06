@@ -11,5 +11,9 @@ This module contains reusable UI components for the EDW Pairing Analyzer:
 """
 
 from .upload import upload_component
+from .header import header_component
 
-__all__ = ["upload_component"]
+__all__ = [
+    "upload_component",
+    "header_component",
+]

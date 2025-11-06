@@ -8,7 +8,7 @@ import reflex as rx
 from .auth.auth_state import AuthState
 from .auth.components import login_page, navbar, unauthorized_page
 from .database.base_state import DatabaseState
-from .edw.components import upload_component
+from .edw.components import upload_component, header_component
 from .edw.edw_state import EDWState
 
 
@@ -38,7 +38,9 @@ def edw_analyzer_tab() -> rx.Component:
         # Upload component
         upload_component(),
 
-        # TODO: Add header display component (Task 3.3)
+        # Header information display
+        header_component(),
+
         # TODO: Add results display components (Task 3.4)
         # TODO: Add duty day distribution charts (Task 3.5)
         # TODO: Add filtering UI (Task 3.6)
