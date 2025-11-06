@@ -54,8 +54,8 @@ class EDWState(DatabaseState):
     # Duty day distribution data
     duty_dist_data: List[Dict[str, Any]] = []
 
-    # Duty day statistics
-    duty_day_stats: Dict[str, Any] = {}
+    # Duty day statistics (list of records for table rendering)
+    duty_day_stats: List[Dict[str, Any]] = []
 
     # ========== Filter State ==========
     # Max duty day length filter
@@ -331,10 +331,10 @@ class EDWState(DatabaseState):
         if duty_dist is not None:
             self.duty_dist_data = duty_dist.to_dict("records")
 
-        # Store duty day statistics
+        # Store duty day statistics (as list of records for easy table rendering)
         duty_stats = results.get("duty_day_stats")
         if duty_stats is not None:
-            self.duty_day_stats = duty_stats.to_dict()
+            self.duty_day_stats = duty_stats.to_dict("records")
 
     def reset_filters(self):
         """Reset all filters to default values."""
