@@ -9,6 +9,7 @@ from typing import Optional, Dict, List, Any
 from pathlib import Path
 import tempfile
 import pandas as pd
+import plotly.graph_objects as go
 import sys
 import os
 
@@ -209,7 +210,141 @@ class EDWState(DatabaseState):
 
         return self.duty_dist_data
 
+    @rx.var
+    def duty_day_count_chart(self) -> go.Figure:
+        """Generate duty day count bar chart."""
+        data = self.duty_dist_display
+
+        # Create empty figure if no data
+        if not data:
+            fig = go.Figure()
+            fig.update_layout(
+                title="Duty Day Count Distribution",
+                xaxis_title="Number of Duty Days",
+                yaxis_title="Number of Trips",
+                template="plotly_white",
+                height=400,
+            )
+            return fig
+
+        # Extract data - handle both naming conventions
+        duty_days = []
+        trips = []
+        for item in data:
+            # Try both "Duty Days" and "duty_days" keys
+            dd = item.get("Duty Days") or item.get("duty_days", 0)
+            t = item.get("Trips") or item.get("trips", 0)
+            duty_days.append(dd)
+            trips.append(t)
+
+        # Create bar chart
+        fig = go.Figure()
+
+        fig.add_trace(go.Bar(
+            x=duty_days,
+            y=trips,
+            text=trips,
+            textposition='outside',
+            marker=dict(
+                color='#3b82f6',  # Blue color
+                line=dict(color='#1e40af', width=1)
+            ),
+            hovertemplate='<b>%{x} Duty Days</b><br>Trips: %{y}<extra></extra>',
+        ))
+
+        fig.update_layout(
+            title=dict(
+                text="Duty Day Count Distribution",
+                font=dict(size=18),
+                x=0.5,
+                xanchor='center',
+            ),
+            xaxis=dict(
+                title="Number of Duty Days",
+                tickmode='linear',
+                dtick=1,
+            ),
+            yaxis=dict(
+                title="Number of Trips",
+            ),
+            template="plotly_white",
+            height=400,
+            margin=dict(l=50, r=50, t=60, b=50),
+            showlegend=False,
+        )
+
+        return fig
+
+    @rx.var
+    def duty_day_percent_chart(self) -> go.Figure:
+        """Generate duty day percentage bar chart."""
+        data = self.duty_dist_display
+
+        # Create empty figure if no data
+        if not data:
+            fig = go.Figure()
+            fig.update_layout(
+                title="Duty Day Percentage Distribution",
+                xaxis_title="Number of Duty Days",
+                yaxis_title="Percentage of Trips",
+                template="plotly_white",
+                height=400,
+            )
+            return fig
+
+        # Extract data - handle both naming conventions
+        duty_days = []
+        percents = []
+        for item in data:
+            # Try both "Duty Days" and "duty_days" keys
+            dd = item.get("Duty Days") or item.get("duty_days", 0)
+            p = item.get("Percent") or item.get("percent", 0.0)
+            duty_days.append(dd)
+            percents.append(p)
+
+        # Create bar chart
+        fig = go.Figure()
+
+        fig.add_trace(go.Bar(
+            x=duty_days,
+            y=percents,
+            text=[f"{p:.1f}%" for p in percents],
+            textposition='outside',
+            marker=dict(
+                color='#10b981',  # Green color
+                line=dict(color='#047857', width=1)
+            ),
+            hovertemplate='<b>%{x} Duty Days</b><br>Percentage: %{y:.1f}%<extra></extra>',
+        ))
+
+        fig.update_layout(
+            title=dict(
+                text="Duty Day Percentage Distribution",
+                font=dict(size=18),
+                x=0.5,
+                xanchor='center',
+            ),
+            xaxis=dict(
+                title="Number of Duty Days",
+                tickmode='linear',
+                dtick=1,
+            ),
+            yaxis=dict(
+                title="Percentage of Trips (%)",
+            ),
+            template="plotly_white",
+            height=400,
+            margin=dict(l=50, r=50, t=60, b=50),
+            showlegend=False,
+        )
+
+        return fig
+
     # ========== Event Handlers ==========
+
+    def set_exclude_turns(self, value: bool):
+        """Set exclude_turns toggle value."""
+        self.exclude_turns = value
 
     async def handle_upload(self, files: List[rx.UploadFile]):
         """Handle PDF file upload and processing."""
