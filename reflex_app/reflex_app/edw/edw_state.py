@@ -205,7 +205,8 @@ class EDWState(DatabaseState):
         if self.exclude_turns:
             return [
                 item for item in self.duty_dist_data
-                if item.get("duty_days", 0) != 1
+                # Handle both "Duty Days" (from DataFrame) and "duty_days" (alternative)
+                if (item.get("Duty Days") or item.get("duty_days", 0)) != 1
             ]
 
         return self.duty_dist_data
