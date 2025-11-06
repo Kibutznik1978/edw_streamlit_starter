@@ -262,15 +262,16 @@ class EDWState(DatabaseState):
             ),
             xaxis=dict(
                 title="Number of Duty Days",
-                tickmode='linear',
-                dtick=1,
+                tickmode='array',
+                tickvals=duty_days,  # Explicitly set tick values to match data
+                ticktext=[str(int(d)) for d in duty_days],  # Show all labels
             ),
             yaxis=dict(
                 title="Number of Trips",
             ),
             template="plotly_white",
             height=400,
-            margin=dict(l=50, r=50, t=60, b=50),
+            margin=dict(l=50, r=50, t=60, b=60),  # Increased bottom margin
             showlegend=False,
         )
 
@@ -327,15 +328,16 @@ class EDWState(DatabaseState):
             ),
             xaxis=dict(
                 title="Number of Duty Days",
-                tickmode='linear',
-                dtick=1,
+                tickmode='array',
+                tickvals=duty_days,  # Explicitly set tick values to match data
+                ticktext=[str(int(d)) for d in duty_days],  # Show all labels
             ),
             yaxis=dict(
                 title="Percentage of Trips (%)",
             ),
             template="plotly_white",
             height=400,
-            margin=dict(l=50, r=50, t=60, b=50),
+            margin=dict(l=50, r=50, t=60, b=60),  # Increased bottom margin
             showlegend=False,
         )
 
