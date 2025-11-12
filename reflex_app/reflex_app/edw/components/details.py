@@ -101,8 +101,11 @@ def _render_trip_details() -> rx.Component:
             EDWState.selected_trip_data.contains("error"),
             # Show error message
             rx.callout(
-                rx.text("Error parsing trip data: "),
-                rx.text(EDWState.selected_trip_data["error"]),
+                rx.vstack(
+                    rx.text("Error parsing trip data: "),
+                    rx.text(EDWState.selected_trip_data["error"]),
+                    spacing="1",
+                ),
                 icon="triangle-alert",
                 color_scheme="red",
             ),
@@ -139,7 +142,7 @@ def _render_trip_details() -> rx.Component:
                         rx.table.body(
                             # Render all duty days
                             rx.foreach(
-                                EDWState.selected_trip_data.get("duty_days", []),
+                                EDWState.selected_trip_duty_days,
                                 lambda duty, idx: _render_duty_day(duty, idx),
                             )
                         ),
@@ -202,10 +205,20 @@ def _render_duty_day(duty: Dict[str, Any], duty_idx: int) -> rx.Component:
             rx.fragment(),
         ),
 
-        # Flight rows
-        rx.foreach(
-            duty.get("flights", []),
-            lambda flight, flight_idx: _render_flight_row(flight, flight_idx),
+        # Flight rows placeholder (nested foreach not supported in Reflex 0.8.18)
+        # TODO: Implement proper flight row rendering in future version
+        rx.cond(
+            duty.contains("flights"),
+            rx.table.row(
+                rx.table.cell(
+                    "[Flight details temporarily disabled - nested foreach limitation]",
+                    colspan=10,
+                    padding="0.5rem",
+                    color="gray",
+                    font_style="italic",
+                ),
+            ),
+            rx.fragment(),
         ),
 
         # Duty end row (Debriefing)
@@ -303,54 +316,28 @@ def _render_trip_summary(summary: Dict[str, Any]) -> rx.Component:
     Returns:
         Component displaying trip summary
     """
-    # Define the fields we want to display
-    row1_fields = ["Credit", "Blk", "Duty Time", "TAFB", "Duty Days"]
-    row2_fields = ["Prem", "PDiem", "LDGS", "Crew", "Domicile"]
-
+    # Simplified rendering without foreach (to avoid type inference issues in Reflex 0.8.18)
     return rx.vstack(
         rx.heading("Trip Summary", size="4", weight="bold", margin_top="1rem"),
         rx.divider(),
         rx.vstack(
-            # Row 1
+            # Row 1 - hardcoded fields
             rx.hstack(
-                rx.foreach(
-                    row1_fields,
-                    lambda field: rx.cond(
-                        summary.contains(field),
-                        rx.hstack(
-                            rx.text(f"{field}:", weight="bold", size="2"),
-                            rx.text(summary[field], size="2"),
-                            spacing="1",
-                        ),
-                        rx.fragment(),
-                    ),
-                ),
+                rx.cond(summary.contains("Credit"), rx.hstack(rx.text("Credit:", weight="bold", size="2"), rx.text(summary["Credit"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("Blk"), rx.hstack(rx.text("Blk:", weight="bold", size="2"), rx.text(summary["Blk"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("Duty Time"), rx.hstack(rx.text("Duty Time:", weight="bold", size="2"), rx.text(summary["Duty Time"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("TAFB"), rx.hstack(rx.text("TAFB:", weight="bold", size="2"), rx.text(summary["TAFB"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("Duty Days"), rx.hstack(rx.text("Duty Days:", weight="bold", size="2"), rx.text(summary["Duty Days"], size="2"), spacing="1"), rx.fragment()),
                 spacing="4",
                 wrap="wrap",
             ),
-            # Row 2
+            # Row 2 - hardcoded fields
             rx.hstack(
-                rx.foreach(
-                    row2_fields,
-                    lambda field: rx.cond(
-                        summary.contains(field),
-                        rx.hstack(
-                            rx.text(f"{field}:", weight="bold", size="2"),
-                            # Add $ prefix for Prem and PDiem if needed
-                            rx.cond(
-                                (field == "Prem") | (field == "PDiem"),
-                                rx.cond(
-                                    summary[field].startswith("$"),
-                                    rx.text(summary[field], size="2"),
-                                    rx.text(f"${summary[field]}", size="2"),
-                                ),
-                                rx.text(summary[field], size="2"),
-                            ),
-                            spacing="1",
-                        ),
-                        rx.fragment(),
-                    ),
-                ),
+                rx.cond(summary.contains("Prem"), rx.hstack(rx.text("Prem:", weight="bold", size="2"), rx.text(summary["Prem"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("PDiem"), rx.hstack(rx.text("PDiem:", weight="bold", size="2"), rx.text(summary["PDiem"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("LDGS"), rx.hstack(rx.text("LDGS:", weight="bold", size="2"), rx.text(summary["LDGS"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("Crew"), rx.hstack(rx.text("Crew:", weight="bold", size="2"), rx.text(summary["Crew"], size="2"), spacing="1"), rx.fragment()),
+                rx.cond(summary.contains("Domicile"), rx.hstack(rx.text("Domicile:", weight="bold", size="2"), rx.text(summary["Domicile"], size="2"), spacing="1"), rx.fragment()),
                 spacing="4",
                 wrap="wrap",
             ),

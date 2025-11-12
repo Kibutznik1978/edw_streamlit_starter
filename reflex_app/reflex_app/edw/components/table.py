@@ -53,10 +53,7 @@ def _export_button() -> rx.Component:
     return rx.button(
         rx.icon("download", size=16),
         "Export CSV",
-        on_click=rx.download(
-            data=EDWState.generate_csv_export(),
-            filename=f"trip_records.csv",
-        ),
+        on_click=EDWState.download_csv,
         size="2",
         variant="soft",
         disabled=~EDWState.has_results,
@@ -205,7 +202,7 @@ def _pagination_controls() -> rx.Component:
         rx.spacer(),
         # Page info
         rx.text(
-            f"Page {EDWState.table_page} of {EDWState.total_pages} ({len(EDWState.sorted_filtered_trips)} trips)",
+            f"Page {EDWState.table_page} of {EDWState.total_pages} ({EDWState.sorted_filtered_trips.length()} trips)",
             size="2",
             color=rx.color("gray", 11),
         ),

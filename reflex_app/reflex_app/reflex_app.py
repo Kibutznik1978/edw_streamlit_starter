@@ -8,7 +8,7 @@ import reflex as rx
 from .auth.auth_state import AuthState
 from .auth.components import login_page, navbar, unauthorized_page
 from .database.base_state import DatabaseState
-from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component, details_component, table_component
+from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component, details_component, table_component, downloads_component
 from .edw.edw_state import EDWState
 
 
@@ -50,11 +50,24 @@ def edw_analyzer_tab() -> rx.Component:
         # Advanced filtering controls
         filters_component(),
 
-        # Trip details viewer
-        details_component(),
+        # Trip details viewer - temporarily disabled due to Reflex 0.8.18 type inference issues
+        # TODO: Fix nested foreach and dynamic property access in details component
+        # details_component(),
+        rx.cond(
+            EDWState.has_results,
+            rx.callout(
+                "Trip Details Viewer temporarily disabled - fixing Reflex 0.8.18 compatibility",
+                icon="info",
+                color_scheme="amber",
+            ),
+            rx.fragment(),
+        ),
 
         # Trip records table
         table_component(),
+
+        # Downloads component (Excel and PDF exports)
+        downloads_component(),
 
         spacing="4",
         padding="8",

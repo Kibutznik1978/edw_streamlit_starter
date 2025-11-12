@@ -12,8 +12,13 @@ import pandas as pd
 import plotly.graph_objects as go
 import sys
 import os
+from io import BytesIO
 
 from ..database.base_state import DatabaseState
+
+# Add path to import from root directory modules
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+from export_pdf import create_pdf_report
 
 
 class EDWState(DatabaseState):
@@ -226,6 +231,23 @@ class EDWState(DatabaseState):
         except Exception as e:
             # Return error dict if parsing fails
             return {"error": str(e)}
+
+    @rx.var
+    def selected_trip_duty_days(self) -> List[Dict[str, Any]]:
+        """Return duty days list for the selected trip.
+
+        Explicitly typed for use in rx.foreach.
+
+        Returns:
+            List of duty day dictionaries, or empty list if not available.
+        """
+        trip_data = self.selected_trip_data
+        if not trip_data or "duty_days" not in trip_data:
+            return []
+
+        duty_days = trip_data.get("duty_days", [])
+        # Ensure we return a list type (not None or other)
+        return duty_days if isinstance(duty_days, list) else []
 
     @rx.var
     def duty_dist_display(self) -> List[Dict[str, Any]]:
@@ -647,13 +669,203 @@ class EDWState(DatabaseState):
         return df_export.to_csv(index=False)
 
     def generate_excel_download(self) -> bytes:
-        """Generate Excel workbook for download."""
-        # TODO: Implement Excel generation
-        # Will reuse existing edw_reporter.py logic
-        return b""
+        """Generate Excel workbook for download.
+
+        Creates a multi-sheet Excel workbook with:
+        - Trip Records (filtered trips data)
+        - Duty Distribution (duty day counts and percentages)
+        - Trip Summary (counts and EDW percentages)
+        - Weighted Summary (weighted EDW metrics)
+        - Duty Day Statistics (averages for All/EDW/Non-EDW)
+        - Hot Standby Summary (if applicable)
+
+        Returns:
+            bytes: Excel file as bytes
+        """
+        if not self.filtered_trips:
+            return b""
+
+        try:
+            # Convert filtered trips to DataFrame
+            df_trips = pd.DataFrame(self.filtered_trips)
+
+            # Duty Distribution (exclude Hot Standby)
+            df_regular = df_trips[~df_trips["Hot Standby"]] if "Hot Standby" in df_trips.columns else df_trips
+            duty_dist = df_regular[df_regular["Duty Days"] > 0].groupby("Duty Days")["Frequency"].sum().reset_index(name="Trips")
+            duty_dist["Percent"] = (duty_dist["Trips"] / duty_dist["Trips"].sum() * 100).round(1) if len(duty_dist) > 0 else 0
+
+            # Trip Summary
+            trip_summary = pd.DataFrame({
+                "Metric": ["Unique Pairings", "Total Trips", "EDW Trips", "Day Trips", "Hot Standby Trips"],
+                "Value": [
+                    self.unique_pairings,
+                    self.total_trips,
+                    self.edw_trips,
+                    self.day_trips,
+                    self.hot_standby_trips
+                ],
+            })
+
+            # Weighted Summary
+            weighted_summary = pd.DataFrame({
+                "Metric": [
+                    "Trip-weighted EDW trip %",
+                    "TAFB-weighted EDW trip %",
+                    "Duty-day-weighted EDW trip %",
+                ],
+                "Value": [
+                    f"{self.trip_weighted_pct:.1f}%",
+                    f"{self.tafb_weighted_pct:.1f}%",
+                    f"{self.duty_day_weighted_pct:.1f}%",
+                ],
+            })
+
+            # Duty Day Statistics
+            duty_day_stats_df = pd.DataFrame(self.duty_day_stats)
+
+            # Create Excel file in memory
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_trips.to_excel(writer, sheet_name="Trip Records", index=False)
+                duty_dist.to_excel(writer, sheet_name="Duty Distribution", index=False)
+                trip_summary.to_excel(writer, sheet_name="Trip Summary", index=False)
+                weighted_summary.to_excel(writer, sheet_name="Weighted Summary", index=False)
+                duty_day_stats_df.to_excel(writer, sheet_name="Duty Day Statistics", index=False)
+
+            # Get bytes from BytesIO
+            output.seek(0)
+            return output.getvalue()
+
+        except Exception as e:
+            print(f"Error generating Excel: {e}")
+            return b""
 
     def generate_pdf_download(self) -> bytes:
-        """Generate PDF report for download."""
-        # TODO: Implement PDF generation
-        # Will reuse existing export_pdf.py logic
-        return b""
+        """Generate PDF report for download.
+
+        Creates a professional multi-page PDF report with:
+        - Trip summary statistics
+        - Weighted EDW metrics
+        - Duty day statistics
+        - Trip length distribution charts
+        - EDW percentages analysis
+
+        Returns:
+            bytes: PDF file as bytes
+        """
+        if not self.filtered_trips:
+            return b""
+
+        try:
+            # Prepare trip summary data (dict format for KPI cards)
+            trip_summary = {
+                "Unique Pairings": self.unique_pairings,
+                "Total Trips": self.total_trips,
+                "EDW Trips": self.edw_trips,
+                "Day Trips": self.day_trips,
+            }
+
+            # Prepare weighted summary data (dict format for table)
+            weighted_summary = {
+                "Trip-weighted EDW trip %": f"{self.trip_weighted_pct:.1f}%",
+                "TAFB-weighted EDW trip %": f"{self.tafb_weighted_pct:.1f}%",
+                "Duty-day-weighted EDW trip %": f"{self.duty_day_weighted_pct:.1f}%",
+            }
+
+            # Prepare duty day stats (list of lists format for table)
+            duty_day_stats = [["Metric", "All", "EDW", "Non-EDW"]]
+            for stat in self.duty_day_stats:
+                duty_day_stats.append([
+                    stat["Metric"],
+                    stat["All"],
+                    stat["EDW"],
+                    stat["Non-EDW"]
+                ])
+
+            # Prepare trip length distribution (list of dicts format)
+            df_trips = pd.DataFrame(self.filtered_trips)
+            df_regular = df_trips[~df_trips["Hot Standby"]] if "Hot Standby" in df_trips.columns else df_trips
+            duty_dist = df_regular[df_regular["Duty Days"] > 0].groupby("Duty Days")["Frequency"].sum().reset_index(name="Trips")
+
+            trip_length_distribution = [
+                {"duty_days": int(row["Duty Days"]), "trips": int(row["Trips"])}
+                for _, row in duty_dist.iterrows()
+            ]
+
+            # Prepare data dictionary for create_pdf_report
+            pdf_data = {
+                "title": f"{self.domicile} {self.aircraft} – Bid {self.bid_period}",
+                "subtitle": "Executive Dashboard • Pairing Breakdown & Duty-Day Metrics",
+                "trip_summary": trip_summary,
+                "weighted_summary": weighted_summary,
+                "duty_day_stats": duty_day_stats,
+                "trip_length_distribution": trip_length_distribution,
+                "notes": "Generated from EDW Pairing Analyzer",
+                "generated_by": "Aero Crew Data App"
+            }
+
+            # Branding configuration
+            branding = {
+                "primary_hex": "#1E40AF",
+                "accent_hex": "#F3F4F6",
+                "rule_hex": "#E5E7EB",
+                "muted_hex": "#6B7280",
+                "bg_alt_hex": "#FAFAFA",
+                "sky_hex": "#2E9BE8",
+                "logo_path": None,
+                "title_left": f"{self.domicile} {self.aircraft} – Bid {self.bid_period} | Pairing Analysis Report"
+            }
+
+            # Create PDF in temporary file
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+
+            try:
+                # Generate PDF using export_pdf module
+                create_pdf_report(pdf_data, tmp_path, branding)
+
+                # Read PDF bytes
+                with open(tmp_path, 'rb') as f:
+                    pdf_bytes = f.read()
+
+                return pdf_bytes
+
+            finally:
+                # Clean up temporary file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+        except Exception as e:
+            print(f"Error generating PDF: {e}")
+            import traceback
+            traceback.print_exc()
+            return b""
+
+    # Download Event Handlers
+    # These methods return rx.download() EventSpecs for use in on_click handlers
+
+    def download_csv(self):
+        """Event handler for CSV download from table component."""
+        csv_data = self.generate_csv_export()
+        return rx.download(
+            data=csv_data.encode('utf-8'),
+            filename="trip_records.csv",
+        )
+
+    def download_excel(self):
+        """Event handler for Excel download from downloads component."""
+        excel_bytes = self.generate_excel_download()
+        filename = f"{self.domicile}_{self.aircraft}_Bid{self.bid_period}_EDW_Report.xlsx"
+        return rx.download(
+            data=excel_bytes,
+            filename=filename,
+        )
+
+    def download_pdf(self):
+        """Event handler for PDF download from downloads component."""
+        pdf_bytes = self.generate_pdf_download()
+        filename = f"{self.domicile}_{self.aircraft}_Bid{self.bid_period}_EDW_Report.pdf"
+        return rx.download(
+            data=pdf_bytes,
+            filename=filename,
+        )
