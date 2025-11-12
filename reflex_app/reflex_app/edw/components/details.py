@@ -122,7 +122,7 @@ def _render_trip_details() -> rx.Component:
                     rx.fragment(),
                 ),
 
-                # Duty day table
+                # Duty day table (using flattened rows - no nested foreach)
                 rx.box(
                     rx.table.root(
                         rx.table.header(
@@ -140,10 +140,10 @@ def _render_trip_details() -> rx.Component:
                             )
                         ),
                         rx.table.body(
-                            # Render all duty days
+                            # Single foreach over flattened table rows
                             rx.foreach(
-                                EDWState.selected_trip_duty_days,
-                                lambda duty, idx: _render_duty_day(duty, idx),
+                                EDWState.selected_trip_table_rows,
+                                lambda row: _render_table_row(row),
                             )
                         ),
                         variant="surface",
@@ -155,8 +155,8 @@ def _render_trip_details() -> rx.Component:
 
                 # Trip summary
                 rx.cond(
-                    EDWState.selected_trip_data.contains("trip_summary"),
-                    _render_trip_summary(EDWState.selected_trip_data["trip_summary"]),
+                    EDWState.selected_trip_summary.length() > 0,
+                    _render_trip_summary(EDWState.selected_trip_summary),
                     rx.fragment(),
                 ),
 
@@ -177,69 +177,60 @@ def _render_trip_details() -> rx.Component:
     )
 
 
-def _render_duty_day(duty: Dict[str, Any], duty_idx: int) -> rx.Component:
-    """Render all rows for a single duty day.
+def _render_table_row(row: Dict[str, Any]) -> rx.Component:
+    """Render a single table row based on its type.
+
+    Uses rx.match to switch between different row types (briefing, flight, debriefing, subtotal).
+    This avoids nested foreach issues in Reflex 0.8.18.
 
     Args:
-        duty: Duty day data dict (Var)
-        duty_idx: Index of this duty day (0-based from foreach)
+        row: Flattened row data dict with 'row_type' field
 
     Returns:
-        Fragment containing all table rows for this duty day
+        Table row component
     """
-    return rx.fragment(
-        # Duty start row (Briefing)
-        rx.cond(
-            duty.contains("duty_start"),
-            rx.table.row(
-                rx.table.cell(
-                    rx.text("Briefing", font_style="italic"),
-                    colspan=3,
-                    padding="0.5rem",
-                    background_color=rx.color("gray", 2),
-                ),
-                rx.table.cell(duty["duty_start"], padding="0.5rem", background_color=rx.color("gray", 2)),
-                rx.table.cell("", padding="0.5rem", background_color=rx.color("gray", 2)),
-                rx.table.cell("", colspan=5, padding="0.5rem", background_color=rx.color("gray", 2)),
+    return rx.match(
+        row["row_type"],
+        # Briefing row
+        ("briefing", rx.table.row(
+            rx.table.cell(
+                rx.text("Briefing", font_style="italic"),
+                colspan=3,
+                padding="0.5rem",
+                background_color=rx.color("gray", 2),
             ),
-            rx.fragment(),
-        ),
-
-        # Flight rows placeholder (nested foreach not supported in Reflex 0.8.18)
-        # TODO: Implement proper flight row rendering in future version
-        rx.cond(
-            duty.contains("flights"),
-            rx.table.row(
-                rx.table.cell(
-                    "[Flight details temporarily disabled - nested foreach limitation]",
-                    colspan=10,
-                    padding="0.5rem",
-                    color="gray",
-                    font_style="italic",
-                ),
+            rx.table.cell(row["duty_start"], padding="0.5rem", background_color=rx.color("gray", 2)),
+            rx.table.cell("", padding="0.5rem", background_color=rx.color("gray", 2)),
+            rx.table.cell("", colspan=5, padding="0.5rem", background_color=rx.color("gray", 2)),
+        )),
+        # Flight row
+        ("flight", rx.table.row(
+            rx.table.cell(row.get("day", ""), padding="0.5rem"),
+            rx.table.cell(row.get("flight", ""), padding="0.5rem"),
+            rx.table.cell(row.get("route", ""), padding="0.5rem"),
+            rx.table.cell(row.get("depart", ""), padding="0.5rem"),
+            rx.table.cell(row.get("arrive", ""), padding="0.5rem"),
+            rx.table.cell(row.get("block", ""), padding="0.5rem"),
+            rx.table.cell(row.get("connection", ""), padding="0.5rem"),
+            # Duty, Cr, L/O columns left empty (rowspan not well-supported)
+            rx.table.cell("", padding="0.5rem"),
+            rx.table.cell("", padding="0.5rem"),
+            rx.table.cell("", padding="0.5rem"),
+        )),
+        # Debriefing row
+        ("debriefing", rx.table.row(
+            rx.table.cell(
+                rx.text("Debriefing", font_style="italic"),
+                colspan=3,
+                padding="0.5rem",
+                background_color=rx.color("gray", 2),
             ),
-            rx.fragment(),
-        ),
-
-        # Duty end row (Debriefing)
-        rx.cond(
-            duty.contains("duty_end"),
-            rx.table.row(
-                rx.table.cell(
-                    rx.text("Debriefing", font_style="italic"),
-                    colspan=3,
-                    padding="0.5rem",
-                    background_color=rx.color("gray", 2),
-                ),
-                rx.table.cell("", padding="0.5rem", background_color=rx.color("gray", 2)),
-                rx.table.cell(duty["duty_end"], padding="0.5rem", background_color=rx.color("gray", 2)),
-                rx.table.cell("", colspan=5, padding="0.5rem", background_color=rx.color("gray", 2)),
-            ),
-            rx.fragment(),
-        ),
-
+            rx.table.cell("", padding="0.5rem", background_color=rx.color("gray", 2)),
+            rx.table.cell(row["duty_end"], padding="0.5rem", background_color=rx.color("gray", 2)),
+            rx.table.cell("", colspan=5, padding="0.5rem", background_color=rx.color("gray", 2)),
+        )),
         # Subtotal row
-        rx.table.row(
+        ("subtotal", rx.table.row(
             rx.table.cell(
                 "Duty Day Subtotal:",
                 colspan=5,
@@ -249,7 +240,7 @@ def _render_duty_day(duty: Dict[str, Any], duty_idx: int) -> rx.Component:
                 background_color=rx.color("gray", 3),
             ),
             rx.table.cell(
-                duty.get("block_total", ""),
+                row.get("block_total", ""),
                 padding="0.5rem",
                 font_weight="bold",
                 background_color=rx.color("gray", 3),
@@ -260,50 +251,26 @@ def _render_duty_day(duty: Dict[str, Any], duty_idx: int) -> rx.Component:
                 background_color=rx.color("gray", 3),
             ),
             rx.table.cell(
-                duty.get("duty_time", ""),
+                row.get("duty_time", ""),
                 padding="0.5rem",
                 font_weight="bold",
                 background_color=rx.color("gray", 3),
             ),
             rx.table.cell(
-                duty.get("credit", ""),
+                row.get("credit", ""),
                 padding="0.5rem",
                 font_weight="bold",
                 background_color=rx.color("gray", 3),
             ),
             rx.table.cell(
-                duty.get("rest", ""),
+                row.get("rest", ""),
                 padding="0.5rem",
                 font_weight="bold",
                 background_color=rx.color("gray", 3),
             ),
-        ),
-    )
-
-
-def _render_flight_row(flight: Dict[str, Any], flight_idx: int) -> rx.Component:
-    """Render a single flight row in the duty day table.
-
-    Args:
-        flight: Flight data dict (Var)
-        flight_idx: Index of this flight in the duty day (0-based from foreach)
-
-    Returns:
-        Table row component
-    """
-    return rx.table.row(
-        rx.table.cell(flight.get("day", ""), padding="0.5rem"),
-        rx.table.cell(flight.get("flight", ""), padding="0.5rem"),
-        rx.table.cell(flight.get("route", ""), padding="0.5rem"),
-        rx.table.cell(flight.get("depart", ""), padding="0.5rem"),
-        rx.table.cell(flight.get("arrive", ""), padding="0.5rem"),
-        rx.table.cell(flight.get("block", ""), padding="0.5rem"),
-        rx.table.cell(flight.get("connection", ""), padding="0.5rem"),
-        # Duty, Cr, L/O columns are handled by rowspan in original -
-        # for now, leave empty (Reflex tables don't support rowspan well)
-        rx.table.cell("", padding="0.5rem"),
-        rx.table.cell("", padding="0.5rem"),
-        rx.table.cell("", padding="0.5rem"),
+        )),
+        # Default/fallback
+        rx.fragment(),
     )
 
 
@@ -316,28 +283,29 @@ def _render_trip_summary(summary: Dict[str, Any]) -> rx.Component:
     Returns:
         Component displaying trip summary
     """
-    # Simplified rendering without foreach (to avoid type inference issues in Reflex 0.8.18)
+    # Simplified rendering - directly access fields without contains check
+    # Missing fields will just show empty values
     return rx.vstack(
         rx.heading("Trip Summary", size="4", weight="bold", margin_top="1rem"),
         rx.divider(),
         rx.vstack(
-            # Row 1 - hardcoded fields
+            # Row 1 - hardcoded fields (using get with defaults to avoid missing key errors)
             rx.hstack(
-                rx.cond(summary.contains("Credit"), rx.hstack(rx.text("Credit:", weight="bold", size="2"), rx.text(summary["Credit"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("Blk"), rx.hstack(rx.text("Blk:", weight="bold", size="2"), rx.text(summary["Blk"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("Duty Time"), rx.hstack(rx.text("Duty Time:", weight="bold", size="2"), rx.text(summary["Duty Time"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("TAFB"), rx.hstack(rx.text("TAFB:", weight="bold", size="2"), rx.text(summary["TAFB"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("Duty Days"), rx.hstack(rx.text("Duty Days:", weight="bold", size="2"), rx.text(summary["Duty Days"], size="2"), spacing="1"), rx.fragment()),
+                rx.hstack(rx.text("Credit:", weight="bold", size="2"), rx.text(summary.get("Credit", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("Blk:", weight="bold", size="2"), rx.text(summary.get("Blk", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("Duty Time:", weight="bold", size="2"), rx.text(summary.get("Duty Time", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("TAFB:", weight="bold", size="2"), rx.text(summary.get("TAFB", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("Duty Days:", weight="bold", size="2"), rx.text(summary.get("Duty Days", ""), size="2"), spacing="1"),
                 spacing="4",
                 wrap="wrap",
             ),
             # Row 2 - hardcoded fields
             rx.hstack(
-                rx.cond(summary.contains("Prem"), rx.hstack(rx.text("Prem:", weight="bold", size="2"), rx.text(summary["Prem"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("PDiem"), rx.hstack(rx.text("PDiem:", weight="bold", size="2"), rx.text(summary["PDiem"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("LDGS"), rx.hstack(rx.text("LDGS:", weight="bold", size="2"), rx.text(summary["LDGS"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("Crew"), rx.hstack(rx.text("Crew:", weight="bold", size="2"), rx.text(summary["Crew"], size="2"), spacing="1"), rx.fragment()),
-                rx.cond(summary.contains("Domicile"), rx.hstack(rx.text("Domicile:", weight="bold", size="2"), rx.text(summary["Domicile"], size="2"), spacing="1"), rx.fragment()),
+                rx.hstack(rx.text("Prem:", weight="bold", size="2"), rx.text(summary.get("Prem", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("PDiem:", weight="bold", size="2"), rx.text(summary.get("PDiem", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("LDGS:", weight="bold", size="2"), rx.text(summary.get("LDGS", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("Crew:", weight="bold", size="2"), rx.text(summary.get("Crew", ""), size="2"), spacing="1"),
+                rx.hstack(rx.text("Domicile:", weight="bold", size="2"), rx.text(summary.get("Domicile", ""), size="2"), spacing="1"),
                 spacing="4",
                 wrap="wrap",
             ),

@@ -50,20 +50,8 @@ def edw_analyzer_tab() -> rx.Component:
         # Advanced filtering controls
         filters_component(),
 
-        # Trip details viewer - temporarily disabled due to Reflex 0.8.18 type inference issues
-        # TODO: Fix nested foreach and dynamic property access in details component
-        # details_component(),
-        rx.cond(
-            EDWState.has_results,
-            rx.callout.root(
-                rx.callout.text(
-                    "Trip Details Viewer temporarily disabled - fixing Reflex 0.8.18 compatibility",
-                ),
-                icon="info",
-                color="amber",
-            ),
-            rx.fragment(),
-        ),
+        # Trip details viewer (fixed for Reflex 0.8.18 - uses flattened rows)
+        details_component(),
 
         # Trip records table
         table_component(),

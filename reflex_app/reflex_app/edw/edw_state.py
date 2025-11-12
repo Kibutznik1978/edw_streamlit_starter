@@ -268,6 +268,82 @@ class EDWState(DatabaseState):
         return duty_days if isinstance(duty_days, list) else []
 
     @rx.var
+    def selected_trip_table_rows(self) -> List[Dict[str, Any]]:
+        """Flatten duty days into a single list of table rows for display.
+
+        This avoids nested foreach issues in Reflex 0.8.18 by pre-flattening
+        the structure into: briefing row, flight rows, debriefing row, subtotal row.
+
+        Each row has a 'row_type' field: 'briefing', 'flight', 'debriefing', 'subtotal'
+
+        Returns:
+            Flat list of row dictionaries ready for single foreach rendering.
+        """
+        duty_days = self.selected_trip_duty_days
+        if not duty_days:
+            return []
+
+        rows = []
+        for duty_idx, duty in enumerate(duty_days):
+            # Add briefing row
+            if "duty_start" in duty:
+                rows.append({
+                    "row_type": "briefing",
+                    "duty_start": duty["duty_start"],
+                    "duty_idx": duty_idx
+                })
+
+            # Add flight rows
+            flights = duty.get("flights", [])
+            for flight in flights:
+                rows.append({
+                    "row_type": "flight",
+                    "day": flight.get("day", ""),
+                    "flight": flight.get("flight", ""),
+                    "route": flight.get("route", ""),
+                    "depart": flight.get("depart", ""),
+                    "arrive": flight.get("arrive", ""),
+                    "block": flight.get("block", ""),
+                    "connection": flight.get("connection", ""),
+                    "duty_idx": duty_idx
+                })
+
+            # Add debriefing row
+            if "duty_end" in duty:
+                rows.append({
+                    "row_type": "debriefing",
+                    "duty_end": duty["duty_end"],
+                    "duty_idx": duty_idx
+                })
+
+            # Add subtotal row
+            rows.append({
+                "row_type": "subtotal",
+                "block_total": duty.get("block_total", ""),
+                "duty_time": duty.get("duty_time", ""),
+                "credit": duty.get("credit", ""),
+                "rest": duty.get("rest", ""),
+                "duty_idx": duty_idx
+            })
+
+        return rows
+
+    @rx.var
+    def selected_trip_summary(self) -> Dict[str, Any]:
+        """Return trip summary for the selected trip.
+
+        Explicitly typed computed var to avoid 'Any' type issues in Reflex 0.8.18.
+
+        Returns:
+            Trip summary dictionary, or empty dict if not available.
+        """
+        trip_data = self.selected_trip_data
+        if not trip_data or "trip_summary" not in trip_data:
+            return {}
+
+        return trip_data.get("trip_summary", {})
+
+    @rx.var
     def duty_dist_display(self) -> List[Dict[str, Any]]:
         """Duty day distribution data with optional 1-day trip exclusion."""
         if not self.duty_dist_data:
@@ -620,8 +696,11 @@ class EDWState(DatabaseState):
                 self.filter_duty_day_max_available = float(df_trips["Max Duty Length"].max())
                 self.filter_legs_max_available = int(df_trips["Max Legs/Duty"].max())
 
-        # Store trip text map
-        self.trip_text_map = results.get("trip_text_map", {})
+        # Store trip text map (convert keys to strings for Reflex type safety)
+        trip_map = results.get("trip_text_map", {})
+        self.trip_text_map = {str(k): v for k, v in trip_map.items()}
+        print(f"[DEBUG] trip_text_map has {len(self.trip_text_map)} trips")
+        print(f"[DEBUG] First 5 trip IDs: {list(self.trip_text_map.keys())[:5]}")
 
         # Store duty day distribution
         duty_dist = results.get("duty_dist")
