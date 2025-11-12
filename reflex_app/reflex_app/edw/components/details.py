@@ -123,20 +123,101 @@ def _render_trip_details() -> rx.Component:
                 ),
 
                 # Duty day table (using flattened rows - no nested foreach)
+                # Styled to match Streamlit version with monospace font and borders
                 rx.box(
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell("Day", padding="0.5rem"),
-                                rx.table.column_header_cell("Flight", padding="0.5rem"),
-                                rx.table.column_header_cell("Dep-Arr", padding="0.5rem"),
-                                rx.table.column_header_cell("Depart (L) Z", padding="0.5rem"),
-                                rx.table.column_header_cell("Arrive (L) Z", padding="0.5rem"),
-                                rx.table.column_header_cell("Blk", padding="0.5rem"),
-                                rx.table.column_header_cell("Cxn", padding="0.5rem"),
-                                rx.table.column_header_cell("Duty", padding="0.5rem"),
-                                rx.table.column_header_cell("Cr", padding="0.5rem"),
-                                rx.table.column_header_cell("L/O", padding="0.5rem"),
+                                rx.table.column_header_cell(
+                                    "Day",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Flight",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Dep-Arr",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Depart (L) Z",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Arrive (L) Z",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Blk",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Cxn",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Duty",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "Cr",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
+                                rx.table.column_header_cell(
+                                    "L/O",
+                                    padding="6px 4px",
+                                    background_color="#e0e0e0",
+                                    border="1px solid #999",
+                                    font_weight="bold",
+                                    font_size="10px",
+                                    white_space="nowrap",
+                                ),
                             )
                         ),
                         rx.table.body(
@@ -148,9 +229,22 @@ def _render_trip_details() -> rx.Component:
                         ),
                         variant="surface",
                         size="1",
+                        width="100%",
+                        min_width="650px",
+                        border_collapse="collapse",
+                        font_family="'Courier New', monospace",
+                        font_size="11px",
                     ),
                     overflow_x="auto",
                     width="100%",
+                    max_width="60%",
+                    margin="0 auto",
+                    # Responsive: 100% on mobile, 60% on desktop
+                    css={
+                        "@media (max-width: 768px)": {
+                            "max-width": "100%",
+                        }
+                    },
                 ),
 
                 # Trip summary
@@ -183,6 +277,8 @@ def _render_table_row(row: Dict[str, Any]) -> rx.Component:
     Uses rx.match to switch between different row types (briefing, flight, debriefing, subtotal).
     This avoids nested foreach issues in Reflex 0.8.18.
 
+    Styled to match Streamlit version with borders and proper backgrounds.
+
     Args:
         row: Flattened row data dict with 'row_type' field
 
@@ -196,38 +292,80 @@ def _render_table_row(row: Dict[str, Any]) -> rx.Component:
             rx.table.cell(
                 rx.text("Briefing", font_style="italic"),
                 colspan=3,
-                padding="0.5rem",
-                background_color=rx.color("gray", 2),
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
             ),
-            rx.table.cell(row["duty_start"], padding="0.5rem", background_color=rx.color("gray", 2)),
-            rx.table.cell("", padding="0.5rem", background_color=rx.color("gray", 2)),
-            rx.table.cell("", colspan=5, padding="0.5rem", background_color=rx.color("gray", 2)),
+            rx.table.cell(
+                row["duty_start"],
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
+            ),
+            rx.table.cell(
+                "",
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
+            ),
+            rx.table.cell(
+                "",
+                colspan=5,
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
+            ),
         )),
         # Flight row
         ("flight", rx.table.row(
-            rx.table.cell(row.get("day", ""), padding="0.5rem"),
-            rx.table.cell(row.get("flight", ""), padding="0.5rem"),
-            rx.table.cell(row.get("route", ""), padding="0.5rem"),
-            rx.table.cell(row.get("depart", ""), padding="0.5rem"),
-            rx.table.cell(row.get("arrive", ""), padding="0.5rem"),
-            rx.table.cell(row.get("block", ""), padding="0.5rem"),
-            rx.table.cell(row.get("connection", ""), padding="0.5rem"),
+            rx.table.cell(row.get("day", ""), padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell(row.get("flight", ""), padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell(row.get("route", ""), padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell(row.get("depart", ""), padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell(row.get("arrive", ""), padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell(row.get("block", ""), padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell(row.get("connection", ""), padding="4px", border="1px solid #ccc", font_size="11px"),
             # Duty, Cr, L/O columns left empty (rowspan not well-supported)
-            rx.table.cell("", padding="0.5rem"),
-            rx.table.cell("", padding="0.5rem"),
-            rx.table.cell("", padding="0.5rem"),
+            rx.table.cell("", padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell("", padding="4px", border="1px solid #ccc", font_size="11px"),
+            rx.table.cell("", padding="4px", border="1px solid #ccc", font_size="11px"),
         )),
         # Debriefing row
         ("debriefing", rx.table.row(
             rx.table.cell(
                 rx.text("Debriefing", font_style="italic"),
                 colspan=3,
-                padding="0.5rem",
-                background_color=rx.color("gray", 2),
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
             ),
-            rx.table.cell("", padding="0.5rem", background_color=rx.color("gray", 2)),
-            rx.table.cell(row["duty_end"], padding="0.5rem", background_color=rx.color("gray", 2)),
-            rx.table.cell("", colspan=5, padding="0.5rem", background_color=rx.color("gray", 2)),
+            rx.table.cell(
+                "",
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
+            ),
+            rx.table.cell(
+                row["duty_end"],
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
+            ),
+            rx.table.cell(
+                "",
+                colspan=5,
+                padding="4px",
+                background_color="#f9f9f9",
+                border="1px solid #ccc",
+                font_size="11px",
+            ),
         )),
         # Subtotal row
         ("subtotal", rx.table.row(
@@ -235,38 +373,56 @@ def _render_table_row(row: Dict[str, Any]) -> rx.Component:
                 "Duty Day Subtotal:",
                 colspan=5,
                 text_align="right",
-                padding="0.5rem",
+                padding="4px",
                 font_weight="bold",
-                background_color=rx.color("gray", 3),
+                background_color="#f5f5f5",
+                border="2px solid #666",
+                border_top="2px solid #666",
+                font_size="11px",
             ),
             rx.table.cell(
                 row.get("block_total", ""),
-                padding="0.5rem",
+                padding="4px",
                 font_weight="bold",
-                background_color=rx.color("gray", 3),
+                background_color="#f5f5f5",
+                border="1px solid #ccc",
+                border_top="2px solid #666",
+                font_size="11px",
             ),
             rx.table.cell(
                 "",
-                padding="0.5rem",
-                background_color=rx.color("gray", 3),
+                padding="4px",
+                background_color="#f5f5f5",
+                border="1px solid #ccc",
+                border_top="2px solid #666",
+                font_size="11px",
             ),
             rx.table.cell(
                 row.get("duty_time", ""),
-                padding="0.5rem",
+                padding="4px",
                 font_weight="bold",
-                background_color=rx.color("gray", 3),
+                background_color="#f5f5f5",
+                border="1px solid #ccc",
+                border_top="2px solid #666",
+                font_size="11px",
             ),
             rx.table.cell(
                 row.get("credit", ""),
-                padding="0.5rem",
+                padding="4px",
                 font_weight="bold",
-                background_color=rx.color("gray", 3),
+                background_color="#f5f5f5",
+                border="1px solid #ccc",
+                border_top="2px solid #666",
+                font_size="11px",
             ),
             rx.table.cell(
                 row.get("rest", ""),
-                padding="0.5rem",
+                padding="4px",
                 font_weight="bold",
-                background_color=rx.color("gray", 3),
+                background_color="#f5f5f5",
+                border="1px solid #ccc",
+                border_top="2px solid #666",
+                font_size="11px",
             ),
         )),
         # Default/fallback
@@ -277,43 +433,75 @@ def _render_table_row(row: Dict[str, Any]) -> rx.Component:
 def _render_trip_summary(summary: Dict[str, Any]) -> rx.Component:
     """Render trip summary section.
 
+    Styled to match Streamlit version with monospace font and blue background.
+
     Args:
         summary: Trip summary data dict (Var)
 
     Returns:
         Component displaying trip summary
     """
-    # Simplified rendering - directly access fields without contains check
-    # Missing fields will just show empty values
-    return rx.vstack(
-        rx.heading("Trip Summary", size="4", weight="bold", margin_top="1rem"),
-        rx.divider(),
+    # Render as a table-like layout matching Streamlit styling
+    return rx.box(
         rx.vstack(
-            # Row 1 - hardcoded fields (using get with defaults to avoid missing key errors)
-            rx.hstack(
-                rx.hstack(rx.text("Credit:", weight="bold", size="2"), rx.text(summary.get("Credit", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("Blk:", weight="bold", size="2"), rx.text(summary.get("Blk", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("Duty Time:", weight="bold", size="2"), rx.text(summary.get("Duty Time", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("TAFB:", weight="bold", size="2"), rx.text(summary.get("TAFB", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("Duty Days:", weight="bold", size="2"), rx.text(summary.get("Duty Days", ""), size="2"), spacing="1"),
-                spacing="4",
-                wrap="wrap",
+            # Header row
+            rx.box(
+                rx.text(
+                    "TRIP SUMMARY",
+                    weight="bold",
+                    size="3",
+                    text_align="center",
+                ),
+                padding="6px",
+                background_color="#d6eaf8",
+                border="3px solid #333",
+                border_bottom="none",
+                width="100%",
             ),
-            # Row 2 - hardcoded fields
-            rx.hstack(
-                rx.hstack(rx.text("Prem:", weight="bold", size="2"), rx.text(summary.get("Prem", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("PDiem:", weight="bold", size="2"), rx.text(summary.get("PDiem", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("LDGS:", weight="bold", size="2"), rx.text(summary.get("LDGS", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("Crew:", weight="bold", size="2"), rx.text(summary.get("Crew", ""), size="2"), spacing="1"),
-                rx.hstack(rx.text("Domicile:", weight="bold", size="2"), rx.text(summary.get("Domicile", ""), size="2"), spacing="1"),
-                spacing="4",
-                wrap="wrap",
+            # Content box
+            rx.box(
+                rx.vstack(
+                    # Row 1 - hardcoded fields (using get with defaults to avoid missing key errors)
+                    rx.hstack(
+                        rx.text("Credit: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap"),
+                        rx.text(summary.get("Credit", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("Blk: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("Blk", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("Duty Time: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("Duty Time", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("TAFB: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("TAFB", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("Duty Days: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("Duty Days", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        spacing="1",
+                        wrap="wrap",
+                    ),
+                    # Row 2 - hardcoded fields
+                    rx.hstack(
+                        rx.text("Prem: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap"),
+                        rx.text(summary.get("Prem", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("PDiem: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("PDiem", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("LDGS: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("LDGS", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("Crew: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("Crew", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        rx.text("Domicile: ", weight="bold", font_family="'Courier New', monospace", font_size="11px", white_space="nowrap", margin_left="1rem"),
+                        rx.text(summary.get("Domicile", ""), font_family="'Courier New', monospace", font_size="11px"),
+                        spacing="1",
+                        wrap="wrap",
+                    ),
+                    spacing="3",
+                ),
+                padding="10px",
+                background_color="#f0f8ff",
+                border="1px solid #ccc",
+                border_top="none",
+                width="100%",
             ),
-            spacing="2",
-            padding="1rem",
-            background_color=rx.color("blue", 2),
-            border_radius="0.5rem",
+            spacing="0",
+            width="100%",
         ),
+        margin_top="0",
         width="100%",
-        spacing="2",
     )

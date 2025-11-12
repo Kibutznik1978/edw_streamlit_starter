@@ -19,7 +19,7 @@ from ..database.base_state import DatabaseState
 
 # Add path to import from root directory modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from export_pdf import create_pdf_report
+from pdf_generation import create_edw_pdf_report
 
 
 class EDWState(DatabaseState):
@@ -237,15 +237,16 @@ class EDWState(DatabaseState):
             return {}
 
         try:
-            # Add project root to path to import edw_reporter
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../..'))
+            # Add project root to path to import edw package
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
             if project_root not in sys.path:
                 sys.path.insert(0, project_root)
 
-            from edw_reporter import parse_trip_for_table
+            from edw.parser import parse_trip_for_table
+            from edw.analyzer import is_edw_trip
 
             trip_text = self.trip_text_map[self.selected_trip_id]
-            return parse_trip_for_table(trip_text)
+            return parse_trip_for_table(trip_text, is_edw_trip)
         except Exception as e:
             # Return error dict if parsing fails
             return {"error": str(e)}
@@ -567,15 +568,13 @@ class EDWState(DatabaseState):
             yield  # Push progress update to frontend
 
             # Import EDW reporter functions (lazy import to avoid circular dependencies)
-            # Add project root to path to import edw_reporter from parent directory
+            # Add project root to path to import edw package from parent directory
             project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
             if project_root not in sys.path:
                 sys.path.insert(0, project_root)
 
-            from edw_reporter import (
-                extract_pdf_header_info,
-                run_edw_report
-            )
+            from edw.parser import extract_pdf_header_info
+            from edw.reporter import run_edw_report
 
             # Extract header information
             self.processing_progress = 10
@@ -1107,8 +1106,8 @@ class EDWState(DatabaseState):
                 tmp_path = tmp_file.name
 
             try:
-                # Generate PDF using export_pdf module
-                create_pdf_report(pdf_data, tmp_path, branding)
+                # Generate PDF using pdf_generation module
+                create_edw_pdf_report(pdf_data, tmp_path, branding)
 
                 # Read PDF bytes
                 with open(tmp_path, 'rb') as f:
