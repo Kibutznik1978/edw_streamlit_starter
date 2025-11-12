@@ -86,6 +86,12 @@ class EDWState(DatabaseState):
     # ========== Selected Trip for Detail Viewer ==========
     selected_trip_id: str = ""
 
+    # ========== Table State ==========
+    table_page: int = 1
+    table_page_size: int = 25
+    table_sort_column: str = "Trip ID"
+    table_sort_ascending: bool = True
+
     # ========== Save to Database State ==========
     save_status: str = ""  # Success/error message
     save_in_progress: bool = False
@@ -303,6 +309,46 @@ class EDWState(DatabaseState):
         return fig
 
     @rx.var
+    def sorted_filtered_trips(self) -> List[Dict[str, Any]]:
+        """Apply sorting to filtered trips."""
+        if not self.filtered_trips:
+            return []
+
+        trips = self.filtered_trips.copy()
+
+        # Sort by selected column
+        try:
+            trips.sort(
+                key=lambda x: x.get(self.table_sort_column, ""),
+                reverse=not self.table_sort_ascending
+            )
+        except Exception:
+            # If sorting fails, return unsorted
+            pass
+
+        return trips
+
+    @rx.var
+    def paginated_trips(self) -> List[Dict[str, Any]]:
+        """Apply pagination to sorted filtered trips."""
+        if not self.sorted_filtered_trips:
+            return []
+
+        start_idx = (self.table_page - 1) * self.table_page_size
+        end_idx = start_idx + self.table_page_size
+
+        return self.sorted_filtered_trips[start_idx:end_idx]
+
+    @rx.var
+    def total_pages(self) -> int:
+        """Calculate total number of pages."""
+        if not self.sorted_filtered_trips:
+            return 1
+
+        import math
+        return max(1, math.ceil(len(self.sorted_filtered_trips) / self.table_page_size))
+
+    @rx.var
     def duty_day_percent_chart(self) -> go.Figure:
         """Generate duty day percentage bar chart."""
         data = self.duty_dist_display
@@ -511,6 +557,33 @@ class EDWState(DatabaseState):
         self.filter_hot_standby = "All"
         self.sort_by = "Trip ID"
         self.exclude_turns = False
+        # Reset table to first page when filters change
+        self.table_page = 1
+
+    def set_table_page(self, page: int):
+        """Set current table page."""
+        self.table_page = max(1, min(page, self.total_pages))
+
+    def set_table_page_size(self, size: str):
+        """Set table page size and reset to first page."""
+        self.table_page_size = int(size)
+        self.table_page = 1
+
+    def table_sort(self, column: str):
+        """Sort table by column. Toggle direction if same column clicked."""
+        if self.table_sort_column == column:
+            # Toggle sort direction
+            self.table_sort_ascending = not self.table_sort_ascending
+        else:
+            # New column, default to ascending
+            self.table_sort_column = column
+            self.table_sort_ascending = True
+        # Reset to first page when sorting changes
+        self.table_page = 1
+
+    def select_trip_from_table(self, trip_id: str):
+        """Select a trip from the table (for detail viewer)."""
+        self.selected_trip_id = str(trip_id)
 
     async def save_to_database(self):
         """Save EDW analysis results to database."""
@@ -534,6 +607,44 @@ class EDWState(DatabaseState):
         except Exception as e:
             self.save_status = f"Error saving to database: {str(e)}"
             self.save_in_progress = False
+
+    def generate_csv_export(self) -> str:
+        """Generate CSV export of filtered trip data.
+
+        Returns:
+            CSV string of filtered trips with all columns.
+        """
+        if not self.filtered_trips:
+            return ""
+
+        # Convert to DataFrame for easy CSV generation
+        df = pd.DataFrame(self.filtered_trips)
+
+        # Select and order columns for export
+        export_columns = [
+            "Trip ID",
+            "Frequency",
+            "TAFB Hours",
+            "TAFB Days",
+            "Duty Days",
+            "Max Duty Length",
+            "Max Legs/Duty",
+            "EDW",
+            "Hot Standby",
+        ]
+
+        # Only include columns that exist
+        columns_to_export = [col for col in export_columns if col in df.columns]
+        df_export = df[columns_to_export]
+
+        # Convert boolean columns to Yes/No
+        if "EDW" in df_export.columns:
+            df_export["EDW"] = df_export["EDW"].map({True: "Yes", False: "No"})
+        if "Hot Standby" in df_export.columns:
+            df_export["Hot Standby"] = df_export["Hot Standby"].map({True: "Yes", False: "No"})
+
+        # Generate CSV
+        return df_export.to_csv(index=False)
 
     def generate_excel_download(self) -> bytes:
         """Generate Excel workbook for download."""

@@ -8,7 +8,7 @@ import reflex as rx
 from .auth.auth_state import AuthState
 from .auth.components import login_page, navbar, unauthorized_page
 from .database.base_state import DatabaseState
-from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component, details_component
+from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component, details_component, table_component
 from .edw.edw_state import EDWState
 
 
@@ -53,7 +53,8 @@ def edw_analyzer_tab() -> rx.Component:
         # Trip details viewer
         details_component(),
 
-        # TODO: Add trip records table (Task 3.8)
+        # Trip records table
+        table_component(),
 
         spacing="4",
         padding="8",

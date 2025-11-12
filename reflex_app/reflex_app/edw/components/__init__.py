@@ -16,6 +16,7 @@ from .summary import summary_component
 from .charts import charts_component
 from .filters import filters_component
 from .details import details_component
+from .table import table_component
 
 __all__ = [
     "upload_component",
@@ -24,4 +25,5 @@ __all__ = [
     "charts_component",
     "filters_component",
     "details_component",
+    "table_component",
 ]
