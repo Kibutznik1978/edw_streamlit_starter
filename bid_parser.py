@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Callable, Iterable, IO, List, Optional, Sequence, Tuple, Dict, Any
+from typing import IO, Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 import pdfplumber
+
+from config import RESERVE_DAY_KEYWORDS, SHIFTABLE_RESERVE_KEYWORD, VTO_KEYWORDS
 
 # Regex used by legacy/fallback parsing
 LINE_RE = re.compile(
@@ -28,12 +30,15 @@ PAY_PERIOD_RE = re.compile(
 )
 
 
-
 _BLOCK_SEPARATOR_RE = re.compile(r"Comment:\s*", re.IGNORECASE)
 _BLOCK_HEADER_RE = re.compile(r"^[A-Z]{2,}\s+(?P<line>\d{1,4})\b", re.MULTILINE)
-_VTO_PATTERN_RE = re.compile(r"\b(VTOR|VTO|VOR)\b", re.IGNORECASE)
-_RESERVE_DAY_PATTERN_RE = re.compile(r"\b(RA|SA|RB|SB|RC|SC|RD|SD)\b", re.IGNORECASE)
-_SHIFTABLE_RESERVE_RE = re.compile(r"SHIFTABLE\s+RESERVE", re.IGNORECASE)
+
+# Build regex patterns dynamically from config keywords
+_VTO_PATTERN_RE = re.compile(r"\b(" + "|".join(VTO_KEYWORDS) + r")\b", re.IGNORECASE)
+_RESERVE_DAY_PATTERN_RE = re.compile(
+    r"\b(" + "|".join(RESERVE_DAY_KEYWORDS) + r")\b", re.IGNORECASE
+)
+_SHIFTABLE_RESERVE_RE = re.compile(re.escape(SHIFTABLE_RESERVE_KEYWORD), re.IGNORECASE)
 _HOT_STANDBY_RE = re.compile(r"\b(HSBY|HOT\s*STANDBY|HOTSTANDBY)\b", re.IGNORECASE)
 _AVAILABILITY_PATTERN_RE = re.compile(r"(\d+)/(\d+)/(\d+)")
 _CREW_COMPOSITION_RE = re.compile(r"^[A-Z]{2,}\s+\d{1,4}\s+(\d+)/(\d+)/(\d+)/?", re.MULTILINE)
@@ -47,13 +52,15 @@ class ParseDiagnostics:
     used_tables: bool
     warnings: List[str]
     pay_periods: Optional[pd.DataFrame] = None
-    reserve_lines: Optional[pd.DataFrame] = None  # DataFrame with columns: Line, IsReserve, IsHotStandby, CaptainSlots, FOSlots
+    reserve_lines: Optional[pd.DataFrame] = (
+        None  # DataFrame with columns: Line, IsReserve, IsHotStandby, CaptainSlots, FOSlots
+    )
 
 
 def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
     """
     Extract header information from a bid line PDF.
-    Checks the first page, and if header info is not found, checks the second page.
+    Checks pages sequentially (up to first 5 pages) until header info is found.
 
     Extracts:
     - Bid Period (e.g., "2507")
@@ -76,7 +83,7 @@ def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
         "bid_period_date_range": None,
         "domicile": None,
         "fleet_type": None,
-        "date_time": None
+        "date_time": None,
     }
 
     # Helper function to extract header info from page text
@@ -94,7 +101,7 @@ def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
             date_range_match = re.search(
                 r"Bid\s+Period\s+Date\s+Range\s*:?\s*(\d{2}[A-Za-z]{3}\d{4}\s*-\s*\d{2}[A-Za-z]{3}\d{4})",
                 text,
-                re.IGNORECASE
+                re.IGNORECASE,
             )
             if date_range_match:
                 extracted["bid_period_date_range"] = date_range_match.group(1)
@@ -114,9 +121,7 @@ def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
         # Extract Date/Time (e.g., "Date/Time: 26Sep2025 11:35")
         if extracted["date_time"] is None:
             datetime_match = re.search(
-                r"Date/Time\s*:?\s*(\d{2}[A-Za-z]{3}\d{4}\s+\d{1,2}:\d{2})",
-                text,
-                re.IGNORECASE
+                r"Date/Time\s*:?\s*(\d{2}[A-Za-z]{3}\d{4}\s+\d{1,2}:\d{2})", text, re.IGNORECASE
             )
             if datetime_match:
                 extracted["date_time"] = datetime_match.group(1)
@@ -128,18 +133,22 @@ def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
             if not pdf.pages:
                 return result
 
-            # Try extracting from first page
-            first_page_text = pdf.pages[0].extract_text()
-            if first_page_text:
-                result = extract_from_text(first_page_text, result)
+            # Check up to first 5 pages (or all pages if fewer than 5)
+            max_pages_to_check = min(5, len(pdf.pages))
 
-            # If any critical fields are still None, try second page
-            if (result["bid_period"] is None or
-                result["domicile"] is None or
-                result["fleet_type"] is None) and len(pdf.pages) >= 2:
-                second_page_text = pdf.pages[1].extract_text()
-                if second_page_text:
-                    result = extract_from_text(second_page_text, result)
+            for page_idx in range(max_pages_to_check):
+                # Extract text from current page
+                page_text = pdf.pages[page_idx].extract_text()
+                if page_text:
+                    result = extract_from_text(page_text, result)
+
+                # Stop early if all critical fields are found
+                if (
+                    result["bid_period"] is not None
+                    and result["domicile"] is not None
+                    and result["fleet_type"] is not None
+                ):
+                    break
 
     except Exception:
         # Silently return partial results if extraction fails
@@ -149,8 +158,7 @@ def extract_bid_line_header_info(pdf_file: IO[bytes]) -> Dict[str, Any]:
 
 
 def parse_bid_lines(
-    pdf_file: IO[bytes],
-    progress_callback: Optional[Callable[[int, int], None]] = None
+    pdf_file: IO[bytes], progress_callback: Optional[Callable[[int, int], None]] = None
 ) -> Tuple[pd.DataFrame, ParseDiagnostics]:
     """Parse a bid roster PDF into a DataFrame of line statistics.
 
@@ -198,9 +206,13 @@ def parse_bid_lines(
         allowed_table_lines = None
 
     if allowed_table_lines is not None and table_records:
-        table_records = [record for record in table_records if record["Line"] in allowed_table_lines]
+        table_records = [
+            record for record in table_records if record["Line"] in allowed_table_lines
+        ]
 
-    merged_records, diag_warnings = _merge_records(primary_records, table_records, allowed_table_lines)
+    merged_records, diag_warnings = _merge_records(
+        primary_records, table_records, allowed_table_lines
+    )
     warnings.extend(diag_warnings)
 
     if not merged_records:
@@ -220,7 +232,9 @@ def parse_bid_lines(
             pay_period_df = raw_df.sort_values(["Line", "Period"]).reset_index(drop=True)
             df, pay_periods_output = _aggregate_pay_periods(pay_period_df)
         else:
-            pay_periods_output = pd.DataFrame(columns=["Line", "Period", "PayPeriodCode", "CT", "BT", "DO", "DD"])
+            pay_periods_output = pd.DataFrame(
+                columns=["Line", "Period", "PayPeriodCode", "CT", "BT", "DO", "DD"]
+            )
             df = raw_df.sort_values("Line").reset_index(drop=True)
             expected_cols = [col for col in ["Line", "CT", "BT", "DO", "DD"] if col in df.columns]
             df = df[expected_cols]
@@ -248,6 +262,10 @@ def _detect_reserve_line(block: str) -> Tuple[bool, bool, int, int]:
     Returns:
         Tuple of (is_reserve, is_hot_standby, captain_slots, fo_slots)
     """
+    # VTO lines are NOT reserve lines - check this first
+    if _VTO_PATTERN_RE.search(block):
+        return False, False, 0, 0
+
     # Check for Hot Standby patterns first (HSBY, HOT STANDBY, etc.)
     is_hot_standby = bool(_HOT_STANDBY_RE.search(block))
 
@@ -267,7 +285,10 @@ def _detect_reserve_line(block: str) -> Tuple[bool, bool, int, int]:
     has_zero_credit_block = bool(ct_zero and bt_zero)
 
     # Also consider DD:14 even if CT/BT aren't explicitly zero (might be malformed)
-    has_reserve_metrics = has_zero_credit_block or (ct_zero and dd_fourteen) or (bt_zero and dd_fourteen)
+    # Use bool() to prevent None propagation in boolean expressions
+    has_reserve_metrics = (
+        has_zero_credit_block or bool(ct_zero and dd_fourteen) or bool(bt_zero and dd_fourteen)
+    )
 
     is_reserve = has_reserve_days or has_shiftable_reserve or has_reserve_metrics
 
@@ -323,7 +344,9 @@ def _extract_crew_composition(block: str) -> Tuple[int, int]:
     return 0, 0
 
 
-def _detect_split_vto_line(block: str, period_records: List[dict]) -> Tuple[bool, Optional[str], Optional[int]]:
+def _detect_split_vto_line(
+    block: str, period_records: List[dict]
+) -> Tuple[bool, Optional[str], Optional[int]]:
     """Detect if a line is a split VTO/VTOR/VOR line (one period regular, one period VTO).
 
     Args:
@@ -380,7 +403,9 @@ def _detect_split_vto_line(block: str, period_records: List[dict]) -> Tuple[bool
     return False, None, None
 
 
-def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[List[dict], List[str], List[dict]]:
+def _parse_line_blocks(
+    page: pdfplumber.page.Page, page_number: int
+) -> Tuple[List[dict], List[str], List[dict]]:
     """Parse line blocks from a page.
 
     Returns:
@@ -402,24 +427,31 @@ def _parse_line_blocks(page: pdfplumber.page.Page, page_number: int) -> Tuple[Li
     merged_segments = _merge_headerless_segments(segments[1:])
 
     for block in merged_segments:
+        # First, try to extract line number from block (needed for reserve tracking)
+        header_match = _BLOCK_HEADER_RE.search(block)
+
         block_records, block_warnings = _parse_block_text(block, page_number)
+
+        # Track reserve line status even if records are empty (excluded reserve lines)
+        if header_match:
+            line_id = int(header_match.group("line"))
+            is_reserve, is_hot_standby, captain_slots, fo_slots = _detect_reserve_line(block)
+            reserve_info.append(
+                {
+                    "Line": line_id,
+                    "IsReserve": is_reserve,
+                    "IsHotStandby": is_hot_standby,
+                    "CaptainSlots": captain_slots,
+                    "FOSlots": fo_slots,
+                }
+            )
+
         if block_records:
             records.extend(block_records)
 
-            # Detect reserve line status for this block
-            line_id = block_records[0]["Line"]  # All records in block have same line ID
-            is_reserve, is_hot_standby, captain_slots, fo_slots = _detect_reserve_line(block)
-            reserve_info.append({
-                "Line": line_id,
-                "IsReserve": is_reserve,
-                "IsHotStandby": is_hot_standby,
-                "CaptainSlots": captain_slots,
-                "FOSlots": fo_slots,
-            })
         warnings.extend(block_warnings)
 
     return records, warnings, reserve_info
-
 
 
 def _merge_headerless_segments(segments: Sequence[str]) -> List[str]:
@@ -446,7 +478,6 @@ def _merge_headerless_segments(segments: Sequence[str]) -> List[str]:
         merged.append("\n".join(current_parts))
 
     return merged
-
 
 
 def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[str]]:
@@ -482,7 +513,16 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
             if is_reserve and do_value is None:
                 do_value = 0
 
-            fields_missing = [label for label, value in [("CT", ct_value), ("BT", bt_value), ("DO", do_value), ("DD", dd_value)] if value is None]
+            fields_missing = [
+                label
+                for label, value in [
+                    ("CT", ct_value),
+                    ("BT", bt_value),
+                    ("DO", do_value),
+                    ("DD", dd_value),
+                ]
+                if value is None
+            ]
             if fields_missing:
                 warnings.append(
                     _format_warning(
@@ -521,6 +561,11 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
             # This is a VTO line but not split (both periods are VTO) - skip it
             return [], []
         else:
+            # Check if this is a reserve line - skip it (reserve lines tracked in diagnostics only)
+            is_reserve, _, _, _ = _detect_reserve_line(block)
+            if is_reserve:
+                return [], []
+
             # Regular line with no VTO
             for record in period_records:
                 record["VTOType"] = None
@@ -533,19 +578,21 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
     if _VTO_PATTERN_RE.search(block):
         return [], []
 
+    # Skip reserve lines in fallback (reserve lines tracked in diagnostics only)
+    is_reserve, _, _, _ = _detect_reserve_line(block)
+    if is_reserve:
+        return [], []
+
     ct_value = _extract_time_field(block, "CT")
     bt_value = _extract_time_field(block, "BT")
     do_value = _extract_int_field(block, "DO")
     dd_value = _extract_int_field(block, "DD")
 
-    # Check if this is a reserve line (CT=0, BT=0, or has reserve indicators)
-    is_reserve, _, _, _ = _detect_reserve_line(block)
-
-    # For reserve lines, DO (Days Off) might be missing - that's okay, default to 0
-    if is_reserve and do_value is None:
-        do_value = 0
-
-    fields_missing = [label for label, value in [("CT", ct_value), ("BT", bt_value), ("DO", do_value), ("DD", dd_value)] if value is None]
+    fields_missing = [
+        label
+        for label, value in [("CT", ct_value), ("BT", bt_value), ("DO", do_value), ("DD", dd_value)]
+        if value is None
+    ]
     if fields_missing:
         warnings.append(
             _format_warning(
@@ -586,7 +633,9 @@ def _extract_time_field(block: str, label: str) -> Optional[float]:
         # Try to find a time value near any C*T* pattern
         # Look for patterns like: CT:F 82:45, CHTA:N 81:12, CT:N 83:02, CT:F 8R2A:45
         # Pattern allows for letters/spaces between CT and colon, and after colon
-        flexible_pattern = re.compile(r"[A-Z\s]*C[A-Z\s]*T[A-Z]*\s*:[A-Z\s]*\s*([0-9]+:[0-9]{2})", re.IGNORECASE)
+        flexible_pattern = re.compile(
+            r"[A-Z\s]*C[A-Z\s]*T[A-Z]*\s*:[A-Z\s]*\s*([0-9]+:[0-9]{2})", re.IGNORECASE
+        )
         match = flexible_pattern.search(block)
         if match:
             time_str = match.group(1)
@@ -596,7 +645,9 @@ def _extract_time_field(block: str, label: str) -> Optional[float]:
 
         # Also try matching heavily corrupted formats like "8R2A:45" where digits are mixed with letters
         # Look for C*T* followed by colon, then any mix of letters/digits, then colon and 2 digits
-        corrupted_pattern = re.compile(r"[A-Z\s]*C[A-Z\s]*T[A-Z]*\s*:[A-Z\s]*\s*([0-9A-Z]+:[0-9]{2})", re.IGNORECASE)
+        corrupted_pattern = re.compile(
+            r"[A-Z\s]*C[A-Z\s]*T[A-Z]*\s*:[A-Z\s]*\s*([0-9A-Z]+:[0-9]{2})", re.IGNORECASE
+        )
         match = corrupted_pattern.search(block)
         if match:
             time_str = match.group(1)
@@ -607,7 +658,9 @@ def _extract_time_field(block: str, label: str) -> Optional[float]:
 
     elif label == "BT":
         # Similar pattern for BT
-        flexible_pattern = re.compile(r"[A-Z\s]*B[A-Z\s]*T[A-Z]*\s*:[A-Z\s]*\s*([0-9]+:[0-9]{2})", re.IGNORECASE)
+        flexible_pattern = re.compile(
+            r"[A-Z\s]*B[A-Z\s]*T[A-Z]*\s*:[A-Z\s]*\s*([0-9]+:[0-9]{2})", re.IGNORECASE
+        )
         match = flexible_pattern.search(block)
         if match:
             time_str = match.group(1)
@@ -615,7 +668,9 @@ def _extract_time_field(block: str, label: str) -> Optional[float]:
                 return _time_to_hours(time_str)
 
         # Corrupted BT patterns
-        corrupted_pattern = re.compile(r"[A-Z\s]*B[A-Z\s]*T[A-Z]*\s*:\s*([0-9A-Z]+:[0-9]{2})", re.IGNORECASE)
+        corrupted_pattern = re.compile(
+            r"[A-Z\s]*B[A-Z\s]*T[A-Z]*\s*:\s*([0-9A-Z]+:[0-9]{2})", re.IGNORECASE
+        )
         match = corrupted_pattern.search(block)
         if match:
             time_str = match.group(1)
@@ -709,14 +764,18 @@ def _aggregate_pay_periods(pay_period_df: pd.DataFrame) -> Tuple[pd.DataFrame, p
 
     aggregated = base.groupby("Line")[value_cols].mean()
 
-    metric_pivot = base.pivot_table(index="Line", columns="Period", values=value_cols, aggfunc="first")
+    metric_pivot = base.pivot_table(
+        index="Line", columns="Period", values=value_cols, aggfunc="first"
+    )
     if not metric_pivot.empty:
         metric_pivot = metric_pivot.sort_index(axis=1, level=1)
         for metric, period in metric_pivot.columns:
             aggregated[f"{metric}_PP{int(period)}"] = metric_pivot[(metric, period)]
 
     if "PayPeriodCode" in base.columns:
-        code_pivot = base.pivot_table(index="Line", columns="Period", values="PayPeriodCode", aggfunc="first")
+        code_pivot = base.pivot_table(
+            index="Line", columns="Period", values="PayPeriodCode", aggfunc="first"
+        )
         if not code_pivot.empty:
             code_pivot = code_pivot.sort_index(axis=1)
             for period in code_pivot.columns:
@@ -727,19 +786,17 @@ def _aggregate_pay_periods(pay_period_df: pd.DataFrame) -> Tuple[pd.DataFrame, p
 
     # Add crew composition if present (CaptainSlots and FOSlots should be same for all periods of a line)
     if "CaptainSlots" in tidy.columns and "FOSlots" in tidy.columns:
-        crew_info = tidy.groupby("Line").agg({
-            "CaptainSlots": "first",
-            "FOSlots": "first"
-        }).reset_index()
+        crew_info = (
+            tidy.groupby("Line").agg({"CaptainSlots": "first", "FOSlots": "first"}).reset_index()
+        )
         aggregated = aggregated.merge(crew_info, on="Line", how="left")
 
     # Add VTO metadata if present (using original tidy data which includes VTO periods)
     if "VTOType" in tidy.columns:
         # Get VTO info from the original data (before filtering)
-        vto_info = tidy.groupby("Line").agg({
-            "VTOType": "first",
-            "VTOPeriod": "first"
-        }).reset_index()
+        vto_info = (
+            tidy.groupby("Line").agg({"VTOType": "first", "VTOPeriod": "first"}).reset_index()
+        )
         aggregated = aggregated.merge(vto_info, on="Line", how="left")
 
     column_order = ["Line", "CT", "BT", "DO", "DD"] + [
@@ -748,7 +805,6 @@ def _aggregate_pay_periods(pay_period_df: pd.DataFrame) -> Tuple[pd.DataFrame, p
     aggregated = aggregated[column_order]
     used_periods = base.reset_index(drop=True)
     return aggregated, used_periods
-
 
 
 def _parse_lines_from_text(lines: Iterable[str]) -> List[dict]:
@@ -856,7 +912,11 @@ def _normalize_numeric(value: str, allow_float: bool = True) -> str:
     return cleaned
 
 
-def _merge_records(text_records: List[dict], table_records: List[dict], allowed_table_lines: Optional[set[int]] = None) -> Tuple[List[dict], List[str]]:
+def _merge_records(
+    text_records: List[dict],
+    table_records: List[dict],
+    allowed_table_lines: Optional[set[int]] = None,
+) -> Tuple[List[dict], List[str]]:
     merged: dict[int, dict] = {}
     warnings: List[str] = []
 
