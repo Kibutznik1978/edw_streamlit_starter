@@ -322,6 +322,9 @@ def parse_max_legs_per_duty_day(trip_text):
                     is_fallback_start = True
 
         if is_briefing or is_fallback_start:
+            # Save previous duty day's leg count before starting new duty day
+            if in_duty and current_duty_legs > 0:
+                legs_per_duty_day.append(current_duty_legs)
             in_duty = True
             current_duty_legs = 0
 
@@ -343,7 +346,8 @@ def parse_max_legs_per_duty_day(trip_text):
             if re.match(r'^(UPS|DH|GT)(\s|\d|N/A)', stripped, re.IGNORECASE):
                 current_duty_legs += 1
             # MD-11 format: Bare 3-4 digit flight number followed by route
-            elif re.match(r'^\d{3,4}$', stripped):
+            # Also handles flight numbers with suffixes like "2894-2" or "897-2"
+            elif re.match(r'^\d{3,4}(-\d+)?$', stripped):
                 # Verify next line is a route (with optional suffix like (C))
                 if i + 1 < len(lines) and re.match(r'^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$', lines[i + 1].strip()):
                     current_duty_legs += 1
@@ -523,7 +527,8 @@ def parse_duty_day_details(trip_text):
             if re.match(r'^(UPS|DH|GT)(\s|\d|N/A)', stripped, re.IGNORECASE):
                 current_duty_day['num_legs'] += 1
             # MD-11 format: Bare 3-4 digit flight number followed by route
-            elif re.match(r'^\d{3,4}$', stripped):
+            # Also handles flight numbers with suffixes like "2894-2" or "897-2"
+            elif re.match(r'^\d{3,4}(-\d+)?$', stripped):
                 # Verify next line is a route (with optional suffix like (C))
                 if i + 1 < len(lines) and re.match(r'^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$', lines[i + 1].strip()):
                     current_duty_day['num_legs'] += 1
@@ -765,7 +770,8 @@ def parse_trip_for_table(trip_text):
                     flight_num = next_line
                     data_start_offset = 2  # Route starts at i+2
                 # MD-11 format: Day pattern followed by bare numeric flight number
-                elif re.match(r'^\d{3,4}$', next_line):  # 3-4 digit flight number
+                # Also handles flight numbers with suffixes like "2894-2" or "897-2"
+                elif re.match(r'^\d{3,4}(-\d+)?$', next_line):  # 3-4 digit flight number
                     # Verify line after that is a route (with optional suffix like (C))
                     if i + 2 < len(lines) and re.match(r'^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$', lines[i + 2].strip()):
                         is_flight = True
@@ -783,7 +789,8 @@ def parse_trip_for_table(trip_text):
                     data_start_offset = 1  # Route starts at i+1
 
             # Case 3: MD-11 format - Bare numeric flight number (3-4 digits)
-            elif not has_day_pattern and re.match(r'^\d{3,4}$', line):
+            # Also handles flight numbers with suffixes like "2894-2" or "897-2"
+            elif not has_day_pattern and re.match(r'^\d{3,4}(-\d+)?$', line):
                 # Verify next line is a route (with optional suffix like (C))
                 if i + 1 < len(lines) and re.match(r'^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$', lines[i + 1].strip()):
                     is_flight = True

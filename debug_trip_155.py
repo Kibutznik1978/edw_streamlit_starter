@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""
+Debug script to examine trip 155 and understand leg counting issues.
+"""
+from pathlib import Path
+import sys
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from edw_reporter import parse_pairings, parse_trip_id, parse_max_legs_per_duty_day, parse_duty_day_details
+
+# Find trip 155
+pdf_path = Path(__file__).parent / "test_data" / "PacketPrint_BID2507_757_ONT.pdf"
+
+if not pdf_path.exists():
+    print(f"PDF not found at: {pdf_path}")
+    print("Please ensure the PDF is in the test_data directory")
+    sys.exit(1)
+
+print("Parsing PDF...")
+trips = parse_pairings(pdf_path)
+print(f"Found {len(trips)} trips\n")
+
+# Find trip 155
+trip_155_text = None
+for trip_text in trips:
+    trip_id = parse_trip_id(trip_text)
+    if trip_id == 155:
+        trip_155_text = trip_text
+        break
+
+if not trip_155_text:
+    print("❌ Trip 155 not found!")
+    sys.exit(1)
+
+print("=" * 80)
+print("TRIP 155 RAW TEXT:")
+print("=" * 80)
+print(trip_155_text)
+print("\n")
+
+print("=" * 80)
+print("PARSED DETAILS:")
+print("=" * 80)
+
+max_legs = parse_max_legs_per_duty_day(trip_155_text)
+print(f"Max legs per duty day: {max_legs}")
+
+duty_details = parse_duty_day_details(trip_155_text)
+print(f"\nDuty day details:")
+for dd in duty_details:
+    print(f"  Day {dd['day']}: {dd['num_legs']} legs, {dd['duration_hours']:.2f}h duration")
+
+print("\n" + "=" * 80)
+print("ANALYZING LEG DETECTION:")
+print("=" * 80)
+
+lines = trip_155_text.split('\n')
+in_duty = False
+duty_num = 0
+
+for i, line in enumerate(lines):
+    stripped = line.strip()
+
+    # Detect duty day start
+    if 'Briefing' in line or (stripped and stripped[0] == '(' and 'Duty' in lines[i+2:i+4] if i+3 < len(lines) else False):
+        in_duty = True
+        duty_num += 1
+        print(f"\n--- DUTY DAY {duty_num} START ---")
+        continue
+
+    # Detect duty day end
+    if 'Debriefing' in line or stripped == 'Duty Time:':
+        in_duty = False
+        print(f"--- DUTY DAY {duty_num} END ---\n")
+        continue
+
+    # Check if this would be counted as a leg
+    if in_duty and stripped:
+        import re
+
+        is_multi_line = re.match(r'^(UPS|DH|GT)(\s|\d|N/A)', stripped, re.IGNORECASE)
+        is_md11 = re.match(r'^\d{3,4}$', stripped)
+        is_single_line = re.search(r'(UPS|DH|GT)', stripped, re.IGNORECASE) and (
+            re.search(r'[A-Z]{3}-[A-Z]{3}', stripped) or re.search(r'\(\d+\)\d{2}:\d{2}', stripped)
+        )
+
+        if is_multi_line:
+            print(f"  [LEG - Multi-line] {i}: {stripped}")
+        elif is_md11:
+            if i + 1 < len(lines) and re.match(r'^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$', lines[i + 1].strip()):
+                print(f"  [LEG - MD-11] {i}: {stripped} -> {lines[i+1].strip()}")
+        elif is_single_line:
+            print(f"  [LEG - Single-line] {i}: {stripped[:80]}...")
+        elif re.search(r'UPS|DH|GT', stripped, re.IGNORECASE):
+            print(f"  [NOT LEG - Missing route/time] {i}: {stripped[:80]}...")

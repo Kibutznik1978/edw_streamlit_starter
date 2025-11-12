@@ -136,10 +136,15 @@ class EDWState(DatabaseState):
 
         # Filter by max legs per duty
         if self.filter_legs_min > 0:
-            filtered = [
-                trip for trip in filtered
-                if trip.get("Max Legs/Duty", 0) >= self.filter_legs_min
-            ]
+            print(f"[DEBUG] Filtering by legs >= {self.filter_legs_min}")
+            print(f"[DEBUG] Filter type: {type(self.filter_legs_min)}")
+            filtered_new = []
+            for trip in filtered:
+                legs_value = trip.get("Max Legs/Duty", 0)
+                print(f"[DEBUG] Trip {trip.get('Trip ID')}: Max Legs/Duty = {legs_value}, type = {type(legs_value)}, passes = {legs_value >= self.filter_legs_min}")
+                if legs_value >= self.filter_legs_min:
+                    filtered_new.append(trip)
+            filtered = filtered_new
 
         # Filter by duty day criteria (combined conditions)
         if self.match_mode != "Disabled":
