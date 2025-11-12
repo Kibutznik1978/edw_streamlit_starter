@@ -15,6 +15,7 @@ from .header import header_component
 from .summary import summary_component
 from .charts import charts_component
 from .filters import filters_component
+from .details import details_component
 
 __all__ = [
     "upload_component",
@@ -22,4 +23,5 @@ __all__ = [
     "summary_component",
     "charts_component",
     "filters_component",
+    "details_component",
 ]

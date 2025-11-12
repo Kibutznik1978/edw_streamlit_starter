@@ -197,6 +197,31 @@ class EDWState(DatabaseState):
         return sorted(set(trip_ids))
 
     @rx.var
+    def selected_trip_data(self) -> Dict[str, Any]:
+        """Parse and return data for the currently selected trip.
+
+        Returns:
+            Parsed trip data dict with trip_id, date_freq, duty_days, trip_summary.
+            Returns empty dict if no trip is selected or parsing fails.
+        """
+        if not self.selected_trip_id or self.selected_trip_id not in self.trip_text_map:
+            return {}
+
+        try:
+            # Add project root to path to import edw_reporter
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../..'))
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+
+            from edw_reporter import parse_trip_for_table
+
+            trip_text = self.trip_text_map[self.selected_trip_id]
+            return parse_trip_for_table(trip_text)
+        except Exception as e:
+            # Return error dict if parsing fails
+            return {"error": str(e)}
+
+    @rx.var
     def duty_dist_display(self) -> List[Dict[str, Any]]:
         """Duty day distribution data with optional 1-day trip exclusion."""
         if not self.duty_dist_data:
