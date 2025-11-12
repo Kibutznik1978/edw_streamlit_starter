@@ -57,6 +57,7 @@ def _export_button() -> rx.Component:
         size="2",
         variant="soft",
         disabled=~EDWState.has_results,
+        cursor="pointer",
     )
 
 

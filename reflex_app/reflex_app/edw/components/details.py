@@ -100,14 +100,14 @@ def _render_trip_details() -> rx.Component:
             # Check if there was a parsing error
             EDWState.selected_trip_data.contains("error"),
             # Show error message
-            rx.callout(
+            rx.callout.root(
                 rx.vstack(
                     rx.text("Error parsing trip data: "),
                     rx.text(EDWState.selected_trip_data["error"]),
                     spacing="1",
                 ),
                 icon="triangle-alert",
-                color_scheme="red",
+                color="red",
             ),
             # Show trip details
             rx.vstack(

@@ -395,6 +395,7 @@ def filters_component() -> rx.Component:
                 variant="soft",
                 color_scheme="gray",
                 width="100%",
+                cursor="pointer",
             ),
 
             width="100%",

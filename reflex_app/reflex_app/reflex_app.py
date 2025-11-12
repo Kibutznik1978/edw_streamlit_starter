@@ -55,10 +55,12 @@ def edw_analyzer_tab() -> rx.Component:
         # details_component(),
         rx.cond(
             EDWState.has_results,
-            rx.callout(
-                "Trip Details Viewer temporarily disabled - fixing Reflex 0.8.18 compatibility",
+            rx.callout.root(
+                rx.callout.text(
+                    "Trip Details Viewer temporarily disabled - fixing Reflex 0.8.18 compatibility",
+                ),
                 icon="info",
-                color_scheme="amber",
+                color="amber",
             ),
             rx.fragment(),
         ),
@@ -85,10 +87,12 @@ def bid_line_analyzer_tab() -> rx.Component:
             color="gray"
         ),
         rx.divider(),
-        rx.callout(
-            "Phase 3 Implementation - Coming in Weeks 7-9",
+        rx.callout.root(
+            rx.callout.text(
+                "Phase 3 Implementation - Coming in Weeks 7-9",
+            ),
             icon="construction",
-            color_scheme="amber",
+            color="amber",
         ),
         spacing="4",
         padding="8",
@@ -106,10 +110,12 @@ def database_explorer_tab() -> rx.Component:
             color="gray"
         ),
         rx.divider(),
-        rx.callout(
-            "Phase 4 Implementation - Coming in Weeks 10-11",
+        rx.callout.root(
+            rx.callout.text(
+                "Phase 4 Implementation - Coming in Weeks 10-11",
+            ),
             icon="construction",
-            color_scheme="amber",
+            color="amber",
         ),
         spacing="4",
         padding="8",
@@ -127,10 +133,12 @@ def historical_trends_tab() -> rx.Component:
             color="gray"
         ),
         rx.divider(),
-        rx.callout(
-            "Phase 4 Implementation - Coming in Weeks 10-11",
+        rx.callout.root(
+            rx.callout.text(
+                "Phase 4 Implementation - Coming in Weeks 10-11",
+            ),
             icon="construction",
-            color_scheme="amber",
+            color="amber",
         ),
         spacing="4",
         padding="8",
@@ -149,15 +157,19 @@ def index() -> rx.Component:
                 # Authentication status indicator
                 rx.cond(
                     AppState.is_authenticated,
-                    rx.callout(
-                        f"Logged in as {AppState.user_email}",
+                    rx.callout.root(
+                        rx.callout.text(
+                            f"Logged in as {AppState.user_email}",
+                        ),
                         icon="circle-check",
-                        color_scheme="green",
+                        color="green",
                     ),
-                    rx.callout(
-                        "Some features require authentication. Please login to access all functionality.",
+                    rx.callout.root(
+                        rx.callout.text(
+                            "Some features require authentication. Please login to access all functionality.",
+                        ),
                         icon="info",
-                        color_scheme="blue",
+                        color="blue",
                     ),
                 ),
 

@@ -70,6 +70,40 @@ def upload_component() -> rx.Component:
             ),
             width="100%",
             max_width="600px",
+            cursor="pointer",
+            _hover={
+                "border_color": "blue",
+                "background": "var(--blue-2)",
+            },
+        ),
+
+        # Selected files indicator
+        rx.cond(
+            rx.selected_files("edw_upload").length() > 0,
+            rx.box(
+                rx.vstack(
+                    rx.hstack(
+                        rx.icon("file", size=20, color="blue"),
+                        rx.text(
+                            "File selected:",
+                            font_weight="bold",
+                            size="3",
+                        ),
+                        spacing="2",
+                    ),
+                    rx.foreach(
+                        rx.selected_files("edw_upload"),
+                        lambda file: rx.text(file, size="2", color="gray"),
+                    ),
+                    spacing="1",
+                ),
+                background="var(--blue-3)",
+                padding="3",
+                border_radius="8px",
+                border="1px solid var(--blue-6)",
+                width="100%",
+                max_width="600px",
+            ),
         ),
 
         # Upload button
@@ -94,31 +128,56 @@ def upload_component() -> rx.Component:
             disabled=EDWState.is_processing,
             width="100%",
             max_width="600px",
+            cursor="pointer",
         ),
 
         # Progress bar
         rx.cond(
             EDWState.is_processing,
-            rx.vstack(
-                rx.progress(
-                    value=EDWState.processing_progress,
-                    max=100,
+            rx.box(
+                rx.vstack(
+                    rx.hstack(
+                        rx.spinner(size="3", color="blue"),
+                        rx.text(
+                            "Processing your PDF...",
+                            font_weight="bold",
+                            size="4",
+                        ),
+                        spacing="3",
+                    ),
+                    rx.progress(
+                        value=EDWState.processing_progress,
+                        max=100,
+                        width="100%",
+                        height="8px",
+                        color_scheme="blue",
+                    ),
+                    rx.hstack(
+                        rx.text(
+                            EDWState.processing_message,
+                            size="2",
+                            color="gray",
+                        ),
+                        rx.text(
+                            f"{EDWState.processing_progress}%",
+                            size="2",
+                            font_weight="bold",
+                            color="blue",
+                        ),
+                        spacing="2",
+                        justify="between",
+                        width="100%",
+                    ),
+                    spacing="3",
                     width="100%",
-                    max_width="600px",
+                    align="center",
                 ),
-                rx.text(
-                    EDWState.processing_message,
-                    size="2",
-                    color="gray",
-                ),
-                rx.text(
-                    f"{EDWState.processing_progress}%",
-                    size="2",
-                    font_weight="bold",
-                ),
-                spacing="2",
+                background="var(--blue-2)",
+                padding="4",
+                border_radius="8px",
+                border="1px solid var(--blue-6)",
                 width="100%",
-                align="center",
+                max_width="600px",
             ),
         ),
 

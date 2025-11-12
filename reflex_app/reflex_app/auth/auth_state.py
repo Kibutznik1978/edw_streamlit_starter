@@ -97,6 +97,9 @@ class AuthState(rx.State):
                 # TODO: Cookie persistence - implement with correct Reflex API
                 # For now, session only persists during browser session
                 # See: https://reflex.dev/docs/api-reference/state/#cookies
+
+                # Redirect to main page after successful login
+                return rx.redirect("/")
             else:
                 self.error_message = "Login failed: No user returned"
                 self.is_loading = False

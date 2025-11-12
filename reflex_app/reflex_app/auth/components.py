@@ -24,9 +24,9 @@ def login_page() -> rx.Component:
                 # Error message
                 rx.cond(
                     AuthState.error_message != "",
-                    rx.callout(
-                        AuthState.error_message,
-                        color_scheme="red",
+                    rx.callout.root(
+                        rx.callout.text(AuthState.error_message),
+                        color="red",
                         role="alert",
                         margin_bottom="4",
                     ),
@@ -35,9 +35,9 @@ def login_page() -> rx.Component:
                 # Success message
                 rx.cond(
                     AuthState.success_message != "",
-                    rx.callout(
-                        AuthState.success_message,
-                        color_scheme="green",
+                    rx.callout.root(
+                        rx.callout.text(AuthState.success_message),
+                        color="green",
                         role="status",
                         margin_bottom="4",
                     ),
@@ -77,6 +77,7 @@ def login_page() -> rx.Component:
                             size="3",
                             width="100%",
                             margin_top="6",
+                            cursor="pointer",
                         ),
                         spacing="2",
                         width="100%",
@@ -123,6 +124,7 @@ def navbar() -> rx.Component:
                         on_click=AuthState.logout,
                         variant="soft",
                         color_scheme="gray",
+                        cursor="pointer",
                     ),
                     spacing="3",
                 ),
@@ -130,6 +132,7 @@ def navbar() -> rx.Component:
                     "Login",
                     on_click=lambda: rx.redirect("/login"),
                     variant="soft",
+                    cursor="pointer",
                 ),
             ),
             width="100%",
@@ -166,6 +169,7 @@ def unauthorized_page() -> rx.Component:
                 on_click=lambda: rx.redirect("/"),
                 size="3",
                 margin_top="6",
+                cursor="pointer",
             ),
             spacing="4",
             align="center",

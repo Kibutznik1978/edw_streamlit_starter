@@ -451,6 +451,7 @@ class EDWState(DatabaseState):
         self.is_processing = True
         self.processing_progress = 0
         self.processing_message = "Starting PDF processing..."
+        yield  # Push initial state to frontend
 
         try:
             # Get first file
@@ -468,6 +469,7 @@ class EDWState(DatabaseState):
             # Update progress
             self.processing_progress = 10
             self.processing_message = "Extracting PDF text..."
+            yield  # Push progress update to frontend
 
             # Import EDW reporter functions (lazy import to avoid circular dependencies)
             # Add project root to path to import edw_reporter from parent directory
@@ -490,6 +492,7 @@ class EDWState(DatabaseState):
 
             self.processing_progress = 30
             self.processing_message = "Analyzing trips..."
+            yield  # Push progress update to frontend
 
             # Create output directory
             out_dir = tmpdir / "outputs"
@@ -511,11 +514,13 @@ class EDWState(DatabaseState):
             self.processing_progress = 100
             self.processing_message = "Analysis complete!"
             self.is_processing = False
+            yield  # Push completion state to frontend
 
         except Exception as e:
             self.upload_error = f"Error processing PDF: {str(e)}"
             self.is_processing = False
             self.processing_progress = 0
+            yield  # Push error state to frontend
 
     def _update_progress(self, progress: int, message: str):
         """Progress callback for EDW report generation."""
