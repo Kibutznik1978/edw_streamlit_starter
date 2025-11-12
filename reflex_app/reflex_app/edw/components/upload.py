@@ -159,7 +159,7 @@ def upload_component() -> rx.Component:
                             color="gray",
                         ),
                         rx.text(
-                            f"{EDWState.processing_progress}%",
+                            EDWState.processing_progress.to(str) + "%",
                             size="2",
                             font_weight="bold",
                             color="blue",
@@ -196,7 +196,7 @@ def upload_component() -> rx.Component:
                         spacing="2",
                     ),
                     rx.text(
-                        f"Filename: {EDWState.uploaded_file_name}",
+                        "Filename: " + EDWState.uploaded_file_name,
                         size="2",
                     ),
                     spacing="2",

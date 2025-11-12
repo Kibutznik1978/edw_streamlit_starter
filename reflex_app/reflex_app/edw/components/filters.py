@@ -33,9 +33,9 @@ def filters_component() -> rx.Component:
                 ),
                 rx.badge(
                     rx.cond(
-                        EDWState.filtered_trip_count == EDWState.total_trips,
-                        f"{EDWState.filtered_trip_count} trips (all)",
-                        f"{EDWState.filtered_trip_count} of {EDWState.total_trips} trips",
+                        EDWState.filtered_trip_count == EDWState.total_unique_pairings,
+                        EDWState.filtered_trip_count.to(str) + " pairings (all)",
+                        EDWState.filtered_trip_count.to(str) + " of " + EDWState.total_unique_pairings.to(str) + " pairings",
                     ),
                     color_scheme="blue",
                     size="2",
@@ -68,7 +68,7 @@ def filters_component() -> rx.Component:
                                         weight="medium",
                                     ),
                                     rx.text(
-                                        f"{EDWState.filter_duty_day_min:.1f} hrs",
+                                        EDWState.filter_duty_day_min.to(str) + " hrs",
                                         size="2",
                                         color="gray",
                                     ),
@@ -103,7 +103,7 @@ def filters_component() -> rx.Component:
                                         weight="medium",
                                     ),
                                     rx.text(
-                                        str(EDWState.filter_legs_min),
+                                        EDWState.filter_legs_min.to(str),
                                         size="2",
                                         color="gray",
                                     ),
@@ -192,7 +192,7 @@ def filters_component() -> rx.Component:
                                                 weight="medium",
                                             ),
                                             rx.text(
-                                                f"{EDWState.duty_duration_min:.1f} hrs",
+                                                EDWState.duty_duration_min.to(str) + " hrs",
                                                 size="2",
                                                 color="gray",
                                             ),
@@ -222,7 +222,7 @@ def filters_component() -> rx.Component:
                                                 weight="medium",
                                             ),
                                             rx.text(
-                                                str(EDWState.duty_legs_min),
+                                                EDWState.duty_legs_min.to(str),
                                                 size="2",
                                                 color="gray",
                                             ),

@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import sys
 import os
+import asyncio
 from io import BytesIO
 
 from ..database.base_state import DatabaseState
@@ -104,6 +105,13 @@ class EDWState(DatabaseState):
     # ========== Notes ==========
     user_notes: str = ""
 
+    # ========== Internal Progress Tracking (for threading) ==========
+    # Note: These are internal variables, not exposed to UI
+    _progress_updates: List[tuple] = []  # Queue of (progress, message) tuples
+    _analysis_complete: bool = False
+    _analysis_error: str = ""  # Error message if analysis failed
+    _analysis_results: Optional[Dict[str, Any]] = None
+
     # ========== Computed Variables ==========
 
     @rx.var
@@ -123,14 +131,14 @@ class EDWState(DatabaseState):
         if self.filter_duty_day_min > 0:
             filtered = [
                 trip for trip in filtered
-                if trip.get("max_duty_length", 0) >= self.filter_duty_day_min
+                if trip.get("Max Duty Length", 0) >= self.filter_duty_day_min
             ]
 
         # Filter by max legs per duty
         if self.filter_legs_min > 0:
             filtered = [
                 trip for trip in filtered
-                if trip.get("max_legs_per_duty", 0) >= self.filter_legs_min
+                if trip.get("Max Legs/Duty", 0) >= self.filter_legs_min
             ]
 
         # Filter by duty day criteria (combined conditions)
@@ -142,21 +150,21 @@ class EDWState(DatabaseState):
 
         # Filter by EDW status
         if self.filter_edw == "EDW Only":
-            filtered = [trip for trip in filtered if trip.get("is_edw", False)]
+            filtered = [trip for trip in filtered if trip.get("EDW", False)]
         elif self.filter_edw == "Day Only":
-            filtered = [trip for trip in filtered if not trip.get("is_edw", False)]
+            filtered = [trip for trip in filtered if not trip.get("EDW", False)]
 
         # Filter by Hot Standby status
         if self.filter_hot_standby == "Hot Standby Only":
-            filtered = [trip for trip in filtered if trip.get("is_hot_standby", False)]
+            filtered = [trip for trip in filtered if trip.get("Hot Standby", False)]
         elif self.filter_hot_standby == "Exclude Hot Standby":
-            filtered = [trip for trip in filtered if not trip.get("is_hot_standby", False)]
+            filtered = [trip for trip in filtered if not trip.get("Hot Standby", False)]
 
         return filtered
 
     def _trip_matches_duty_criteria(self, trip: Dict[str, Any]) -> bool:
         """Check if trip matches duty day criteria based on match mode."""
-        duty_day_details = trip.get("duty_day_details", [])
+        duty_day_details = trip.get("Duty Day Details", [])
         if not duty_day_details:
             return False
 
@@ -191,8 +199,13 @@ class EDWState(DatabaseState):
 
     @rx.var
     def filtered_trip_count(self) -> int:
-        """Count of filtered trips."""
+        """Count of filtered trips (unique pairings)."""
         return len(self.filtered_trips)
+
+    @rx.var
+    def total_unique_pairings(self) -> int:
+        """Total count of unique pairings (before filtering)."""
+        return len(self.trips_data)
 
     @rx.var
     def available_trip_ids(self) -> List[str]:
@@ -451,6 +464,7 @@ class EDWState(DatabaseState):
         self.is_processing = True
         self.processing_progress = 0
         self.processing_message = "Starting PDF processing..."
+        self._progress_updates = []  # Track updates during processing
         yield  # Push initial state to frontend
 
         try:
@@ -467,8 +481,8 @@ class EDWState(DatabaseState):
             pdf_path.write_bytes(file_data)
 
             # Update progress
-            self.processing_progress = 10
-            self.processing_message = "Extracting PDF text..."
+            self.processing_progress = 5
+            self.processing_message = "Reading PDF file..."
             yield  # Push progress update to frontend
 
             # Import EDW reporter functions (lazy import to avoid circular dependencies)
@@ -483,6 +497,10 @@ class EDWState(DatabaseState):
             )
 
             # Extract header information
+            self.processing_progress = 10
+            self.processing_message = "Extracting PDF header information..."
+            yield
+
             header_info = extract_pdf_header_info(pdf_path)
             self.domicile = header_info.get("domicile", "Unknown")
             self.aircraft = header_info.get("fleet_type", "Unknown")
@@ -490,8 +508,8 @@ class EDWState(DatabaseState):
             self.date_range = header_info.get("date_range", "Unknown")
             self.report_date = header_info.get("report_date", "Unknown")
 
-            self.processing_progress = 30
-            self.processing_message = "Analyzing trips..."
+            self.processing_progress = 15
+            self.processing_message = f"Found: {self.domicile} {self.aircraft} - Bid {self.bid_period}"
             yield  # Push progress update to frontend
 
             # Create output directory
@@ -499,17 +517,53 @@ class EDWState(DatabaseState):
             out_dir.mkdir(exist_ok=True)
 
             # Run EDW analysis with progress callback
-            results = run_edw_report(
-                pdf_path,
-                out_dir,
-                domicile=self.domicile,
-                aircraft=self.aircraft,
-                bid_period=self.bid_period,
-                progress_callback=self._update_progress
-            )
+            # The callback will update state, and we'll poll for updates
+            import threading
+            import time
+
+            # Flag to track completion
+            self._analysis_complete = False
+            self._analysis_error = ""
+            self._analysis_results = None
+
+            def run_analysis():
+                """Run analysis in thread to allow async progress updates."""
+                try:
+                    self._analysis_results = run_edw_report(
+                        pdf_path,
+                        out_dir,
+                        domicile=self.domicile,
+                        aircraft=self.aircraft,
+                        bid_period=self.bid_period,
+                        progress_callback=self._update_progress
+                    )
+                except Exception as e:
+                    self._analysis_error = str(e)
+                finally:
+                    self._analysis_complete = True
+
+            # Start analysis in background thread
+            thread = threading.Thread(target=run_analysis)
+            thread.start()
+
+            # Poll for progress updates while thread is running
+            while not self._analysis_complete:
+                # Check for new progress updates
+                if self._progress_updates:
+                    progress, message = self._progress_updates.pop(0)
+                    self.processing_progress = progress
+                    self.processing_message = message
+                    yield  # Push update to frontend
+
+                # Small delay to avoid busy waiting
+                await asyncio.sleep(0.1)
+
+            # Check for errors
+            if self._analysis_error:
+                raise Exception(self._analysis_error)
 
             # Store results
-            self._process_results(results)
+            self._process_results(self._analysis_results)
 
             self.processing_progress = 100
             self.processing_message = "Analysis complete!"
@@ -523,9 +577,11 @@ class EDWState(DatabaseState):
             yield  # Push error state to frontend
 
     def _update_progress(self, progress: int, message: str):
-        """Progress callback for EDW report generation."""
-        self.processing_progress = progress
-        self.processing_message = message
+        """Progress callback for EDW report generation.
+
+        Called from background thread, queues updates for main async function.
+        """
+        self._progress_updates.append((progress, message))
 
     def _process_results(self, results: Dict[str, Any]):
         """Process and store EDW analysis results."""

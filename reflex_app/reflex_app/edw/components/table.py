@@ -123,38 +123,30 @@ def _render_trip_row(trip: Dict[str, Any]) -> rx.Component:
     """Render a single trip row.
 
     Args:
-        trip: Trip data dictionary.
+        trip: Trip data dictionary (Reflex Var when used in rx.foreach).
 
     Returns:
         Table row with trip data and click handler.
     """
-    trip_id = trip["Trip ID"]
-
     return rx.table.row(
-        rx.table.cell(str(trip_id), padding="0.75rem"),
-        rx.table.cell(str(trip.get("Frequency", "")), padding="0.75rem"),
+        rx.table.cell(trip["Trip ID"], padding="0.75rem"),
+        rx.table.cell(trip["Frequency"], padding="0.75rem"),
+        rx.table.cell(trip["TAFB Hours"], padding="0.75rem"),
+        rx.table.cell(trip["Duty Days"], padding="0.75rem"),
         rx.table.cell(
-            f"{trip.get('TAFB Hours', 0):.1f}",
-            padding="0.75rem",
-        ),
-        rx.table.cell(str(trip.get("Duty Days", "")), padding="0.75rem"),
-        rx.table.cell(
-            _render_badge(trip.get("EDW", False), "EDW", "Day"),
+            _render_badge(trip["EDW"], "EDW", "Day"),
             padding="0.75rem",
         ),
         rx.table.cell(
-            _render_badge(trip.get("Hot Standby", False), "HS", "No"),
+            _render_badge(trip["Hot Standby"], "HS", "No"),
             padding="0.75rem",
         ),
-        rx.table.cell(
-            f"{trip.get('Max Duty Length', 0):.1f}h",
-            padding="0.75rem",
-        ),
-        rx.table.cell(str(trip.get("Max Legs/Duty", "")), padding="0.75rem"),
-        on_click=lambda: EDWState.select_trip_from_table(trip_id),
+        rx.table.cell(trip["Max Duty Length"], padding="0.75rem"),
+        rx.table.cell(trip["Max Legs/Duty"], padding="0.75rem"),
+        on_click=lambda: EDWState.select_trip_from_table(trip["Trip ID"]),
         cursor="pointer",
         background_color=rx.cond(
-            EDWState.selected_trip_id == str(trip_id),
+            EDWState.selected_trip_id == trip["Trip ID"],
             rx.color("blue", 3),
             "transparent",
         ),
