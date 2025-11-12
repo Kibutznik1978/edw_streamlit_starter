@@ -613,7 +613,15 @@ class EDWState(DatabaseState):
         self.selected_trip_id = str(trip_id)
 
     async def save_to_database(self):
-        """Save EDW analysis results to database."""
+        """Save EDW analysis results to database.
+
+        Saves to 3 tables:
+        1. bid_periods - Master record with domicile, aircraft, bid_period
+        2. trips - Individual trip records with EDW analysis
+        3. edw_summary_stats - Aggregated statistics
+
+        Handles duplicate detection and optionally overwrites existing data.
+        """
         if not self.is_authenticated:
             self.save_status = "Error: Please login to save data"
             return
@@ -622,18 +630,151 @@ class EDWState(DatabaseState):
             self.save_status = "Error: No data to save"
             return
 
+        if not self.domicile or not self.aircraft or not self.bid_period:
+            self.save_status = "Error: Missing bid period metadata"
+            return
+
         self.save_in_progress = True
-        self.save_status = ""
+        self.save_status = "Checking for existing data..."
+        yield  # Push initial status to frontend
 
         try:
-            # TODO: Implement database save logic
-            # This will be implemented after database schema is ready
-            self.save_status = "Feature coming soon"
+            client = self.get_db_client()
+            if not client:
+                self.save_status = "Error: Database connection failed"
+                self.save_in_progress = False
+                yield
+                return
+
+            # Step 1: Check if bid period already exists
+            self.save_status = "Checking for duplicates..."
+            yield
+
+            existing_periods = await self.query_table(
+                "bid_periods",
+                filters={
+                    "domicile": self.domicile,
+                    "aircraft": self.aircraft,
+                    "bid_period": self.bid_period
+                }
+            )
+
+            bid_period_id = None
+
+            if existing_periods and len(existing_periods) > 0:
+                # Bid period exists - delete old data and reuse ID
+                bid_period_id = existing_periods[0]["id"]
+                self.save_status = f"Found existing data. Replacing..."
+                yield
+
+                # Delete old trips and stats (cascade will handle this, but being explicit)
+                client.table("trips").delete().eq("bid_period_id", bid_period_id).execute()
+                client.table("edw_summary_stats").delete().eq("bid_period_id", bid_period_id).execute()
+
+                # Update the bid period upload date
+                client.table("bid_periods").update({
+                    "upload_date": "now()"
+                }).eq("id", bid_period_id).execute()
+
+            else:
+                # Step 2: Insert new bid period
+                self.save_status = "Creating bid period record..."
+                yield
+
+                bid_period_data = {
+                    "domicile": self.domicile,
+                    "aircraft": self.aircraft,
+                    "bid_period": self.bid_period
+                }
+
+                result = await self.insert_row("bid_periods", bid_period_data)
+                if not result:
+                    self.save_status = f"Error: Failed to create bid period record - {self.error_message}"
+                    self.save_in_progress = False
+                    yield
+                    return
+
+                bid_period_id = result["id"]
+
+            # Step 3: Insert trips
+            self.save_status = f"Saving {len(self.trips_data)} trip records..."
+            yield
+
+            trips_inserted = 0
+            for trip in self.trips_data:
+                trip_data = {
+                    "bid_period_id": bid_period_id,
+                    "trip_id": trip.get("Trip ID", ""),
+                    "is_edw": trip.get("EDW", False) == "Yes" if isinstance(trip.get("EDW"), str) else trip.get("is_edw", False),
+                    "edw_reason": None,  # Could be enhanced to store which duty days triggered EDW
+                    "tafb_hours": float(trip.get("TAFB Hours", 0)) if trip.get("TAFB Hours") else None,
+                    "duty_days": int(trip.get("Duty Days", 0)) if trip.get("Duty Days") else None,
+                    "credit_time_hours": None,  # Not currently tracked in trips_data
+                    "raw_text": self.trip_text_map.get(trip.get("Trip ID", ""), "")
+                }
+
+                result = client.table("trips").insert(trip_data).execute()
+                if result and result.data:
+                    trips_inserted += 1
+
+            self.save_status = f"Saved {trips_inserted} trip records. Calculating summary stats..."
+            yield
+
+            # Step 4: Calculate and insert summary statistics
+            # Count EDW vs non-EDW trips
+            edw_count = sum(1 for t in self.trips_data if (t.get("EDW") == "Yes" if isinstance(t.get("EDW"), str) else t.get("is_edw", False)))
+            total_count = len(self.trips_data)
+            non_edw_count = total_count - edw_count
+
+            # Calculate TAFB totals
+            total_tafb = sum(float(t.get("TAFB Hours", 0)) for t in self.trips_data if t.get("TAFB Hours"))
+            edw_tafb = sum(
+                float(t.get("TAFB Hours", 0))
+                for t in self.trips_data
+                if t.get("TAFB Hours") and (t.get("EDW") == "Yes" if isinstance(t.get("EDW"), str) else t.get("is_edw", False))
+            )
+
+            # Calculate duty day totals
+            total_duty_days = sum(int(t.get("Duty Days", 0)) for t in self.trips_data if t.get("Duty Days"))
+            edw_duty_days = sum(
+                int(t.get("Duty Days", 0))
+                for t in self.trips_data
+                if t.get("Duty Days") and (t.get("EDW") == "Yes" if isinstance(t.get("EDW"), str) else t.get("is_edw", False))
+            )
+
+            summary_data = {
+                "bid_period_id": bid_period_id,
+                "total_trips": total_count,
+                "edw_trips": edw_count,
+                "non_edw_trips": non_edw_count,
+                "trip_weighted_pct": round(self.trip_weighted_pct, 2),
+                "total_tafb_hours": round(total_tafb, 2),
+                "edw_tafb_hours": round(edw_tafb, 2),
+                "tafb_weighted_pct": round(self.tafb_weighted_pct, 2),
+                "total_duty_days": total_duty_days,
+                "edw_duty_days": edw_duty_days,
+                "duty_day_weighted_pct": round(self.duty_day_weighted_pct, 2)
+            }
+
+            result = await self.insert_row("edw_summary_stats", summary_data)
+            if not result:
+                self.save_status = f"Warning: Trips saved but summary stats failed - {self.error_message}"
+                self.save_in_progress = False
+                yield
+                return
+
+            # Success!
+            self.save_status = f"✅ Successfully saved {trips_inserted} trips to database!"
             self.save_in_progress = False
+            yield
 
         except Exception as e:
+            print(f"Save error: {e}")
+            import traceback
+            traceback.print_exc()
             self.save_status = f"Error saving to database: {str(e)}"
             self.save_in_progress = False
+            yield
 
     def generate_csv_export(self) -> str:
         """Generate CSV export of filtered trip data.

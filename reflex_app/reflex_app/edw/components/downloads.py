@@ -68,10 +68,64 @@ def downloads_component() -> rx.Component:
                     color="blue",
                     cursor="pointer",
                 ),
+                # Database save button
+                rx.button(
+                    rx.cond(
+                        EDWState.save_in_progress,
+                        rx.spinner(size="3"),
+                        rx.icon("database", size=20),
+                    ),
+                    rx.cond(
+                        EDWState.save_in_progress,
+                        "Saving...",
+                        "Save to Database"
+                    ),
+                    on_click=EDWState.save_to_database,
+                    size="3",
+                    variant="soft",
+                    color="violet",
+                    cursor="pointer",
+                    disabled=EDWState.save_in_progress,
+                ),
                 direction="row",
                 spacing="4",
                 wrap="wrap",
                 width="100%",
+            ),
+            # Save status feedback
+            rx.cond(
+                EDWState.save_status != "",
+                rx.box(
+                    rx.cond(
+                        EDWState.save_status.contains("Error") | EDWState.save_status.contains("Warning"),
+                        # Error/Warning message
+                        rx.callout.root(
+                            rx.callout.icon(rx.icon("alert-circle")),
+                            rx.callout.text(EDWState.save_status),
+                            color="red",
+                            size="2",
+                        ),
+                        # Success or progress message
+                        rx.callout.root(
+                            rx.callout.icon(
+                                rx.cond(
+                                    EDWState.save_status.contains("✅"),
+                                    rx.icon("check-circle"),
+                                    rx.icon("info"),
+                                )
+                            ),
+                            rx.callout.text(EDWState.save_status),
+                            color=rx.cond(
+                                EDWState.save_status.contains("✅"),
+                                "green",
+                                "blue",
+                            ),
+                            size="2",
+                        ),
+                    ),
+                    width="100%",
+                ),
+                rx.fragment(),
             ),
             # Export details
             rx.box(
