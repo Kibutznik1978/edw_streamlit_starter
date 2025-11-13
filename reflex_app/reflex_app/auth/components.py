@@ -11,6 +11,10 @@ def login_page() -> rx.Component:
     Returns:
         Login page component
     """
+    # Import at function level to avoid circular imports
+    from ..reflex_app import AppState
+    from ..components.layout import sidebar
+
     return rx.fragment(
         # Load theme immediately to prevent flash
         rx.script("""
@@ -21,93 +25,144 @@ def login_page() -> rx.Component:
                 }
             })();
         """),
-        rx.container(
-            rx.vstack(
-                rx.heading("Aero Crew Data Analyzer", size="9", margin_bottom="2"),
-                rx.text(
-                    "Login to access your bid analysis tools",
-                    size="4",
-                    color="gray",
-                    margin_bottom="8"
-                ),
 
-                # Error message
-                rx.cond(
-                    AuthState.error_message != "",
-                    rx.callout.root(
-                        rx.callout.text(AuthState.error_message),
-                        color="red",
-                        role="alert",
-                        margin_bottom="4",
-                    ),
+        # Hamburger menu button for mobile (fixed position, top-left)
+        # Only show when sidebar is closed on mobile
+        rx.cond(
+            ~AppState.sidebar_open,
+            rx.box(
+                rx.icon_button(
+                    rx.icon("menu", size=24),
+                    on_click=AppState.toggle_sidebar,
+                    variant="soft",
+                    cursor="pointer",
+                    size="3",
+                    color_scheme="gray",
                 ),
-
-                # Success message
-                rx.cond(
-                    AuthState.success_message != "",
-                    rx.callout.root(
-                        rx.callout.text(AuthState.success_message),
-                        color="green",
-                        role="status",
-                        margin_bottom="4",
-                    ),
-                ),
-
-                # Login form
-                rx.card(
-                    rx.vstack(
-                        rx.text("Email", weight="bold", size="2"),
-                        rx.input(
-                            placeholder="your.email@example.com",
-                            value=AuthState.login_email,
-                            on_change=AuthState.set_login_email,
-                            type="email",
-                            size="3",
-                            width="100%",
-                        ),
-                        rx.text("Password", weight="bold", size="2", margin_top="4"),
-                        rx.input(
-                            placeholder="Enter your password",
-                            value=AuthState.login_password,
-                            on_change=AuthState.set_login_password,
-                            type="password",
-                            size="3",
-                            width="100%",
-                        ),
-                        rx.checkbox(
-                            "Remember me for 7 days",
-                            checked=AuthState.remember_me,
-                            on_change=AuthState.set_remember_me,
-                            margin_top="4",
-                        ),
-                        rx.button(
-                            "Login",
-                            on_click=AuthState.login,
-                            loading=AuthState.is_loading,
-                            size="3",
-                            width="100%",
-                            margin_top="6",
-                            cursor="pointer",
-                            style={
-                                "transition": "all 150ms ease",
-                                "_hover": {
-                                    "transform": "translateY(-1px)",
-                                },
-                            },
-                        ),
-                        spacing="2",
-                        width="100%",
-                    ),
-                    size="4",
-                ),
-
-                spacing="4",
-                width="100%",
-                max_width="400px",
-                margin_top="8",
+                position="fixed",
+                top="4",
+                left="4",
+                z_index="101",  # Above sidebar (z-index 100)
+                display=["block", "block", "none"],  # Show on mobile/tablet, hide on desktop
             ),
-            padding="8",
-            center_content=True,
+        ),
+
+        # Overlay/backdrop for mobile when sidebar is open
+        rx.cond(
+            AppState.sidebar_open,
+            rx.box(
+                width="100vw",
+                height="100vh",
+                position="fixed",
+                top="0",
+                left="0",
+                background="rgba(0, 0, 0, 0.5)",
+                z_index="90",  # Below sidebar (z-index 100)
+                display=["block", "block", "none"],  # Show on mobile/tablet, hide on desktop
+                on_click=AppState.toggle_sidebar,
+                class_name="sidebar-backdrop",
+            ),
+        ),
+
+        sidebar(AppState.current_tab, AppState.set_current_tab, AppState.sidebar_open, AppState.toggle_sidebar),
+
+        rx.box(
+            rx.container(
+                rx.vstack(
+                    rx.heading("Login", size="8", margin_bottom="2"),
+                    rx.text(
+                        "Login to access your bid analysis tools",
+                        size="4",
+                        color=Colors.gray_600,
+                        margin_bottom="6"
+                    ),
+                    rx.divider(),
+
+                    # Error message
+                    rx.cond(
+                        AuthState.error_message != "",
+                        rx.callout.root(
+                            rx.callout.text(AuthState.error_message),
+                            color="red",
+                            role="alert",
+                            margin_bottom="4",
+                        ),
+                    ),
+
+                    # Success message
+                    rx.cond(
+                        AuthState.success_message != "",
+                        rx.callout.root(
+                            rx.callout.text(AuthState.success_message),
+                            color="green",
+                            role="status",
+                            margin_bottom="4",
+                        ),
+                    ),
+
+                    # Login form
+                    rx.card(
+                        rx.vstack(
+                            rx.text("Email", weight="bold", size="2"),
+                            rx.input(
+                                placeholder="your.email@example.com",
+                                value=AuthState.login_email,
+                                on_change=AuthState.set_login_email,
+                                type="email",
+                                size="3",
+                                width="100%",
+                            ),
+                            rx.text("Password", weight="bold", size="2", margin_top="4"),
+                            rx.input(
+                                placeholder="Enter your password",
+                                value=AuthState.login_password,
+                                on_change=AuthState.set_login_password,
+                                type="password",
+                                size="3",
+                                width="100%",
+                            ),
+                            rx.checkbox(
+                                "Remember me for 7 days",
+                                checked=AuthState.remember_me,
+                                on_change=AuthState.set_remember_me,
+                                margin_top="4",
+                            ),
+                            rx.button(
+                                "Login",
+                                on_click=AuthState.login,
+                                loading=AuthState.is_loading,
+                                size="3",
+                                width="100%",
+                                margin_top="6",
+                                cursor="pointer",
+                                style={
+                                    "transition": "all 150ms ease",
+                                    "_hover": {
+                                        "transform": "translateY(-1px)",
+                                    },
+                                },
+                            ),
+                            spacing="2",
+                            width="100%",
+                        ),
+                        size="4",
+                    ),
+
+                    spacing="4",
+                    width="100%",
+                    max_width="500px",
+                ),
+                max_width="1400px",
+                padding="8",
+            ),
+            margin_left=rx.cond(
+                AppState.sidebar_open,
+                ["0", "0", "260px"],  # 0 on mobile, 260px on desktop
+                "0",
+            ),
+            min_height="100vh",
+            background=Colors.gray_50,
+            transition="margin-left 0.3s ease",
         ),
         on_mount=AuthState.on_load,
     )

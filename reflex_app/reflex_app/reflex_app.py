@@ -6,7 +6,7 @@ Migration from Streamlit is in progress - see /docs/REFLEX_MIGRATION_*.md for de
 
 import reflex as rx
 from .auth.auth_state import AuthState
-from .auth.components import login_page, navbar, unauthorized_page
+from .auth.components import login_page, unauthorized_page
 from .database.base_state import DatabaseState
 from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component, details_component, table_component, downloads_component
 from .edw.edw_state import EDWState
@@ -26,15 +26,18 @@ class AppState(DatabaseState):
     current_tab: str = "home"
 
     # Sidebar state for responsive behavior
-    sidebar_open: bool = False  # Default closed to maximize content space
+    sidebar_open: bool = False  # Default closed on mobile, CSS will keep it visible on desktop
 
     def set_current_tab(self, tab: str):
-        """Set the current active tab.
+        """Set the current active tab and close sidebar on mobile.
 
         Args:
             tab: Tab identifier to switch to
         """
         self.current_tab = tab
+        # Close sidebar on mobile after navigation
+        # Desktop sidebar won't be affected due to CSS
+        self.sidebar_open = False
 
     def toggle_sidebar(self):
         """Toggle sidebar visibility for mobile/tablet."""
@@ -76,7 +79,7 @@ def settings_tab() -> rx.Component:
 
 
 def edw_analyzer_tab() -> rx.Component:
-    """EDW Pairing Analyzer tab (Tab 1)."""
+    """Pairing Analyzer tab (Tab 1)."""
     return rx.vstack(
         # Upload component (wrapped in card)
         upload_component(),
@@ -164,9 +167,29 @@ def index() -> rx.Component:
                 }
             })();
         """),
-        navbar(),
 
-        # Overlay for mobile when sidebar is open
+        # Hamburger menu button for mobile (fixed position, top-right)
+        # Show on mobile/tablet when sidebar is closed, hide on desktop
+        rx.cond(
+            ~AppState.sidebar_open,  # Only show when sidebar is closed
+            rx.box(
+                rx.icon_button(
+                    rx.icon("menu", size=24),
+                    on_click=AppState.toggle_sidebar,
+                    variant="surface",  # More visible surface variant
+                    cursor="pointer",
+                    size="3",  # Medium size
+                    color_scheme="gray",  # Gray color scheme
+                ),
+                position="fixed",
+                top="1rem",  # 16px from top
+                right="1rem",  # 16px from right
+                z_index="101",  # Above sidebar (z-index 100)
+                class_name="hamburger-menu-button",  # CSS class for responsive visibility
+            ),
+        ),
+
+        # Overlay/backdrop for mobile when sidebar is open
         rx.cond(
             AppState.sidebar_open,
             rx.box(
@@ -176,13 +199,15 @@ def index() -> rx.Component:
                 top="0",
                 left="0",
                 background="rgba(0, 0, 0, 0.5)",
-                z_index="90",
-                display=["block", "block", "none"],  # Show on xs/sm, hide on md+
+                z_index="90",  # Below sidebar (z-index 100)
+                display=["block", "block", "none"],  # Show on mobile/tablet, hide on desktop
                 on_click=AppState.toggle_sidebar,
+                class_name="sidebar-backdrop",
             ),
         ),
 
-        sidebar(AppState.current_tab, AppState.set_current_tab, AppState.sidebar_open),
+        # Sidebar navigation
+        sidebar(AppState.current_tab, AppState.set_current_tab, AppState.sidebar_open, AppState.toggle_sidebar),
 
         rx.box(
             rx.container(
@@ -191,7 +216,7 @@ def index() -> rx.Component:
                     rx.match(
                         AppState.current_tab,
                         ("home", rx.heading("Home", size="8")),
-                        ("edw_analyzer", rx.heading("EDW Pairing Analyzer", size="8")),
+                        ("edw_analyzer", rx.heading("Pairing Analyzer", size="8")),
                         ("bid_line_analyzer", rx.heading("Bid Line Analyzer", size="8")),
                         ("database_explorer", rx.heading("Database Explorer", size="8")),
                         ("historical_trends", rx.heading("Historical Trends", size="8")),
@@ -209,25 +234,6 @@ def index() -> rx.Component:
                         rx.text("Welcome to Aero Crew Data Analyzer", size="4", color=Colors.gray_600),  # default
                     ),
                     rx.divider(),
-
-                    # Authentication status indicator
-                    rx.cond(
-                        AppState.is_authenticated,
-                        rx.callout.root(
-                            rx.callout.text(
-                                f"Logged in as {AppState.user_email}",
-                            ),
-                            icon="circle-check",
-                            color="green",
-                        ),
-                        rx.callout.root(
-                            rx.callout.text(
-                                "Some features require authentication. Please login to access all functionality.",
-                            ),
-                            icon="info",
-                            color="blue",
-                        ),
-                    ),
 
                     # Content based on current tab
                     rx.cond(
@@ -259,13 +265,11 @@ def index() -> rx.Component:
                     width="100%",
                 ),
                 max_width="1400px",
-                padding="8",
+                class_name="main-content-container",  # CSS class for responsive padding
             ),
-            margin_left=rx.cond(
-                AppState.sidebar_open,
-                ["0", "0", "260px"],  # 0 on mobile, 260px on desktop
-                "0",
-            ),
+            # Content margin: always 260px on desktop (sidebar always visible)
+            # On mobile: 0 (sidebar overlays content, doesn't push it)
+            margin_left=["0", "0", "260px"],  # 0 on mobile/tablet, 260px on desktop
             min_height="100vh",
             background=Colors.gray_50,
             transition="margin-left 0.3s ease",
