@@ -1,0 +1,391 @@
+/*
+ * Custom Theme Overrides for Radix UI
+ * Maps Radix color scales to Navy/Teal/Sky brand palette
+ *
+ * Color Scale Guide:
+ * 1-2:   Backgrounds
+ * 3-5:   Component backgrounds
+ * 6-8:   Borders and separators
+ * 9-11:  Solid colors and interactive elements
+ * 12:    High-contrast text
+ */
+
+/* Override Radix Blue scale with Navy colors */
+.radix-themes {
+    --blue-1: #eff6ff;
+    --blue-2: #dbeafe;
+    --blue-3: #bfdbfe;
+    --blue-4: #93c5fd;
+    --blue-5: #60a5fa;
+    --blue-6: #3b82f6;
+    --blue-7: #2563eb;
+    --blue-8: #1d4ed8;
+    --blue-9: #1e3a8a;
+    --blue-10: #1e3a8a;
+    --blue-11: #1e293b;
+    --blue-12: #1e293b;
+
+    /* Override Indigo scale with Navy colors (for consistency) */
+    --indigo-1: #eff6ff;
+    --indigo-2: #dbeafe;
+    --indigo-3: #bfdbfe;
+    --indigo-4: #93c5fd;
+    --indigo-5: #60a5fa;
+    --indigo-6: #3b82f6;
+    --indigo-7: #2563eb;
+    --indigo-8: #1d4ed8;
+    --indigo-9: #1e3a8a;
+    --indigo-10: #1e3a8a;
+    --indigo-11: #1e293b;
+    --indigo-12: #1e293b;
+
+    /* Override Green/Teal scale with Teal accent colors */
+    --green-1: #f0fdfa;
+    --green-2: #ccfbf1;
+    --green-3: #99f6e4;
+    --green-4: #5eead4;
+    --green-5: #2dd4bf;
+    --green-6: #14b8a6;
+    --green-7: #0d9488;
+    --green-8: #0d9488;
+    --green-9: #0f766e;
+    --green-10: #0f766e;
+    --green-11: #115e59;
+    --green-12: #134e4a;
+
+    --teal-1: #f0fdfa;
+    --teal-2: #ccfbf1;
+    --teal-3: #99f6e4;
+    --teal-4: #5eead4;
+    --teal-5: #2dd4bf;
+    --teal-6: #14b8a6;
+    --teal-7: #0d9488;
+    --teal-8: #0d9488;
+    --teal-9: #0f766e;
+    --teal-10: #0f766e;
+    --teal-11: #115e59;
+    --teal-12: #134e4a;
+
+    /* Override Cyan scale with Sky highlight colors */
+    --cyan-1: #f0f9ff;
+    --cyan-2: #e0f2fe;
+    --cyan-3: #bae6fd;
+    --cyan-4: #7dd3fc;
+    --cyan-5: #38bdf8;
+    --cyan-6: #0ea5e9;
+    --cyan-7: #0ea5e9;
+    --cyan-8: #0284c7;
+    --cyan-9: #0284c7;
+    --cyan-10: #0369a1;
+    --cyan-11: #075985;
+    --cyan-12: #0c4a6e;
+
+    /* Accent color (primary brand color) - Maps to Navy */
+    --accent-1: #eff6ff;
+    --accent-2: #dbeafe;
+    --accent-3: #bfdbfe;
+    --accent-4: #93c5fd;
+    --accent-5: #60a5fa;
+    --accent-6: #3b82f6;
+    --accent-7: #2563eb;
+    --accent-8: #1d4ed8;
+    --accent-9: #1e3a8a;
+    --accent-10: #1e3a8a;
+    --accent-11: #1e293b;
+    --accent-12: #1e293b;
+}
+
+/* Dark mode overrides */
+.dark .radix-themes,
+[data-theme="dark"] .radix-themes {
+    /* Dark backgrounds */
+    --color-background: #0f172a;
+    --color-panel: #1e293b;
+    --color-surface: #334155;
+
+    /* Dark gray scale (reversed for dark mode) */
+    --gray-1: #1e293b;
+    --gray-2: #334155;
+    --gray-3: #475569;
+    --gray-4: #64748b;
+    --gray-5: #94a3b8;
+    --gray-6: #cbd5e1;
+    --gray-7: #e2e8f0;
+    --gray-8: #f1f5f9;
+    --gray-9: #f8fafc;
+    --gray-10: #ffffff;
+    --gray-11: #f1f5f9;
+    --gray-12: #ffffff;
+
+    /* Slate gray scale for dark mode */
+    --slate-1: #1e293b;
+    --slate-2: #334155;
+    --slate-3: #475569;
+    --slate-4: #64748b;
+    --slate-5: #94a3b8;
+    --slate-6: #cbd5e1;
+    --slate-7: #e2e8f0;
+    --slate-8: #f1f5f9;
+    --slate-9: #f8fafc;
+    --slate-10: #ffffff;
+    --slate-11: #f1f5f9;
+    --slate-12: #ffffff;
+
+    /* Navy accent (brighter for dark mode) */
+    --blue-1: #1e3a8a;
+    --blue-2: #1e3a8a;
+    --blue-3: #1d4ed8;
+    --blue-4: #2563eb;
+    --blue-5: #3b82f6;
+    --blue-6: #60a5fa;
+    --blue-7: #93c5fd;
+    --blue-8: #bfdbfe;
+    --blue-9: #3b82f6;
+    --blue-10: #60a5fa;
+    --blue-11: #93c5fd;
+    --blue-12: #dbeafe;
+
+    /* Indigo (Navy) - brighter for dark mode */
+    --indigo-1: #1e3a8a;
+    --indigo-2: #1e3a8a;
+    --indigo-3: #1d4ed8;
+    --indigo-4: #2563eb;
+    --indigo-5: #3b82f6;
+    --indigo-6: #60a5fa;
+    --indigo-7: #93c5fd;
+    --indigo-8: #bfdbfe;
+    --indigo-9: #3b82f6;
+    --indigo-10: #60a5fa;
+    --indigo-11: #93c5fd;
+    --indigo-12: #dbeafe;
+
+    /* Teal accent (brighter) */
+    --green-1: #134e4a;
+    --green-2: #115e59;
+    --green-3: #0f766e;
+    --green-4: #0d9488;
+    --green-5: #14b8a6;
+    --green-6: #2dd4bf;
+    --green-7: #5eead4;
+    --green-8: #99f6e4;
+    --green-9: #14b8a6;
+    --green-10: #2dd4bf;
+    --green-11: #5eead4;
+    --green-12: #ccfbf1;
+
+    --teal-1: #134e4a;
+    --teal-2: #115e59;
+    --teal-3: #0f766e;
+    --teal-4: #0d9488;
+    --teal-5: #14b8a6;
+    --teal-6: #2dd4bf;
+    --teal-7: #5eead4;
+    --teal-8: #99f6e4;
+    --teal-9: #14b8a6;
+    --teal-10: #2dd4bf;
+    --teal-11: #5eead4;
+    --teal-12: #ccfbf1;
+
+    /* Sky highlight (brighter) */
+    --cyan-1: #0c4a6e;
+    --cyan-2: #075985;
+    --cyan-3: #0369a1;
+    --cyan-4: #0284c7;
+    --cyan-5: #0ea5e9;
+    --cyan-6: #38bdf8;
+    --cyan-7: #7dd3fc;
+    --cyan-8: #bae6fd;
+    --cyan-9: #38bdf8;
+    --cyan-10: #7dd3fc;
+    --cyan-11: #bae6fd;
+    --cyan-12: #e0f2fe;
+
+    /* Accent color (primary brand color) - Brighter Navy for dark mode */
+    --accent-1: #1e3a8a;
+    --accent-2: #1e3a8a;
+    --accent-3: #1d4ed8;
+    --accent-4: #2563eb;
+    --accent-5: #3b82f6;
+    --accent-6: #60a5fa;
+    --accent-7: #93c5fd;
+    --accent-8: #bfdbfe;
+    --accent-9: #3b82f6;
+    --accent-10: #60a5fa;
+    --accent-11: #93c5fd;
+    --accent-12: #dbeafe;
+}
+
+/* Dark mode body background */
+.dark {
+    background: #0f172a;
+    color: #f1f5f9;
+}
+
+/* ==========================================================================
+   Animation Keyframes
+   ========================================================================== */
+
+/* Fade in animation - for content that loads dynamically */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Slide in from left - for navigation items and sidebars */
+@keyframes slideInLeft {
+    from {
+        transform: translateX(-10px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Scale in - for modals and popups */
+@keyframes scaleIn {
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Pulse animation - for loading indicators */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* ==========================================================================
+   Global Transition Standards
+   ========================================================================== */
+
+/* Smooth transitions for all interactive elements */
+button,
+a,
+.rt-Button,
+.rt-Card,
+.rt-Badge,
+.rt-IconButton {
+    transition-property: background-color, border-color, color, box-shadow, transform;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+}
+
+/* Standard transitions for UI components */
+.rt-TableRow,
+.rt-AccordionTrigger,
+.rt-SelectTrigger,
+.rt-SliderThumb {
+    transition-property: background-color, border-color, box-shadow;
+    transition-duration: 200ms;
+    transition-timing-function: ease;
+}
+
+/* ==========================================================================
+   Accessibility: Reduced Motion
+   ========================================================================== */
+
+/* Respect user's motion preferences - critical for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ==========================================================================
+   Component-Specific Animations
+   ========================================================================== */
+
+/* Button hover effects */
+.rt-Button:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.rt-Button:not(:disabled):active {
+    transform: translateY(0);
+}
+
+/* Card hover effects */
+.rt-Card {
+    transition: box-shadow 200ms ease, transform 200ms ease;
+}
+
+.rt-Card:hover {
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Badge micro-interactions */
+.rt-Badge {
+    transition: transform 150ms ease;
+}
+
+.rt-Badge:hover {
+    transform: scale(1.05);
+}
+
+/* Icon button hover effects */
+.rt-IconButton:not(:disabled):hover {
+    transform: scale(1.1);
+}
+
+/* Table row interactions */
+.rt-TableRow {
+    transition: background-color 150ms ease, transform 100ms ease;
+}
+
+.rt-TableRow:hover {
+    background-color: var(--gray-3) !important;
+}
+
+/* Smooth accordion animations */
+.rt-AccordionContent {
+    animation: fadeIn 200ms ease;
+}
+
+/* Dialog/Modal entrance */
+.rt-Dialog,
+.rt-AlertDialog {
+    animation: scaleIn 200ms ease;
+}
+
+/* ==========================================================================
+   Performance Optimizations
+   ========================================================================== */
+
+/* Use GPU acceleration for transforms and opacity */
+.rt-Button,
+.rt-Card,
+.rt-Badge,
+.rt-IconButton,
+.rt-TableRow {
+    will-change: transform, opacity;
+}
+
+/* Prevent layout shifts during animations */
+.rt-Button,
+.rt-IconButton {
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}

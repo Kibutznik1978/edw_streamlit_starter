@@ -21,9 +21,10 @@ def downloads_component() -> rx.Component:
     """
     return rx.cond(
         EDWState.has_results,
-        rx.vstack(
-            # Section header
-            rx.hstack(
+        rx.card(
+            rx.vstack(
+                # Section header
+                rx.hstack(
                 rx.icon("download", size=24, color=rx.color("green", 9)),
                 rx.heading(
                     "Download Reports",
@@ -57,6 +58,12 @@ def downloads_component() -> rx.Component:
                     variant="soft",
                     color="green",
                     cursor="pointer",
+                    style={
+                        "transition": "all 150ms ease",
+                        "_hover": {
+                            "transform": "translateY(-2px)",
+                        },
+                    },
                 ),
                 # PDF download button
                 rx.button(
@@ -67,6 +74,12 @@ def downloads_component() -> rx.Component:
                     variant="soft",
                     color="blue",
                     cursor="pointer",
+                    style={
+                        "transition": "all 150ms ease",
+                        "_hover": {
+                            "transform": "translateY(-2px)",
+                        },
+                    },
                 ),
                 # Database save button
                 rx.button(
@@ -86,6 +99,12 @@ def downloads_component() -> rx.Component:
                     color="violet",
                     cursor="pointer",
                     disabled=EDWState.save_in_progress,
+                    style={
+                        "transition": "all 150ms ease",
+                        "_hover": {
+                            "transform": "translateY(-2px)",
+                        },
+                    },
                 ),
                 direction="row",
                 spacing="4",
@@ -194,9 +213,12 @@ def downloads_component() -> rx.Component:
                 background=rx.color("gray", 2),
                 width="100%",
             ),
-            # Divider after section
-            rx.divider(),
-            spacing="4",
+                # Divider after section
+                rx.divider(),
+                spacing="4",
+                width="100%",
+            ),
+            size="4",
             width="100%",
         ),
         rx.fragment(),  # Show nothing if no results

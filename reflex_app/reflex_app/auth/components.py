@@ -2,6 +2,7 @@
 
 import reflex as rx
 from .auth_state import AuthState
+from ..theme import Colors, Spacing, Shadows
 
 
 def login_page() -> rx.Component:
@@ -11,6 +12,15 @@ def login_page() -> rx.Component:
         Login page component
     """
     return rx.fragment(
+        # Load theme immediately to prevent flash
+        rx.script("""
+            (function() {
+                const theme = localStorage.getItem('theme') || 'light';
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                }
+            })();
+        """),
         rx.container(
             rx.vstack(
                 rx.heading("Aero Crew Data Analyzer", size="9", margin_bottom="2"),
@@ -78,6 +88,12 @@ def login_page() -> rx.Component:
                             width="100%",
                             margin_top="6",
                             cursor="pointer",
+                            style={
+                                "transition": "all 150ms ease",
+                                "_hover": {
+                                    "transform": "translateY(-1px)",
+                                },
+                            },
                         ),
                         spacing="2",
                         width="100%",
@@ -101,45 +117,127 @@ def navbar() -> rx.Component:
     """Navigation bar with authentication controls.
 
     Returns:
-        Navbar component
+        Navbar component with logo, theme toggle, and user menu
     """
+    # Import at function level to avoid circular imports
+    from ..reflex_app import AppState
+
     return rx.box(
         rx.hstack(
-            rx.heading("Aero Crew Data Analyzer", size="7"),
+            # Hamburger menu button (mobile only)
+            rx.icon_button(
+                rx.icon("menu", size=24),
+                on_click=AppState.toggle_sidebar,
+                variant="ghost",
+                display=["block", "block", "none"],  # Show on xs/sm, hide on md+
+                cursor="pointer",
+            ),
+
+            # Left side - Logo and brand
+            rx.hstack(
+                rx.icon("plane", size=32, color=Colors.navy_700),
+                rx.heading("Aero Crew Data Analyzer", size="7", color=Colors.navy_800),
+                spacing="3",
+                align="center",
+            ),
+
             rx.spacer(),
-            rx.cond(
-                AuthState.is_authenticated,
-                rx.hstack(
-                    rx.badge(
-                        AuthState.user_email,
-                        color_scheme="blue",
-                        size="2",
+
+            # Right side - Theme toggle and user controls
+            rx.hstack(
+                # Dark mode toggle button (always visible)
+                rx.icon_button(
+                    rx.icon(
+                        rx.cond(AuthState.is_dark_mode, "moon", "sun"),
+                        size=20,
                     ),
-                    rx.cond(
-                        AuthState.user_role == "admin",
-                        rx.badge("Admin", color_scheme="purple", size="2"),
+                    on_click=AuthState.toggle_theme,
+                    variant="ghost",
+                    cursor="pointer",
+                    color_scheme="gray",
+                    title=rx.cond(AuthState.is_dark_mode, "Switch to Light Mode", "Switch to Dark Mode"),
+                ),
+
+                # Conditional user controls or login button
+                rx.cond(
+                    AuthState.is_authenticated,
+                    rx.hstack(
+                        # Admin badge (if admin)
+                        rx.cond(
+                            AuthState.user_role == "admin",
+                            rx.badge("Admin", color_scheme="purple", size="2"),
+                        ),
+
+                        # User menu dropdown
+                        rx.menu.root(
+                            rx.menu.trigger(
+                                rx.button(
+                                    rx.hstack(
+                                        rx.icon("user", size=18),
+                                        rx.text(AuthState.user_email, size="2"),
+                                        rx.icon("chevron-down", size=16),
+                                        spacing="2",
+                                        align="center",
+                                    ),
+                                    variant="ghost",
+                                    cursor="pointer",
+                                )
+                            ),
+                            rx.menu.content(
+                                rx.menu.item(
+                                    rx.hstack(
+                                        rx.icon("user", size=16),
+                                        rx.text("Profile"),
+                                        spacing="2",
+                                        align="center",
+                                    ),
+                                ),
+                                rx.menu.item(
+                                    rx.hstack(
+                                        rx.icon("settings", size=16),
+                                        rx.text("Settings"),
+                                        spacing="2",
+                                        align="center",
+                                    ),
+                                ),
+                                rx.menu.separator(),
+                                rx.menu.item(
+                                    rx.hstack(
+                                        rx.icon("log-out", size=16),
+                                        rx.text("Logout"),
+                                        spacing="2",
+                                        align="center",
+                                    ),
+                                    on_click=AuthState.logout,
+                                    color=Colors.error,
+                                ),
+                            ),
+                        ),
+
+                        spacing="3",
+                        align="center",
                     ),
                     rx.button(
-                        "Logout",
-                        on_click=AuthState.logout,
+                        "Login",
+                        on_click=lambda: rx.redirect("/login"),
                         variant="soft",
-                        color_scheme="gray",
                         cursor="pointer",
                     ),
-                    spacing="3",
                 ),
-                rx.button(
-                    "Login",
-                    on_click=lambda: rx.redirect("/login"),
-                    variant="soft",
-                    cursor="pointer",
-                ),
+
+                spacing="3",
+                align="center",
             ),
+
             width="100%",
-            padding="4",
+            align="center",
         ),
-        background_color="var(--accent-2)",
-        border_bottom="1px solid var(--gray-6)",
+
+        # Navbar container styling
+        background=Colors.bg_primary,
+        border_bottom=f"1px solid {Colors.gray_200}",
+        box_shadow=Shadows.sm,
+        padding="6",
         width="100%",
     )
 
@@ -170,6 +268,12 @@ def unauthorized_page() -> rx.Component:
                 size="3",
                 margin_top="6",
                 cursor="pointer",
+                style={
+                    "transition": "all 150ms ease",
+                    "_hover": {
+                        "transform": "translateY(-1px)",
+                    },
+                },
             ),
             spacing="4",
             align="center",

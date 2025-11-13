@@ -61,6 +61,12 @@ def stat_card(
         background=rx.color("gray", 2),
         min_width="140px",
         flex="1",
+        transition="all 200ms ease",
+        _hover={
+            "box_shadow": "0 4px 12px rgba(0, 0, 0, 0.1)",
+            "transform": "translateY(-2px)",
+            "border_color": rx.color('gray', 7),
+        },
     )
 
 
@@ -125,6 +131,12 @@ def percentage_card(
         background=rx.color(color, 2),
         min_width="160px",
         flex="1",
+        transition="all 200ms ease",
+        _hover={
+            "box_shadow": f"0 4px 12px {rx.color(color, 4)}",
+            "transform": "translateY(-2px)",
+            "border_color": rx.color(color, 7),
+        },
     )
 
 
@@ -219,9 +231,10 @@ def summary_component() -> rx.Component:
     """
     return rx.cond(
         EDWState.has_results,
-        rx.vstack(
-            # Trip Summary Section
+        rx.card(
             rx.vstack(
+                # Trip Summary Section
+                rx.vstack(
                 # Section header
                 rx.hstack(
                     rx.icon("bar-chart-2", size=24, color=rx.color("blue", 9)),
@@ -328,9 +341,12 @@ def summary_component() -> rx.Component:
                 spacing="4",
                 width="100%",
             ),
-            # Duty Day Statistics Section
-            duty_day_statistics_component(),
-            spacing="6",
+                # Duty Day Statistics Section
+                duty_day_statistics_component(),
+                spacing="6",
+                width="100%",
+            ),
+            size="4",
             width="100%",
         ),
     )

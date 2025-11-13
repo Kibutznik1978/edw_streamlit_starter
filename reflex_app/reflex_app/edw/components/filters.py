@@ -23,9 +23,10 @@ def filters_component() -> rx.Component:
     """
     return rx.cond(
         EDWState.has_results,
-        rx.vstack(
-            # Header with filter count indicator
-            rx.hstack(
+        rx.card(
+            rx.vstack(
+                # Header with filter count indicator
+                rx.hstack(
                 rx.heading(
                     "Advanced Filters",
                     size="6",
@@ -387,22 +388,21 @@ def filters_component() -> rx.Component:
                 variant="soft",
             ),
 
-            # Reset button
-            rx.button(
-                rx.icon("rotate-ccw", size=16),
-                "Reset All Filters",
-                on_click=EDWState.reset_filters,
-                variant="soft",
-                color_scheme="gray",
-                width="100%",
-                cursor="pointer",
-            ),
+                # Reset button
+                rx.button(
+                    rx.icon("rotate-ccw", size=16),
+                    "Reset All Filters",
+                    on_click=EDWState.reset_filters,
+                    variant="soft",
+                    color_scheme="gray",
+                    width="100%",
+                    cursor="pointer",
+                ),
 
+                width="100%",
+                spacing="4",
+            ),
+            size="4",
             width="100%",
-            spacing="4",
-            padding="4",
-            border_radius="8px",
-            border=f"1px solid {rx.color('gray', 6)}",
-            background=rx.color("gray", 2),
         )
     )

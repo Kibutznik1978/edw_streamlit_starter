@@ -24,17 +24,18 @@ def charts_component() -> rx.Component:
     """
     return rx.cond(
         EDWState.has_results,
-        rx.vstack(
-            # Section header
-            rx.heading(
-                "Duty Day Distribution",
-                size="6",
-                weight="bold",
-                margin_bottom="4",
-            ),
+        rx.card(
+            rx.vstack(
+                # Section header
+                rx.heading(
+                    "Duty Day Distribution",
+                    size="6",
+                    weight="bold",
+                    margin_bottom="4",
+                ),
 
-            # Exclude 1-day trips toggle
-            rx.hstack(
+                # Exclude 1-day trips toggle
+                rx.hstack(
                 rx.switch(
                     checked=EDWState.exclude_turns,
                     on_change=EDWState.set_exclude_turns,
@@ -99,21 +100,20 @@ def charts_component() -> rx.Component:
                 width="100%",
             ),
 
-            # Info callout
-            rx.callout.root(
-                rx.callout.text(
-                    "Interactive charts powered by Plotly. Hover over bars for details, use toolbar to zoom/pan.",
+                # Info callout
+                rx.callout.root(
+                    rx.callout.text(
+                        "Interactive charts powered by Plotly. Hover over bars for details, use toolbar to zoom/pan.",
+                    ),
+                    size="1",
+                    color="gray",
+                    margin_top="4",
                 ),
-                size="1",
-                color="gray",
-                margin_top="4",
-            ),
 
+                width="100%",
+                spacing="4",
+            ),
+            size="4",
             width="100%",
-            spacing="4",
-            padding="4",
-            border_radius="8px",
-            border=f"1px solid {rx.color('gray', 6)}",
-            background=rx.color("gray", 2),
         )
     )

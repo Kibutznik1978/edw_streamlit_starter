@@ -70,22 +70,23 @@ def header_component() -> rx.Component:
     """
     return rx.cond(
         EDWState.domicile != "",  # Only show if we have header data
-        rx.vstack(
-            # Section heading
-            rx.hstack(
-                rx.icon("file-text", size=24, color=rx.color("blue", 9)),
-                rx.heading(
-                    "Pairing Information",
-                    size="6",
-                    color=rx.color("gray", 12),
+        rx.card(
+            rx.vstack(
+                # Section heading
+                rx.hstack(
+                    rx.icon("file-text", size=24, color=rx.color("blue", 9)),
+                    rx.heading(
+                        "Pairing Information",
+                        size="6",
+                        color=rx.color("gray", 12),
+                    ),
+                    spacing="2",
+                    align="center",
                 ),
-                spacing="2",
-                align="center",
-            ),
 
-            # Info cards grid - responsive layout
-            rx.box(
-                rx.flex(
+                # Info cards grid - responsive layout
+                rx.box(
+                    rx.flex(
                     # Row 1: Domicile, Aircraft, Bid Period
                     info_card(
                         "Domicile",
@@ -124,10 +125,13 @@ def header_component() -> rx.Component:
                 width="100%",
             ),
 
-            # Divider below header
-            rx.divider(),
+                # Divider below header
+                rx.divider(),
 
-            spacing="4",
+                spacing="4",
+                width="100%",
+            ),
+            size="4",
             width="100%",
         ),
     )

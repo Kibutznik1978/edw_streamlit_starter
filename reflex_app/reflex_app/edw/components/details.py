@@ -23,11 +23,12 @@ def details_component() -> rx.Component:
     """
     return rx.cond(
         EDWState.has_results,
-        rx.vstack(
-            # Header
-            rx.heading("Trip Details Viewer", size="6", weight="bold"),
+        rx.card(
+            rx.vstack(
+                # Header
+                rx.heading("Trip Details Viewer", size="6", weight="bold"),
 
-            # Trip selector
+                # Trip selector
             rx.cond(
                 EDWState.available_trip_ids.length() > 0,
                 rx.vstack(
@@ -63,23 +64,25 @@ def details_component() -> rx.Component:
                 ),
             ),
 
-            # Trip details display
-            rx.cond(
-                EDWState.selected_trip_id != "",
-                rx.box(
-                    _render_trip_details(),
-                    padding="1rem",
-                    border_radius="0.5rem",
-                    border=f"1px solid {rx.color('gray', 4)}",
-                    background_color=rx.color("gray", 1),
-                    margin_top="1rem",
+                # Trip details display
+                rx.cond(
+                    EDWState.selected_trip_id != "",
+                    rx.box(
+                        _render_trip_details(),
+                        padding="1rem",
+                        border_radius="0.5rem",
+                        border=f"1px solid {rx.color('gray', 4)}",
+                        background_color=rx.color("gray", 1),
+                        margin_top="1rem",
+                    ),
+                    rx.fragment(),
                 ),
-                rx.fragment(),
-            ),
 
-            spacing="4",
+                spacing="4",
+                width="100%",
+            ),
+            size="4",
             width="100%",
-            padding="1rem",
         ),
         rx.fragment(),
     )

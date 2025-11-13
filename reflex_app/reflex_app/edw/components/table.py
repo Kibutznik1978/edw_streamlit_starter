@@ -8,6 +8,7 @@ import reflex as rx
 from typing import Dict, Any
 
 from ..edw_state import EDWState
+from reflex_app.theme import Colors, Typography, Spacing
 
 
 def table_component() -> rx.Component:
@@ -23,26 +24,29 @@ def table_component() -> rx.Component:
     """
     return rx.cond(
         EDWState.has_results,
-        rx.vstack(
-            # Header with title and export button
-            rx.hstack(
+        rx.card(
+            rx.vstack(
+                # Header with title and export button
+                rx.hstack(
                 rx.heading("Trip Records", size="6", weight="bold"),
                 rx.spacer(),
                 _export_button(),
                 width="100%",
                 align="center",
             ),
-            # Table container
-            rx.box(
-                _render_table(),
+                # Table container
+                rx.box(
+                    _render_table(),
+                    width="100%",
+                    overflow_x="auto",
+                ),
+                # Pagination controls
+                _pagination_controls(),
+                spacing="4",
                 width="100%",
-                overflow_x="auto",
             ),
-            # Pagination controls
-            _pagination_controls(),
-            spacing="4",
+            size="4",
             width="100%",
-            padding="1rem",
         ),
         rx.fragment(),
     )
@@ -88,15 +92,22 @@ def _render_table() -> rx.Component:
     )
 
 
-def _sortable_header(column: str) -> rx.Component:
-    """Render a sortable column header.
+def _sortable_header(column: str, align: str = "left") -> rx.Component:
+    """Render a sortable column header with modern styling.
 
     Args:
         column: Column name to display and sort by.
+        align: Text alignment ("left" or "right"). Default is "left".
 
     Returns:
         Table header cell with sort icon and click handler.
     """
+    # Determine if this is a numeric column (right-aligned)
+    numeric_columns = ["Frequency", "TAFB Hours", "Duty Days", "Max Duty Length", "Max Legs/Duty"]
+    is_numeric = column in numeric_columns
+    text_align = "right" if is_numeric else "left"
+    justify = "end" if is_numeric else "start"
+
     return rx.table.column_header_cell(
         rx.hstack(
             rx.text(column, weight="bold", size="2"),
@@ -112,15 +123,36 @@ def _sortable_header(column: str) -> rx.Component:
             ),
             spacing="1",
             align="center",
+            justify=justify,
         ),
         on_click=lambda: EDWState.table_sort(column),
         cursor="pointer",
-        _hover={"background_color": rx.color("gray", 3)},
+        style={
+            # Sticky header with proper stacking
+            "position": "sticky",
+            "top": "0",
+            "z_index": "10",
+            # Modern background and border
+            "background": Colors.gray_50,
+            "border_bottom": f"2px solid {Colors.gray_300}",
+            # Typography
+            "font_weight": Typography.weight_bold,
+            "font_size": "13px",
+            "text_align": text_align,
+            "color": Colors.gray_700,
+            # Spacing
+            "padding": "12px 16px",
+            # Interaction states
+            "transition": "background-color 0.15s ease",
+            "_hover": {
+                "background": Colors.gray_100,
+            },
+        },
     )
 
 
 def _render_trip_row(trip: Dict[str, Any]) -> rx.Component:
-    """Render a single trip row.
+    """Render a single trip row with modern table styling.
 
     Args:
         trip: Trip data dictionary (Reflex Var when used in rx.foreach).
@@ -128,21 +160,48 @@ def _render_trip_row(trip: Dict[str, Any]) -> rx.Component:
     Returns:
         Table row with trip data and click handler.
     """
+    # Base cell style - shared by all cells
+    cell_base_style = {
+        "padding": "12px 16px",
+        "border_bottom": f"1px solid {Colors.gray_200}",
+        "font_size": "13px",
+        "color": Colors.gray_800,
+    }
+
+    # Text cell style (left-aligned)
+    cell_text_style = {
+        **cell_base_style,
+        "text_align": "left",
+    }
+
+    # Numeric cell style (right-aligned, monospace for tabular numbers)
+    cell_numeric_style = {
+        **cell_base_style,
+        "text_align": "right",
+        "font_family": Typography.font_mono,
+        "font_variant_numeric": "tabular-nums",
+    }
+
     return rx.table.row(
-        rx.table.cell(trip["Trip ID"], padding="0.75rem"),
-        rx.table.cell(trip["Frequency"], padding="0.75rem"),
-        rx.table.cell(trip["TAFB Hours"], padding="0.75rem"),
-        rx.table.cell(trip["Duty Days"], padding="0.75rem"),
+        # Text columns (left-aligned)
+        rx.table.cell(trip["Trip ID"], style=cell_text_style),
+        # Numeric columns (right-aligned, monospace)
+        rx.table.cell(trip["Frequency"], style=cell_numeric_style),
+        rx.table.cell(trip["TAFB Hours"], style=cell_numeric_style),
+        rx.table.cell(trip["Duty Days"], style=cell_numeric_style),
+        # Badge columns (left-aligned)
         rx.table.cell(
             _render_badge(trip["EDW"], "EDW", "Day"),
-            padding="0.75rem",
+            style=cell_text_style,
         ),
         rx.table.cell(
             _render_badge(trip["Hot Standby"], "HS", "No"),
-            padding="0.75rem",
+            style=cell_text_style,
         ),
-        rx.table.cell(trip["Max Duty Length"], padding="0.75rem"),
-        rx.table.cell(trip["Max Legs/Duty"], padding="0.75rem"),
+        # Numeric columns (right-aligned, monospace)
+        rx.table.cell(trip["Max Duty Length"], style=cell_numeric_style),
+        rx.table.cell(trip["Max Legs/Duty"], style=cell_numeric_style),
+        # Row interaction - selection and hover
         on_click=lambda: EDWState.select_trip_from_table(trip["Trip ID"]),
         cursor="pointer",
         background_color=rx.cond(
@@ -150,7 +209,12 @@ def _render_trip_row(trip: Dict[str, Any]) -> rx.Component:
             rx.color("blue", 3),
             "transparent",
         ),
-        _hover={"background_color": rx.color("gray", 2)},
+        style={
+            "transition": "background-color 0.15s ease",
+            "_hover": {
+                "background": Colors.gray_50,
+            },
+        },
     )
 
 
