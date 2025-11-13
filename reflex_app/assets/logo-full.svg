@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img" aria-label="Aero Crew Data logo">
+  <defs>
+    <style>
+      .wordmark-base {
+        font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.48em;
+      }
+    </style>
+  </defs>
+  <g transform="translate(20 40)">
+    <g>
+      <path fill="#0C1E36" d="M18 104h68l19-88H54z" />
+      <path fill="#ffffff" d="M57 36h44l-12 54H40z" />
+      <path fill="#1BB3A4" d="M60 42h34l-10 40H46z" />
+      <path fill="#5B6168" d="M18 104h68l-3 12H15z" />
+    </g>
+    <g transform="translate(160 56)">
+      <text class="wordmark-base" fill="#0C1E36" font-size="28">AERO CREW</text>
+      <text class="wordmark-base" fill="#1BB3A4" font-size="28" x="0" y="42">DATA</text>
+    </g>
+  </g>
+</svg>

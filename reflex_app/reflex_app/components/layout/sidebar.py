@@ -55,12 +55,17 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool) -> rx.Component:
     return rx.box(
         rx.vstack(
             # Logo section
-            rx.hstack(
-                rx.icon("plane", size=28, color=Colors.navy_700),
-                rx.text("Aero Crew", size="5", weight="bold", color=Colors.navy_800),
-                spacing="2",
-                padding="4",
-                align="center",
+            rx.box(
+                rx.image(
+                    src="/logo-full.svg",
+                    alt="Aero Crew Data logo",
+                    height="80px",
+                    width="auto",
+                ),
+                padding="6",
+                display="flex",
+                justify_content="center",
+                align_items="center",
             ),
 
             rx.divider(),

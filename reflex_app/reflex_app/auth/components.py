@@ -133,14 +133,6 @@ def navbar() -> rx.Component:
                 cursor="pointer",
             ),
 
-            # Left side - Logo and brand
-            rx.hstack(
-                rx.icon("plane", size=32, color=Colors.navy_700),
-                rx.heading("Aero Crew Data Analyzer", size="7", color=Colors.navy_800),
-                spacing="3",
-                align="center",
-            ),
-
             rx.spacer(),
 
             # Right side - Theme toggle and user controls
