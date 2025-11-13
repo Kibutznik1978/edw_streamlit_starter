@@ -124,12 +124,11 @@ def navbar() -> rx.Component:
 
     return rx.box(
         rx.hstack(
-            # Hamburger menu button (mobile only)
+            # Hamburger menu button (always visible)
             rx.icon_button(
                 rx.icon("menu", size=24),
                 on_click=AppState.toggle_sidebar,
                 variant="ghost",
-                display=["block", "block", "none"],  # Show on xs/sm, hide on md+
                 cursor="pointer",
             ),
 

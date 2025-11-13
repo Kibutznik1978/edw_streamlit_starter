@@ -26,7 +26,7 @@ class AppState(DatabaseState):
     current_tab: str = "home"
 
     # Sidebar state for responsive behavior
-    sidebar_open: bool = True  # Default open on desktop
+    sidebar_open: bool = False  # Default closed to maximize content space
 
     def set_current_tab(self, tab: str):
         """Set the current active tab.

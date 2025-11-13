@@ -141,7 +141,7 @@ def _sortable_header(column: str, align: str = "left") -> rx.Component:
             "text_align": text_align,
             "color": Colors.gray_700,
             # Spacing
-            "padding": "12px 16px",
+            "padding": "8px 16px",
             # Interaction states
             "transition": "background-color 0.15s ease",
             "_hover": {
@@ -162,7 +162,7 @@ def _render_trip_row(trip: Dict[str, Any]) -> rx.Component:
     """
     # Base cell style - shared by all cells
     cell_base_style = {
-        "padding": "12px 16px",
+        "padding": "8px 16px",
         "border_bottom": f"1px solid {Colors.gray_200}",
         "font_size": "13px",
         "color": Colors.gray_800,

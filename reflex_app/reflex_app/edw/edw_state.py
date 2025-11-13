@@ -419,8 +419,10 @@ class EDWState(DatabaseState):
             ),
             template="plotly_white",
             height=400,
-            margin=dict(l=50, r=50, t=60, b=60),  # Increased bottom margin
+            width=580,
+            margin=dict(l=70, r=40, t=80, b=60),
             showlegend=False,
+            autosize=False,
         )
 
         return fig
@@ -525,8 +527,10 @@ class EDWState(DatabaseState):
             ),
             template="plotly_white",
             height=400,
-            margin=dict(l=50, r=50, t=60, b=60),  # Increased bottom margin
+            width=580,
+            margin=dict(l=70, r=40, t=80, b=60),
             showlegend=False,
+            autosize=False,
         )
 
         return fig

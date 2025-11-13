@@ -1,12 +1,13 @@
 """Duty Day Distribution Charts Component.
 
-This module provides interactive Plotly charts for visualizing
+This module provides interactive Recharts bar charts for visualizing
 duty day distribution data in the EDW Pairing Analyzer.
 """
 
 import reflex as rx
 
 from ..edw_state import EDWState
+from reflex_app.theme import Colors
 
 
 def charts_component() -> rx.Component:
@@ -50,48 +51,56 @@ def charts_component() -> rx.Component:
                 margin_bottom="4",
             ),
 
-            # Charts grid (side-by-side on desktop, stacked on mobile)
+            # Charts grid (side-by-side, fully responsive)
             rx.flex(
                 # Count chart
                 rx.box(
-                    rx.plotly(
-                        data=EDWState.duty_day_count_chart,
-                        layout={},
-                        config={
-                            "displayModeBar": True,
-                            "displaylogo": False,
-                            "modeBarButtonsToRemove": [
-                                "pan2d",
-                                "select2d",
-                                "lasso2d",
-                                "autoScale2d",
-                            ],
-                        },
+                    rx.heading("Duty Day Count Distribution", size="5", margin_bottom="3"),
+                    rx.recharts.bar_chart(
+                        rx.recharts.bar(
+                            data_key="Trips",
+                            fill=Colors.sky_500,
+                            stroke=Colors.navy_700,
+                            stroke_width=1,
+                            label={"position": "top", "fill": Colors.gray_700, "fontSize": 12},
+                        ),
+                        rx.recharts.x_axis(data_key="Duty Days"),
+                        rx.recharts.y_axis(),
+                        rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+                        rx.recharts.graphing_tooltip(
+                            cursor={"fill": "rgba(0, 0, 0, 0.1)"},
+                        ),
+                        data=EDWState.duty_dist_display,
+                        width="100%",
+                        height=400,
                     ),
-                    width="100%",
-                    min_width="400px",
                     flex="1",
+                    min_width="0",
                 ),
 
                 # Percentage chart
                 rx.box(
-                    rx.plotly(
-                        data=EDWState.duty_day_percent_chart,
-                        layout={},
-                        config={
-                            "displayModeBar": True,
-                            "displaylogo": False,
-                            "modeBarButtonsToRemove": [
-                                "pan2d",
-                                "select2d",
-                                "lasso2d",
-                                "autoScale2d",
-                            ],
-                        },
+                    rx.heading("Duty Day Percentage Distribution", size="5", margin_bottom="3"),
+                    rx.recharts.bar_chart(
+                        rx.recharts.bar(
+                            data_key="Percent",
+                            fill=Colors.teal_600,
+                            stroke=Colors.navy_700,
+                            stroke_width=1,
+                            label={"position": "top", "fill": Colors.gray_700, "fontSize": 12},
+                        ),
+                        rx.recharts.x_axis(data_key="Duty Days"),
+                        rx.recharts.y_axis(),
+                        rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+                        rx.recharts.graphing_tooltip(
+                            cursor={"fill": "rgba(0, 0, 0, 0.1)"},
+                        ),
+                        data=EDWState.duty_dist_display,
+                        width="100%",
+                        height=400,
                     ),
-                    width="100%",
-                    min_width="400px",
                     flex="1",
+                    min_width="0",
                 ),
 
                 direction="row",
@@ -103,7 +112,7 @@ def charts_component() -> rx.Component:
                 # Info callout
                 rx.callout.root(
                     rx.callout.text(
-                        "Interactive charts powered by Plotly. Hover over bars for details, use toolbar to zoom/pan.",
+                        "Interactive charts powered by Recharts. Hover over bars for details.",
                     ),
                     size="1",
                     color="gray",
