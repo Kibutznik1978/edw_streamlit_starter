@@ -373,8 +373,8 @@ def parse_max_legs_per_duty_day(trip_text):
             # Match lines starting with UPS/DH/GT
             if re.match(r"^(UPS|DH|GT)(\s|\d|N/A)", stripped, re.IGNORECASE):
                 current_duty_legs += 1
-            # MD-11 format: Bare 3-4 digit flight number followed by route
-            elif re.match(r"^\d{3,4}$", stripped):
+            # MD-11 format: Bare 3-4 digit flight number followed by route (may have suffix like -2)
+            elif re.match(r"^\d{3,4}(-\d+)?$", stripped):
                 # Verify next line is a route (with optional suffix like (C))
                 if i + 1 < len(lines) and re.match(
                     r"^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$", lines[i + 1].strip()
@@ -591,8 +591,8 @@ def parse_duty_day_details(trip_text, is_edw_func):
             # Multi-line format: Flight number on its own line (starts with UPS/DH/GT)
             if re.match(r"^(UPS|DH|GT)(\s|\d|N/A)", stripped, re.IGNORECASE):
                 current_duty_day["num_legs"] += 1
-            # MD-11 format: Bare 3-4 digit flight number followed by route
-            elif re.match(r"^\d{3,4}$", stripped):
+            # MD-11 format: Bare 3-4 digit flight number followed by route (may have suffix like -2)
+            elif re.match(r"^\d{3,4}(-\d+)?$", stripped):
                 # Verify next line is a route (with optional suffix like (C))
                 if i + 1 < len(lines) and re.match(
                     r"^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$", lines[i + 1].strip()
@@ -877,8 +877,8 @@ def parse_trip_for_table(trip_text, is_edw_func):
                     day_info = line
                     flight_num = next_line
                     data_start_offset = 2  # Route starts at i+2
-                # MD-11 format: Day pattern followed by bare numeric flight number
-                elif re.match(r"^\d{3,4}$", next_line):  # 3-4 digit flight number
+                # MD-11 format: Day pattern followed by bare numeric flight number (may have suffix like -2)
+                elif re.match(r"^\d{3,4}(-\d+)?$", next_line):  # 3-4 digit flight number with optional suffix
                     # Verify line after that is a route (with optional suffix like (C))
                     if i + 2 < len(lines) and re.match(
                         r"^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$", lines[i + 2].strip()
@@ -899,8 +899,8 @@ def parse_trip_for_table(trip_text, is_edw_func):
                     flight_num = line
                     data_start_offset = 1  # Route starts at i+1
 
-            # Case 3: MD-11 format - Bare numeric flight number (3-4 digits)
-            elif not has_day_pattern and re.match(r"^\d{3,4}$", line):
+            # Case 3: MD-11 format - Bare numeric flight number (3-4 digits, may have suffix like -2)
+            elif not has_day_pattern and re.match(r"^\d{3,4}(-\d+)?$", line):
                 # Verify next line is a route (with optional suffix like (C))
                 if i + 1 < len(lines) and re.match(
                     r"^[A-Z]{3}-[A-Z]{3}(\([A-Z]\))?$", lines[i + 1].strip()

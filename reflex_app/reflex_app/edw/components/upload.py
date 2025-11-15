@@ -127,18 +127,10 @@ def upload_component() -> rx.Component:
 
         # Upload button
         rx.button(
-            rx.cond(
-                EDWState.is_processing,
-                rx.hstack(
-                    rx.spinner(size="3"),
-                    rx.text("Processing..."),
-                    spacing="2",
-                ),
-                rx.hstack(
-                    rx.icon("file-up", size=20),
-                    rx.text("Upload and Analyze"),
-                    spacing="2",
-                ),
+            rx.hstack(
+                rx.icon("file-up", size=20),
+                rx.text("Upload and Analyze"),
+                spacing="2",
             ),
             on_click=EDWState.handle_upload(
                 rx.upload_files(upload_id="edw_upload")
