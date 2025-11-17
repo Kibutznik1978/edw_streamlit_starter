@@ -364,6 +364,49 @@ class BidLineState(DatabaseState):
         self.filter_do_max = DO_RANGE_MAX
         self.filter_dd_min = DD_RANGE_MIN
         self.filter_dd_max = DD_RANGE_MAX
+        # Recalculate statistics with new filters
+        self._calculate_statistics()
+
+    # Filter setter methods
+    def set_filter_ct_min(self, value: float):
+        """Set CT minimum filter."""
+        self.filter_ct_min = value
+        self._calculate_statistics()
+
+    def set_filter_ct_max(self, value: float):
+        """Set CT maximum filter."""
+        self.filter_ct_max = value
+        self._calculate_statistics()
+
+    def set_filter_bt_min(self, value: float):
+        """Set BT minimum filter."""
+        self.filter_bt_min = value
+        self._calculate_statistics()
+
+    def set_filter_bt_max(self, value: float):
+        """Set BT maximum filter."""
+        self.filter_bt_max = value
+        self._calculate_statistics()
+
+    def set_filter_do_min(self, value: int):
+        """Set DO minimum filter."""
+        self.filter_do_min = value
+        self._calculate_statistics()
+
+    def set_filter_do_max(self, value: int):
+        """Set DO maximum filter."""
+        self.filter_do_max = value
+        self._calculate_statistics()
+
+    def set_filter_dd_min(self, value: int):
+        """Set DD minimum filter."""
+        self.filter_dd_min = value
+        self._calculate_statistics()
+
+    def set_filter_dd_max(self, value: int):
+        """Set DD maximum filter."""
+        self.filter_dd_max = value
+        self._calculate_statistics()
 
     # ========== Private Helper Methods ==========
 
