@@ -39,7 +39,7 @@ _RESERVE_DAY_PATTERN_RE = re.compile(
     r"\b(" + "|".join(RESERVE_DAY_KEYWORDS) + r")\b", re.IGNORECASE
 )
 _SHIFTABLE_RESERVE_RE = re.compile(re.escape(SHIFTABLE_RESERVE_KEYWORD), re.IGNORECASE)
-_HOT_STANDBY_RE = re.compile(r"\b(HSBY|HOT\s*STANDBY|HOTSTANDBY)\b", re.IGNORECASE)
+_HOT_STANDBY_RE = re.compile(r"\b(HSBY|HOT\s*STANDBY|HOTSTANDBY|GATEWAY\s*STANDBY|AIRPORT\s*STANDBY)\b", re.IGNORECASE)
 _AVAILABILITY_PATTERN_RE = re.compile(r"(\d+)/(\d+)/(\d+)")
 _CREW_COMPOSITION_RE = re.compile(r"^[A-Z]{2,}\s+\d{1,4}\s+(\d+)/(\d+)/(\d+)/?", re.MULTILINE)
 
@@ -562,11 +562,12 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
             return [], []
         else:
             # Check if this is a reserve line - skip it (reserve lines tracked in diagnostics only)
-            is_reserve, _, _, _ = _detect_reserve_line(block)
-            if is_reserve:
+            # EXCEPTION: Hot standby lines should be included in main data
+            is_reserve, is_hot_standby, _, _ = _detect_reserve_line(block)
+            if is_reserve and not is_hot_standby:
                 return [], []
 
-            # Regular line with no VTO
+            # Regular line (or hot standby line) with no VTO
             for record in period_records:
                 record["VTOType"] = None
                 record["VTOPeriod"] = None
@@ -579,8 +580,9 @@ def _parse_block_text(block: str, page_number: int) -> Tuple[List[dict], List[st
         return [], []
 
     # Skip reserve lines in fallback (reserve lines tracked in diagnostics only)
-    is_reserve, _, _, _ = _detect_reserve_line(block)
-    if is_reserve:
+    # EXCEPTION: Hot standby lines should be included in main data
+    is_reserve, is_hot_standby, _, _ = _detect_reserve_line(block)
+    if is_reserve and not is_hot_standby:
         return [], []
 
     ct_value = _extract_time_field(block, "CT")
