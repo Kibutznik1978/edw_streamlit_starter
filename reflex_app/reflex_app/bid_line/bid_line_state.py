@@ -206,6 +206,88 @@ class BidLineState(DatabaseState):
 
         return filtered
 
+    @rx.var
+    def ct_distribution_data(self) -> List[Dict[str, Any]]:
+        """Generate Credit Time distribution data for charts.
+
+        Creates histogram bins in 10-hour increments.
+        """
+        if not self.filtered_data:
+            return []
+
+        # Create bins: 0-10, 10-20, 20-30, etc. up to 200
+        bins = {}
+        for line in self.filtered_data:
+            ct = line.get("CT", 0)
+            # Determine which bin this value belongs to
+            bin_start = int(ct // 10) * 10
+            bin_label = f"{bin_start}-{bin_start + 10}"
+            bins[bin_label] = bins.get(bin_label, 0) + 1
+
+        # Convert to list of dicts for Recharts
+        result = [{"Range": label, "Count": count} for label, count in sorted(bins.items())]
+        return result
+
+    @rx.var
+    def bt_distribution_data(self) -> List[Dict[str, Any]]:
+        """Generate Block Time distribution data for charts.
+
+        Creates histogram bins in 10-hour increments.
+        """
+        if not self.filtered_data:
+            return []
+
+        # Create bins: 0-10, 10-20, 20-30, etc. up to 200
+        bins = {}
+        for line in self.filtered_data:
+            bt = line.get("BT", 0)
+            # Determine which bin this value belongs to
+            bin_start = int(bt // 10) * 10
+            bin_label = f"{bin_start}-{bin_start + 10}"
+            bins[bin_label] = bins.get(bin_label, 0) + 1
+
+        # Convert to list of dicts for Recharts
+        result = [{"Range": label, "Count": count} for label, count in sorted(bins.items())]
+        return result
+
+    @rx.var
+    def do_distribution_data(self) -> List[Dict[str, Any]]:
+        """Generate Days Off distribution data for charts.
+
+        Counts occurrences of each discrete value.
+        """
+        if not self.filtered_data:
+            return []
+
+        # Count occurrences of each DO value
+        counts = {}
+        for line in self.filtered_data:
+            do = line.get("DO", 0)
+            counts[do] = counts.get(do, 0) + 1
+
+        # Convert to list of dicts for Recharts, sorted by DO value
+        result = [{"Days": days, "Count": count} for days, count in sorted(counts.items())]
+        return result
+
+    @rx.var
+    def dd_distribution_data(self) -> List[Dict[str, Any]]:
+        """Generate Duty Days distribution data for charts.
+
+        Counts occurrences of each discrete value.
+        """
+        if not self.filtered_data:
+            return []
+
+        # Count occurrences of each DD value
+        counts = {}
+        for line in self.filtered_data:
+            dd = line.get("DD", 0)
+            counts[dd] = counts.get(dd, 0) + 1
+
+        # Convert to list of dicts for Recharts, sorted by DD value
+        result = [{"Days": days, "Count": count} for days, count in sorted(counts.items())]
+        return result
+
     # ========== Event Handlers ==========
 
     async def handle_upload(self, files: List[rx.UploadFile]):
