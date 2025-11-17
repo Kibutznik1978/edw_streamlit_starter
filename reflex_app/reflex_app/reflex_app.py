@@ -10,6 +10,8 @@ from .auth.components import login_page, unauthorized_page
 from .database.base_state import DatabaseState
 from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component, details_component, table_component, downloads_component
 from .edw.edw_state import EDWState
+from .bid_line.components import upload_component as bid_upload_component, header_component as bid_header_component, editor_component
+from .bid_line.bid_line_state import BidLineState
 from .theme import get_theme_config, get_global_styles, Colors
 from .components.layout import sidebar
 
@@ -113,14 +115,22 @@ def edw_analyzer_tab() -> rx.Component:
 def bid_line_analyzer_tab() -> rx.Component:
     """Bid Line Analyzer tab (Tab 2)."""
     return rx.vstack(
-        rx.callout.root(
-            rx.callout.text(
-                "Phase 3 Implementation - Coming in Weeks 7-9",
-            ),
-            icon="construction",
-            color="amber",
-        ),
-        spacing="4",
+        # Upload component (wrapped in card)
+        bid_upload_component(),
+
+        # Header information display (wrapped in card)
+        bid_header_component(),
+
+        # Interactive data editor (wrapped in card)
+        editor_component(),
+
+        # TODO: Add remaining components in future tasks
+        # - Filter sidebar (Task 4.4)
+        # - Statistics display (Task 4.5)
+        # - Distribution charts (Task 4.6)
+        # - Export & database save (Task 4.7)
+
+        spacing="6",  # 24px spacing between cards for visual separation
         width="100%",
     )
 
