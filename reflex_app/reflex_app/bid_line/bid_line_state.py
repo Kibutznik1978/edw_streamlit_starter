@@ -328,6 +328,32 @@ class BidLineState(DatabaseState):
         self.validation_warnings = []
         self._calculate_statistics()
 
+    def undo_edit(self, edit_idx: int):
+        """Undo a specific edit by its index in edited_cells list.
+
+        Args:
+            edit_idx: Index of the edit to undo in the edited_cells list
+        """
+        if edit_idx < 0 or edit_idx >= len(self.edited_cells):
+            return
+
+        # Get the edit to undo
+        edit = self.edited_cells[edit_idx]
+        row_idx = edit["row_idx"]
+        column = edit["column"]
+        old_value = edit["old_value"]
+
+        # Revert the cell to its old value
+        if row_idx < len(self.edited_data_json):
+            self.edited_data_json[row_idx][column] = old_value
+
+        # Remove this edit from the list
+        self.edited_cells.pop(edit_idx)
+
+        # Re-validate and recalculate
+        self._validate_edits()
+        self._calculate_statistics()
+
     def reset_filters(self):
         """Reset all filters to default values."""
         self.filter_ct_min = CT_RANGE_MIN

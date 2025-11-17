@@ -317,7 +317,7 @@ def _editable_cell(
     value_type: str,
     value_range: tuple,
 ) -> rx.Component:
-    """Render an editable table cell.
+    """Render an editable table cell with change highlighting.
 
     Args:
         row_idx: Row index in filtered data
@@ -327,7 +327,7 @@ def _editable_cell(
         value_range: (min, max) validation range
 
     Returns:
-        rx.Component: Editable input cell
+        rx.Component: Editable input cell with edit indicator if modified
     """
     min_val, max_val = value_range
 
@@ -342,34 +342,69 @@ def _editable_cell(
         input_type = "text"
         step = None
 
+    # Check if this cell has been edited
+    # Look for any edit where row_idx and column match
+    cell_edited = BidLineState.edited_cells.contains(
+        lambda edit: (edit["row_idx"] == row_idx) & (edit["column"] == column)
+    )
+
     return rx.table.cell(
-        rx.input(
-            value=value.to(str),
-            type=input_type,
-            step=step,
-            min=min_val,
-            max=max_val,
-            on_change=lambda new_val: BidLineState.update_cell(
-                row_idx, column, new_val
+        rx.box(
+            rx.input(
+                value=value.to(str),
+                type=input_type,
+                step=step,
+                min=min_val,
+                max=max_val,
+                on_change=lambda new_val: BidLineState.update_cell(
+                    row_idx, column, new_val
+                ),
+                style={
+                    "width": "100%",
+                    "padding": "0.5rem",
+                    "text-align": "center",
+                    "border": "1px solid",
+                    "border-color": rx.cond(
+                        cell_edited,
+                        rx.color("amber", 7),
+                        rx.color("gray", 6),
+                    ),
+                    "border-radius": "4px",
+                    "font-size": "14px",
+                    "background-color": rx.cond(
+                        cell_edited,
+                        rx.color("amber", 2),
+                        "white",
+                    ),
+                    ":focus": {
+                        "outline": "2px solid",
+                        "outline-color": rx.color("blue", 8),
+                        "border-color": rx.color("blue", 8),
+                    },
+                    ":hover": {
+                        "border-color": rx.cond(
+                            cell_edited,
+                            rx.color("amber", 8),
+                            rx.color("gray", 8),
+                        ),
+                    },
+                },
             ),
-            style={
-                "width": "100%",
-                "padding": "0.5rem",
-                "text-align": "center",
-                "border": "1px solid",
-                "border-color": rx.color("gray", 6),
-                "border-radius": "4px",
-                "font-size": "14px",
-                "background-color": "white",
-                ":focus": {
-                    "outline": "2px solid",
-                    "outline-color": rx.color("blue", 8),
-                    "border-color": rx.color("blue", 8),
-                },
-                ":hover": {
-                    "border-color": rx.color("gray", 8),
-                },
-            },
+            # Small corner indicator for edited cells
+            rx.cond(
+                cell_edited,
+                rx.box(
+                    position="absolute",
+                    top="2px",
+                    right="2px",
+                    width="6px",
+                    height="6px",
+                    background=rx.color("amber", 9),
+                    border_radius="50%",
+                ),
+            ),
+            position="relative",
+            width="100%",
         ),
         style={
             "padding": "0.25rem",
