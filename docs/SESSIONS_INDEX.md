@@ -6,15 +6,31 @@
 
 ## 📍 Latest Session (START HERE for Sequential Work)
 
-**Session 48 (Nov 17, 2025):** Streamlit PDF Enhancements
-- **What we did:** Fixed hot standby parsing, enhanced PDF pay period comparison with dual chart views
-- **Outcome:** Hot standby lines now appear in results, pay period metrics show 2x2 grids with count + percentage charts
-- **Next:** TBD (continue Streamlit enhancements or resume Reflex migration)
-- **Read:** `handoff/sessions/session-48.md`
+**Session 49 (Nov 17, 2025):** Phase 4 Tasks 4.2 & 4.3 - Bid Line Analyzer Interactive Components
+- **What we did:** Created interactive data editor (upload, header, table) and enhanced change tracking UI
+- **Outcome:** Bid Line Analyzer now has functional upload, editing, and change tracking. Phase 4 is 37.5% complete (3/8 tasks).
+- **Next:** Task 4.4 - Filter Sidebar implementation
+- **Read:** `handoff/sessions/session-49.md`
 
 ---
 
 ## Recent Sessions (Rolling Window - Last 10)
+
+**Session 49 (Nov 17, 2025):** Phase 4 Tasks 4.2 & 4.3 - Bid Line Analyzer Interactive Components
+- **Task 4.2:** Created upload, header, and editor components (809 lines)
+  - Drag-and-drop PDF upload with progress tracking
+  - Header display for metadata (domicile, aircraft, bid period, etc.)
+  - Editable table with CT, BT, DO, DD columns
+  - Row-level highlighting for edited data
+  - Real-time validation warnings
+- **Task 4.3:** Enhanced change tracking UI (371 lines)
+  - Change tracker component with detailed edit history table
+  - Individual undo buttons for each edit
+  - Cell-level highlighting (amber background, border, corner dot)
+  - Change summary by column (CT, BT, DO, DD edit counts)
+  - Added undo_edit() method to BidLineState
+- **Impact:** Phase 4 now 37.5% complete (3 of 8 tasks done). Users can now upload, edit, and track changes to bid line data.
+- **Commits:** fcb8ba0 (Task 4.2), 4e7b62b (Task 4.3)
 
 **Session 48 (Nov 17, 2025):** Streamlit PDF Enhancements - Hot Standby & Pay Period Visualization
 - Fixed hot standby line parsing (lines now included in main results, excluded only from BT calculations)
