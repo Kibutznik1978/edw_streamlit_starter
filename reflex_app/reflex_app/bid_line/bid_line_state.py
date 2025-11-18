@@ -601,6 +601,26 @@ class BidLineState(DatabaseState):
 
         old_value = self.edited_data_json[row_idx].get(column)
 
+        # Convert numeric columns to proper types
+        numeric_columns = [
+            "CT", "BT", "DO", "DD", "P_PP1", "DO_PP1", "CT_PP1", "BT_PP1", "DD_PP1",
+            "P_PP2", "DO_PP2", "CT_PP2", "BT_PP2", "DD_PP2"
+        ]
+
+        if column in numeric_columns and new_value is not None and new_value != "":
+            try:
+                # Try to convert to float first, then int if it's a whole number
+                float_val = float(new_value)
+                # For DO and DD, keep as int
+                if column in ["DO", "DD", "DO_PP1", "DO_PP2", "DD_PP1", "DD_PP2"]:
+                    new_value = int(float_val)
+                else:
+                    # For CT and BT, keep as float
+                    new_value = float_val
+            except (ValueError, TypeError):
+                # If conversion fails, keep as-is (will be caught by validation)
+                pass
+
         # Update the cell
         self.edited_data_json[row_idx][column] = new_value
 
@@ -757,6 +777,16 @@ class BidLineState(DatabaseState):
 
         # Convert to DataFrame for easier statistics calculation
         df = pd.DataFrame(self.filtered_data)
+
+        # Convert numeric columns to proper numeric types (handles string values from edits)
+        numeric_columns = [
+            "CT", "BT", "DO", "DD",
+            "CT_PP1", "CT_PP2", "BT_PP1", "BT_PP2",
+            "DO_PP1", "DO_PP2", "DD_PP1", "DD_PP2"
+        ]
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
         # Exclude hot standby lines from statistics (they have zero block time and skew averages)
         if self.reserve_lines_json:
