@@ -159,7 +159,7 @@ def _editable_table() -> rx.Component:
 
     return rx.box(
         rx.table.root(
-            # Table header
+            # Table header (sticky)
             rx.table.header(
                 rx.table.row(
                     # Line column
@@ -171,14 +171,88 @@ def _editable_table() -> rx.Component:
                             "padding": "0.75rem",
                             "background-color": rx.color("gray", 2),
                             "position": "sticky",
-                            "top": 0,
-                            "z-index": 10,
+                            "top": "0px",
+                            "z-index": 100,
                             "min-width": "60px",
                         },
                     ),
-                    # CT column
+                    # CT column (dynamic header: "AVG CT" or "CT")
                     rx.table.column_header_cell(
-                        "CT",
+                        rx.tooltip(
+                            rx.hstack(
+                                rx.text(BidLineState.ct_header),
+                                rx.icon("info", size=14, color=rx.color("gray", 10)),
+                                spacing="1",
+                                align="center",
+                            ),
+                            content=BidLineState.averaging_tooltip,
+                        ),
+                        style={
+                            "text-align": "center",
+                            "font-weight": "bold",
+                            "padding": "0.75rem",
+                            "background-color": rx.color("blue", 2),
+                            "position": "sticky",
+                            "top": "0px",
+                            "z-index": 100,
+                            "min-width": "120px",
+                        },
+                    ),
+                    # BT column (dynamic header: "AVG BT" or "BT")
+                    rx.table.column_header_cell(
+                        rx.tooltip(
+                            rx.hstack(
+                                rx.text(BidLineState.bt_header),
+                                rx.icon("info", size=14, color=rx.color("gray", 10)),
+                                spacing="1",
+                                align="center",
+                            ),
+                            content=BidLineState.averaging_tooltip,
+                        ),
+                        style={
+                            "text-align": "center",
+                            "font-weight": "bold",
+                            "padding": "0.75rem",
+                            "background-color": rx.color("blue", 2),
+                            "position": "sticky",
+                            "top": "0px",
+                            "z-index": 100,
+                            "min-width": "120px",
+                        },
+                    ),
+                    # DO column (dynamic header: "AVG DO" or "DO")
+                    rx.table.column_header_cell(
+                        rx.tooltip(
+                            rx.hstack(
+                                rx.text(BidLineState.do_header),
+                                rx.icon("info", size=14, color=rx.color("gray", 10)),
+                                spacing="1",
+                                align="center",
+                            ),
+                            content=BidLineState.averaging_tooltip,
+                        ),
+                        style={
+                            "text-align": "center",
+                            "font-weight": "bold",
+                            "padding": "0.75rem",
+                            "background-color": rx.color("blue", 2),
+                            "position": "sticky",
+                            "top": "0px",
+                            "z-index": 100,
+                            "min-width": "100px",
+                        },
+                    ),
+                    # DD column (dynamic header: "AVG DD" or "DD")
+                    rx.table.column_header_cell(
+                        rx.tooltip(
+                            rx.hstack(
+                                rx.text(BidLineState.dd_header),
+                                rx.icon("info", size=14, color=rx.color("gray", 10)),
+                                spacing="1",
+                                align="center",
+                            ),
+                            content=BidLineState.averaging_tooltip,
+                        ),
                         style={
                             "text-align": "center",
                             "font-weight": "bold",
@@ -188,48 +262,6 @@ def _editable_table() -> rx.Component:
                             "top": 0,
                             "z-index": 10,
                             "min-width": "100px",
-                        },
-                    ),
-                    # BT column
-                    rx.table.column_header_cell(
-                        "BT",
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("blue", 2),
-                            "position": "sticky",
-                            "top": 0,
-                            "z-index": 10,
-                            "min-width": "100px",
-                        },
-                    ),
-                    # DO column
-                    rx.table.column_header_cell(
-                        "DO",
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("blue", 2),
-                            "position": "sticky",
-                            "top": 0,
-                            "z-index": 10,
-                            "min-width": "70px",
-                        },
-                    ),
-                    # DD column
-                    rx.table.column_header_cell(
-                        "DD",
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("blue", 2),
-                            "position": "sticky",
-                            "top": 0,
-                            "z-index": 10,
-                            "min-width": "70px",
                         },
                     ),
                     # Additional columns (dynamic based on data)
@@ -246,14 +278,20 @@ def _editable_table() -> rx.Component:
                                     "padding": "0.75rem",
                                     "background-color": rx.color("gray", 2),
                                     "position": "sticky",
-                                    "top": 0,
-                                    "z-index": 10,
+                                    "top": "0px",
+                                    "z-index": 100,
                                     "min-width": "120px",
                                 },
                             ),
                         ),
                     ),
                 ),
+                style={
+                    "position": "sticky",
+                    "top": "0px",
+                    "z-index": 99,
+                    "background-color": "white",
+                },
             ),
             # Table body
             rx.table.body(

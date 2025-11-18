@@ -6,15 +6,38 @@
 
 ## 📍 Latest Session (START HERE for Sequential Work)
 
-**Session 51 (Nov 17, 2025):** Decimal Formatting Fix for Bid Line Editor
-- **What we did:** Fixed numeric display issues - all values now show exactly 2 decimal places. Learned that JavaScript formatting doesn't work with Reflex Vars.
-- **Outcome:** Implemented Python-side formatting in state layer. Clean solution using round() at data load time.
-- **Next:** User testing of decimal formatting, then Task 4.7 - Export & Database Save
-- **Read:** `handoff/sessions/session-51.md`
+**Session 52 (Nov 17, 2025):** Dynamic Headers, Statistics Accuracy & Sticky Headers
+- **What we did:** Added context-aware column headers (AVG CT vs CT), fixed min/max statistics to use actual pay period values, excluded hot standby lines from stats, enhanced sticky headers
+- **Outcome:** Headers now indicate averaging, statistics more accurate, hot standby lines don't skew averages, better UX when scrolling
+- **Next:** User testing of dynamic headers and statistics, then Task 4.7 - Export & Database Save
+- **Read:** `handoff/sessions/session-52.md`
 
 ---
 
 ## Recent Sessions (Rolling Window - Last 10)
+
+**Session 52 (Nov 17, 2025):** Dynamic Headers, Statistics Accuracy & Sticky Headers
+- **Dynamic Column Headers:** Implemented computed vars that detect dual vs single pay periods
+  - Display "AVG CT", "AVG BT", "AVG DO", "AVG DD" for dual pay period PDFs (averaged values)
+  - Display "CT", "BT", "DO", "DD" for single pay period PDFs
+  - Added info icon tooltips explaining averaging context
+  - Uses `@rx.var` computed properties: `has_dual_pay_periods`, `ct_header`, `bt_header`, etc.
+- **Statistics Accuracy:** Fixed min/max calculations for dual pay periods
+  - Min/max now use actual pay period values (CT_PP1, CT_PP2 combined) instead of averaged values
+  - Mean/median continue using averaged values (mathematically equivalent)
+  - Example: CT_PP1=[50,60,70], CT_PP2=[40,55,65] → Min=40, Max=70 (not 45, 67.5 from averages)
+- **Hot Standby Exclusion:** Exclude hot standby lines from all statistics
+  - Hot standby lines have zero block time (BT=0) and skew averages
+  - Identified from `reserve_lines_json` where `IsHotStandby=True`
+  - Applied filter before all statistics calculations
+- **Sticky Table Headers:** Enhanced header positioning for better scrolling UX
+  - Increased z-index from 10 to 100 for column header cells
+  - Added sticky positioning to header container (z-index 99)
+  - Changed `top: 0` to `top: "0px"` (explicit string format)
+  - Headers now remain visible when scrolling through large datasets
+- **Files:** bid_line_state.py (+44 lines computed vars, ~82 lines stats updates), editor.py (~147 lines modified)
+- **Impact:** Clearer UI context, more accurate statistics, better UX
+- **Next:** User testing of all improvements, then Task 4.7 (Export & Database Save)
 
 **Session 51 (Nov 17, 2025):** Decimal Formatting Fix for Bid Line Editor
 - **Problem:** Numeric values displayed with excessive decimals and floating-point errors (35.519999999999996)

@@ -327,6 +327,50 @@ class BidLineState(DatabaseState):
         """
         return list(set(edit.get("line") for edit in self.edited_cells if edit.get("line") is not None))
 
+    # ========== Dynamic Column Headers ==========
+
+    @rx.var
+    def has_dual_pay_periods(self) -> bool:
+        """Check if data contains dual pay periods (averaged values).
+
+        Returns True if any record has CT_PP2, BT_PP2, etc. columns,
+        indicating the data represents averages of two pay periods.
+        """
+        if not self.edited_data_json:
+            return False
+
+        # Check first record for PP2 columns
+        first_record = self.edited_data_json[0]
+        return "CT_PP2" in first_record or "BT_PP2" in first_record
+
+    @rx.var
+    def ct_header(self) -> str:
+        """Column header for CT - 'AVG CT' for dual periods, 'CT' for single period."""
+        return "AVG CT" if self.has_dual_pay_periods else "CT"
+
+    @rx.var
+    def bt_header(self) -> str:
+        """Column header for BT - 'AVG BT' for dual periods, 'BT' for single period."""
+        return "AVG BT" if self.has_dual_pay_periods else "BT"
+
+    @rx.var
+    def do_header(self) -> str:
+        """Column header for DO - 'AVG DO' for dual periods, 'DO' for single period."""
+        return "AVG DO" if self.has_dual_pay_periods else "DO"
+
+    @rx.var
+    def dd_header(self) -> str:
+        """Column header for DD - 'AVG DD' for dual periods, 'DD' for single period."""
+        return "AVG DD" if self.has_dual_pay_periods else "DD"
+
+    @rx.var
+    def averaging_tooltip(self) -> str:
+        """Tooltip explaining whether values are averaged or direct."""
+        if self.has_dual_pay_periods:
+            return "Values shown are averages of two pay periods (PP1 and PP2). Individual period values are shown in separate columns."
+        else:
+            return "Values shown are from a single pay period."
+
     # ========== Formatted Statistics (for display) ==========
 
     @rx.var
@@ -714,31 +758,89 @@ class BidLineState(DatabaseState):
         # Convert to DataFrame for easier statistics calculation
         df = pd.DataFrame(self.filtered_data)
 
+        # Exclude hot standby lines from statistics (they have zero block time and skew averages)
+        if self.reserve_lines_json:
+            reserve_df = pd.DataFrame(self.reserve_lines_json)
+            hot_standby_lines = reserve_df[reserve_df.get("IsHotStandby", False) == True]["Line"].tolist()
+            if hot_standby_lines:
+                df = df[~df["Line"].isin(hot_standby_lines)]
+
+        # If all lines were filtered out, reset statistics
+        if df.empty:
+            self.ct_min = self.ct_max = self.ct_mean = self.ct_median = 0.0
+            self.bt_min = self.bt_max = self.bt_mean = self.bt_median = 0.0
+            self.do_min = self.do_max = self.do_mean = self.do_median = 0.0
+            self.dd_min = self.dd_max = self.dd_mean = self.dd_median = 0.0
+            return
+
+        # Check if we have dual pay periods (CT_PP1 and CT_PP2 columns exist)
+        has_dual_periods = "CT_PP1" in df.columns and "CT_PP2" in df.columns
+
         # CT statistics
         if "CT" in df.columns:
-            self.ct_min = float(df["CT"].min())
-            self.ct_max = float(df["CT"].max())
+            if has_dual_periods and "CT_PP1" in df.columns and "CT_PP2" in df.columns:
+                # For dual periods: use actual period values for min/max
+                all_ct_values = pd.concat([df["CT_PP1"], df["CT_PP2"]]).dropna()
+                if not all_ct_values.empty:
+                    self.ct_min = float(all_ct_values.min())
+                    self.ct_max = float(all_ct_values.max())
+            else:
+                # For single period: use averaged values
+                self.ct_min = float(df["CT"].min())
+                self.ct_max = float(df["CT"].max())
+
+            # Mean and median always use averaged CT (mathematically equivalent)
             self.ct_mean = float(df["CT"].mean())
             self.ct_median = float(df["CT"].median())
 
         # BT statistics
         if "BT" in df.columns:
-            self.bt_min = float(df["BT"].min())
-            self.bt_max = float(df["BT"].max())
+            if has_dual_periods and "BT_PP1" in df.columns and "BT_PP2" in df.columns:
+                # For dual periods: use actual period values for min/max
+                all_bt_values = pd.concat([df["BT_PP1"], df["BT_PP2"]]).dropna()
+                if not all_bt_values.empty:
+                    self.bt_min = float(all_bt_values.min())
+                    self.bt_max = float(all_bt_values.max())
+            else:
+                # For single period: use averaged values
+                self.bt_min = float(df["BT"].min())
+                self.bt_max = float(df["BT"].max())
+
+            # Mean and median always use averaged BT (mathematically equivalent)
             self.bt_mean = float(df["BT"].mean())
             self.bt_median = float(df["BT"].median())
 
         # DO statistics
         if "DO" in df.columns:
-            self.do_min = int(df["DO"].min())
-            self.do_max = int(df["DO"].max())
+            if has_dual_periods and "DO_PP1" in df.columns and "DO_PP2" in df.columns:
+                # For dual periods: use actual period values for min/max
+                all_do_values = pd.concat([df["DO_PP1"], df["DO_PP2"]]).dropna()
+                if not all_do_values.empty:
+                    self.do_min = int(all_do_values.min())
+                    self.do_max = int(all_do_values.max())
+            else:
+                # For single period: use averaged values
+                self.do_min = int(df["DO"].min())
+                self.do_max = int(df["DO"].max())
+
+            # Mean and median always use averaged DO (mathematically equivalent)
             self.do_mean = float(df["DO"].mean())
             self.do_median = float(df["DO"].median())
 
         # DD statistics
         if "DD" in df.columns:
-            self.dd_min = int(df["DD"].min())
-            self.dd_max = int(df["DD"].max())
+            if has_dual_periods and "DD_PP1" in df.columns and "DD_PP2" in df.columns:
+                # For dual periods: use actual period values for min/max
+                all_dd_values = pd.concat([df["DD_PP1"], df["DD_PP2"]]).dropna()
+                if not all_dd_values.empty:
+                    self.dd_min = int(all_dd_values.min())
+                    self.dd_max = int(all_dd_values.max())
+            else:
+                # For single period: use averaged values
+                self.dd_min = int(df["DD"].min())
+                self.dd_max = int(df["DD"].max())
+
+            # Mean and median always use averaged DD (mathematically equivalent)
             self.dd_mean = float(df["DD"].mean())
             self.dd_median = float(df["DD"].median())
 
