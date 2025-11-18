@@ -186,16 +186,20 @@ def _column_edit_badge(column: str) -> rx.Component:
     Returns:
         rx.Component: Badge with edit count
     """
-    # Count how many edits are for this column
-    # We'll create a computed variable that filters edited_cells
-    count_var = BidLineState.edited_cells.filter(
-        lambda edit: edit["column"] == column
-    ).length()
+    # Map column to its corresponding edit count computed variable
+    count_map = {
+        "CT": BidLineState.ct_edit_count,
+        "BT": BidLineState.bt_edit_count,
+        "DO": BidLineState.do_edit_count,
+        "DD": BidLineState.dd_edit_count,
+    }
+
+    count_var = count_map.get(column, 0)
 
     return rx.cond(
         count_var > 0,
         rx.badge(
-            f"{column}: {count_var}",
+            column + ": " + count_var.to(str),
             color_scheme="blue",
             variant="soft",
             size="2",

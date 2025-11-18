@@ -82,6 +82,9 @@ class BidLineState(DatabaseState):
     # Validation warnings for edited data
     validation_warnings: List[str] = []
 
+    # Advanced edit mode (allows editing all columns)
+    advanced_edit_mode: bool = False
+
     # ========== Statistics State ==========
     # Basic statistics (computed from filtered data)
     ct_min: float = 0.0
@@ -288,6 +291,172 @@ class BidLineState(DatabaseState):
         result = [{"Days": days, "Count": count} for days, count in sorted(counts.items())]
         return result
 
+    @rx.var
+    def ct_edit_count(self) -> int:
+        """Count of CT column edits."""
+        return sum(1 for edit in self.edited_cells if edit.get("column") == "CT")
+
+    @rx.var
+    def bt_edit_count(self) -> int:
+        """Count of BT column edits."""
+        return sum(1 for edit in self.edited_cells if edit.get("column") == "BT")
+
+    @rx.var
+    def do_edit_count(self) -> int:
+        """Count of DO column edits."""
+        return sum(1 for edit in self.edited_cells if edit.get("column") == "DO")
+
+    @rx.var
+    def dd_edit_count(self) -> int:
+        """Count of DD column edits."""
+        return sum(1 for edit in self.edited_cells if edit.get("column") == "DD")
+
+    @rx.var
+    def edited_cell_keys(self) -> List[str]:
+        """Return list of keys for edited cells in format 'row_idx:column'.
+
+        Used by editor component to check if a cell has been edited.
+        """
+        return [f"{edit['row_idx']}:{edit['column']}" for edit in self.edited_cells]
+
+    @rx.var
+    def edited_line_numbers(self) -> List[int]:
+        """Return list of line numbers that have been edited.
+
+        Used by editor component for row highlighting.
+        """
+        return list(set(edit.get("line") for edit in self.edited_cells if edit.get("line") is not None))
+
+    # ========== Formatted Statistics (for display) ==========
+
+    @rx.var
+    def ct_mean_fmt(self) -> str:
+        """CT mean formatted to 2 decimal places."""
+        return f"{self.ct_mean:.2f}"
+
+    @rx.var
+    def ct_median_fmt(self) -> str:
+        """CT median formatted to 2 decimal places."""
+        return f"{self.ct_median:.2f}"
+
+    @rx.var
+    def bt_mean_fmt(self) -> str:
+        """BT mean formatted to 2 decimal places."""
+        return f"{self.bt_mean:.2f}"
+
+    @rx.var
+    def bt_median_fmt(self) -> str:
+        """BT median formatted to 2 decimal places."""
+        return f"{self.bt_median:.2f}"
+
+    @rx.var
+    def do_mean_fmt(self) -> str:
+        """DO mean formatted to 2 decimal places."""
+        return f"{self.do_mean:.2f}"
+
+    @rx.var
+    def do_median_fmt(self) -> str:
+        """DO median formatted to 2 decimal places."""
+        return f"{self.do_median:.2f}"
+
+    @rx.var
+    def dd_mean_fmt(self) -> str:
+        """DD mean formatted to 2 decimal places."""
+        return f"{self.dd_mean:.2f}"
+
+    @rx.var
+    def dd_median_fmt(self) -> str:
+        """DD median formatted to 2 decimal places."""
+        return f"{self.dd_median:.2f}"
+
+    @rx.var
+    def pp1_ct_mean_fmt(self) -> str:
+        """Pay Period 1 CT mean formatted to 2 decimal places."""
+        return f"{self.pp1_ct_mean:.2f}"
+
+    @rx.var
+    def pp2_ct_mean_fmt(self) -> str:
+        """Pay Period 2 CT mean formatted to 2 decimal places."""
+        return f"{self.pp2_ct_mean:.2f}"
+
+    @rx.var
+    def pp1_bt_mean_fmt(self) -> str:
+        """Pay Period 1 BT mean formatted to 2 decimal places."""
+        return f"{self.pp1_bt_mean:.2f}"
+
+    @rx.var
+    def pp2_bt_mean_fmt(self) -> str:
+        """Pay Period 2 BT mean formatted to 2 decimal places."""
+        return f"{self.pp2_bt_mean:.2f}"
+
+    @rx.var
+    def pp1_do_mean_fmt(self) -> str:
+        """Pay Period 1 DO mean formatted to 2 decimal places."""
+        return f"{self.pp1_do_mean:.2f}"
+
+    @rx.var
+    def pp2_do_mean_fmt(self) -> str:
+        """Pay Period 2 DO mean formatted to 2 decimal places."""
+        return f"{self.pp2_do_mean:.2f}"
+
+    @rx.var
+    def pp1_dd_mean_fmt(self) -> str:
+        """Pay Period 1 DD mean formatted to 2 decimal places."""
+        return f"{self.pp1_dd_mean:.2f}"
+
+    @rx.var
+    def pp2_dd_mean_fmt(self) -> str:
+        """Pay Period 2 DD mean formatted to 2 decimal places."""
+        return f"{self.pp2_dd_mean:.2f}"
+
+    # Pay period differences (formatted)
+    @rx.var
+    def pp_ct_diff_fmt(self) -> str:
+        """Pay period CT difference formatted to 2 decimal places."""
+        diff = self.pp2_ct_mean - self.pp1_ct_mean
+        return f"{diff:+.2f}" if diff >= 0 else f"{diff:.2f}"
+
+    @rx.var
+    def pp_bt_diff_fmt(self) -> str:
+        """Pay period BT difference formatted to 2 decimal places."""
+        diff = self.pp2_bt_mean - self.pp1_bt_mean
+        return f"{diff:+.2f}" if diff >= 0 else f"{diff:.2f}"
+
+    @rx.var
+    def pp_do_diff_fmt(self) -> str:
+        """Pay period DO difference formatted to 2 decimal places."""
+        diff = self.pp2_do_mean - self.pp1_do_mean
+        return f"{diff:+.2f}" if diff >= 0 else f"{diff:.2f}"
+
+    @rx.var
+    def pp_dd_diff_fmt(self) -> str:
+        """Pay period DD difference formatted to 2 decimal places."""
+        diff = self.pp2_dd_mean - self.pp1_dd_mean
+        return f"{diff:+.2f}" if diff >= 0 else f"{diff:.2f}"
+
+    # ========== Helper Methods ==========
+
+    def _format_numeric_values(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Format numeric values to 2 decimal places to avoid floating point display issues.
+
+        Args:
+            data: List of bid line records
+
+        Returns:
+            List of records with formatted numeric values
+        """
+        formatted_data = []
+        for record in data:
+            formatted_record = {}
+            for key, value in record.items():
+                # Round floats to 2 decimal places
+                if isinstance(value, float):
+                    formatted_record[key] = round(value, 2)
+                else:
+                    formatted_record[key] = value
+            formatted_data.append(formatted_record)
+        return formatted_data
+
     # ========== Event Handlers ==========
 
     async def handle_upload(self, files: List[rx.UploadFile]):
@@ -336,9 +505,12 @@ class BidLineState(DatabaseState):
             with open(pdf_path, "rb") as f:
                 df, diagnostics = parse_bid_lines(f, progress_callback=None)
 
-            # Convert DataFrame to JSON-serializable format
-            self.original_data_json = df.to_dict("records")
-            self.edited_data_json = df.to_dict("records")  # Start with copy of original
+            # Convert DataFrame to JSON-serializable format and format numeric values
+            raw_data = df.to_dict("records")
+            formatted_data = self._format_numeric_values(raw_data)
+
+            self.original_data_json = formatted_data
+            self.edited_data_json = [dict(record) for record in formatted_data]  # Deep copy
 
             # Store diagnostics
             self.parse_warnings = diagnostics.warnings
@@ -409,6 +581,10 @@ class BidLineState(DatabaseState):
         self.edited_cells = []
         self.validation_warnings = []
         self._calculate_statistics()
+
+    def toggle_advanced_edit_mode(self):
+        """Toggle advanced edit mode on/off."""
+        self.advanced_edit_mode = not self.advanced_edit_mode
 
     def undo_edit(self, edit_idx: int):
         """Undo a specific edit by its index in edited_cells list.

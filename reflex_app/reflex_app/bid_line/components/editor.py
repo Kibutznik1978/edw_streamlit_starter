@@ -38,6 +38,34 @@ def editor_component() -> rx.Component:
                     color=rx.color("gray", 12),
                 ),
                 rx.spacer(),
+                # Advanced edit mode toggle
+                rx.button(
+                    rx.icon(
+                        rx.cond(
+                            BidLineState.advanced_edit_mode,
+                            "lock-open",
+                            "lock",
+                        ),
+                        size=18,
+                    ),
+                    rx.cond(
+                        BidLineState.advanced_edit_mode,
+                        "Advanced Edit Mode: ON",
+                        "Advanced Edit Mode: OFF",
+                    ),
+                    on_click=BidLineState.toggle_advanced_edit_mode,
+                    size="2",
+                    variant=rx.cond(
+                        BidLineState.advanced_edit_mode,
+                        "solid",
+                        "outline",
+                    ),
+                    color_scheme=rx.cond(
+                        BidLineState.advanced_edit_mode,
+                        "orange",
+                        "gray",
+                    ),
+                ),
                 # Line count indicator
                 rx.badge(
                     f"{BidLineState.filtered_lines_count} lines",
@@ -145,6 +173,7 @@ def _editable_table() -> rx.Component:
                             "position": "sticky",
                             "top": 0,
                             "z-index": 10,
+                            "min-width": "60px",
                         },
                     ),
                     # CT column
@@ -158,6 +187,7 @@ def _editable_table() -> rx.Component:
                             "position": "sticky",
                             "top": 0,
                             "z-index": 10,
+                            "min-width": "100px",
                         },
                     ),
                     # BT column
@@ -171,6 +201,7 @@ def _editable_table() -> rx.Component:
                             "position": "sticky",
                             "top": 0,
                             "z-index": 10,
+                            "min-width": "100px",
                         },
                     ),
                     # DO column
@@ -184,6 +215,7 @@ def _editable_table() -> rx.Component:
                             "position": "sticky",
                             "top": 0,
                             "z-index": 10,
+                            "min-width": "70px",
                         },
                     ),
                     # DD column
@@ -197,6 +229,7 @@ def _editable_table() -> rx.Component:
                             "position": "sticky",
                             "top": 0,
                             "z-index": 10,
+                            "min-width": "70px",
                         },
                     ),
                     # Additional columns (dynamic based on data)
@@ -215,6 +248,7 @@ def _editable_table() -> rx.Component:
                                     "position": "sticky",
                                     "top": 0,
                                     "z-index": 10,
+                                    "min-width": "120px",
                                 },
                             ),
                         ),
@@ -256,7 +290,7 @@ def _editable_row(row: Dict[str, Any], row_idx: int) -> rx.Component:
     line_number = row["Line"]
 
     return rx.table.row(
-        # Line (read-only)
+        # Line (always read-only)
         rx.table.cell(
             rx.text(
                 row["Line"].to(str),
@@ -264,40 +298,102 @@ def _editable_row(row: Dict[str, Any], row_idx: int) -> rx.Component:
                     "text-align": "center",
                     "padding": "0.5rem",
                     "color": rx.color("gray", 11),
+                    "min-width": "60px",
                 },
             ),
         ),
-        # CT (editable)
-        _editable_cell(row_idx, "CT", row["CT"], "float", (0.0, 200.0)),
-        # BT (editable)
-        _editable_cell(row_idx, "BT", row["BT"], "float", (0.0, 200.0)),
-        # DO (editable)
-        _editable_cell(row_idx, "DO", row["DO"], "int", (0, 31)),
-        # DD (editable)
-        _editable_cell(row_idx, "DD", row["DD"], "int", (0, 31)),
-        # Additional columns (read-only)
+        # CT (editable only in advanced mode)
+        rx.cond(
+            BidLineState.advanced_edit_mode,
+            _editable_cell(row_idx, "CT", row["CT"], "float", (0.0, 200.0)),
+            rx.table.cell(
+                rx.text(
+                    row["CT"].to(str),
+                    style={
+                        "text-align": "center",
+                        "padding": "0.5rem",
+                        "color": rx.color("gray", 10),
+                        "min-width": "80px",
+                    },
+                ),
+            ),
+        ),
+        # BT (editable only in advanced mode)
+        rx.cond(
+            BidLineState.advanced_edit_mode,
+            _editable_cell(row_idx, "BT", row["BT"], "float", (0.0, 200.0)),
+            rx.table.cell(
+                rx.text(
+                    row["BT"].to(str),
+                    style={
+                        "text-align": "center",
+                        "padding": "0.5rem",
+                        "color": rx.color("gray", 10),
+                        "min-width": "80px",
+                    },
+                ),
+            ),
+        ),
+        # DO (editable only in advanced mode)
+        rx.cond(
+            BidLineState.advanced_edit_mode,
+            _editable_cell(row_idx, "DO", row["DO"], "int", (0, 31)),
+            rx.table.cell(
+                rx.text(
+                    row["DO"].to(str),
+                    style={
+                        "text-align": "center",
+                        "padding": "0.5rem",
+                        "color": rx.color("gray", 10),
+                        "min-width": "60px",
+                    },
+                ),
+            ),
+        ),
+        # DD (editable only in advanced mode)
+        rx.cond(
+            BidLineState.advanced_edit_mode,
+            _editable_cell(row_idx, "DD", row["DD"], "int", (0, 31)),
+            rx.table.cell(
+                rx.text(
+                    row["DD"].to(str),
+                    style={
+                        "text-align": "center",
+                        "padding": "0.5rem",
+                        "color": rx.color("gray", 10),
+                        "min-width": "60px",
+                    },
+                ),
+            ),
+        ),
+        # Additional columns (editable in advanced mode, read-only otherwise)
         rx.foreach(
             row.keys(),
             lambda col: rx.cond(
                 ~rx.Var.create(["Line", "CT", "BT", "DO", "DD"]).contains(col),
-                rx.table.cell(
-                    rx.text(
-                        row[col].to(str),
-                        style={
-                            "text-align": "center",
-                            "padding": "0.5rem",
-                            "color": rx.color("gray", 10),
-                            "font-size": "0.875rem",
-                        },
+                rx.cond(
+                    BidLineState.advanced_edit_mode,
+                    # Editable in advanced mode
+                    _editable_cell(row_idx, col, row[col], "text", (None, None)),
+                    # Read-only otherwise
+                    rx.table.cell(
+                        rx.text(
+                            row[col].to(str),
+                            style={
+                                "text-align": "center",
+                                "padding": "0.5rem",
+                                "color": rx.color("gray", 10),
+                                "font-size": "0.875rem",
+                                "min-width": "100px",
+                            },
+                        ),
                     ),
                 ),
             ),
         ),
         # Highlight if row has edits
         background_color=rx.cond(
-            BidLineState.edited_cells.contains(
-                lambda edit: edit["line"] == line_number
-            ),
+            BidLineState.edited_line_numbers.contains(line_number),
             rx.color("yellow", 3),
             "white",
         ),
@@ -321,15 +417,15 @@ def _editable_cell(
 
     Args:
         row_idx: Row index in filtered data
-        column: Column name (CT, BT, DO, or DD)
+        column: Column name (e.g., CT, BT, DO, DD, or any other column in advanced mode)
         value: Current cell value
-        value_type: Data type ("float" or "int")
-        value_range: (min, max) validation range
+        value_type: Data type ("float", "int", or "text")
+        value_range: (min, max) validation range (can be (None, None) for text fields)
 
     Returns:
         rx.Component: Editable input cell with edit indicator if modified
     """
-    min_val, max_val = value_range
+    min_val, max_val = value_range if value_range != (None, None) else (None, None)
 
     # Determine input type and step
     if value_type == "int":
@@ -343,24 +439,33 @@ def _editable_cell(
         step = None
 
     # Check if this cell has been edited
-    # Look for any edit where row_idx and column match
-    cell_edited = BidLineState.edited_cells.contains(
-        lambda edit: (edit["row_idx"] == row_idx) & (edit["column"] == column)
-    )
+    # Construct cell key and check if it's in the edited_cell_keys list
+    cell_key = f"{row_idx}:{column}"
+    cell_edited = BidLineState.edited_cell_keys.contains(cell_key)
+
+    # Build input with conditional props
+    # Use a fixed reasonable width for all inputs to avoid Var comparison issues
+    input_kwargs = {
+        "value": value.to(str),
+        "type": input_type,
+        "on_change": lambda new_val: BidLineState.update_cell(row_idx, column, new_val),
+    }
+
+    # Add optional number input props
+    if step is not None:
+        input_kwargs["step"] = step
+    if min_val is not None:
+        input_kwargs["min"] = min_val
+    if max_val is not None:
+        input_kwargs["max"] = max_val
 
     return rx.table.cell(
         rx.box(
             rx.input(
-                value=value.to(str),
-                type=input_type,
-                step=step,
-                min=min_val,
-                max=max_val,
-                on_change=lambda new_val: BidLineState.update_cell(
-                    row_idx, column, new_val
-                ),
+                **input_kwargs,
                 style={
                     "width": "100%",
+                    "min-width": "100px",
                     "padding": "0.5rem",
                     "text-align": "center",
                     "border": "1px solid",

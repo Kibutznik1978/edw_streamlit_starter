@@ -166,19 +166,15 @@ def pay_period_comparison() -> rx.Component:
                         rx.table.row(
                             rx.table.cell("Credit Time (CT)", weight="medium"),
                             rx.table.cell(
-                                BidLineState.pp1_ct_mean.to(str) + " hrs",
+                                BidLineState.pp1_ct_mean_fmt + " hrs",
                                 color=rx.color("blue", 11),
                             ),
                             rx.table.cell(
-                                BidLineState.pp2_ct_mean.to(str) + " hrs",
+                                BidLineState.pp2_ct_mean_fmt + " hrs",
                                 color=rx.color("blue", 11),
                             ),
                             rx.table.cell(
-                                rx.cond(
-                                    BidLineState.pp2_ct_mean > BidLineState.pp1_ct_mean,
-                                    "+" + (BidLineState.pp2_ct_mean - BidLineState.pp1_ct_mean).to(str) + " hrs",
-                                    (BidLineState.pp2_ct_mean - BidLineState.pp1_ct_mean).to(str) + " hrs",
-                                ),
+                                BidLineState.pp_ct_diff_fmt + " hrs",
                                 color=rx.cond(
                                     BidLineState.pp2_ct_mean > BidLineState.pp1_ct_mean,
                                     rx.color("green", 11),
@@ -190,19 +186,15 @@ def pay_period_comparison() -> rx.Component:
                         rx.table.row(
                             rx.table.cell("Block Time (BT)", weight="medium"),
                             rx.table.cell(
-                                BidLineState.pp1_bt_mean.to(str) + " hrs",
+                                BidLineState.pp1_bt_mean_fmt + " hrs",
                                 color=rx.color("cyan", 11),
                             ),
                             rx.table.cell(
-                                BidLineState.pp2_bt_mean.to(str) + " hrs",
+                                BidLineState.pp2_bt_mean_fmt + " hrs",
                                 color=rx.color("cyan", 11),
                             ),
                             rx.table.cell(
-                                rx.cond(
-                                    BidLineState.pp2_bt_mean > BidLineState.pp1_bt_mean,
-                                    "+" + (BidLineState.pp2_bt_mean - BidLineState.pp1_bt_mean).to(str) + " hrs",
-                                    (BidLineState.pp2_bt_mean - BidLineState.pp1_bt_mean).to(str) + " hrs",
-                                ),
+                                BidLineState.pp_bt_diff_fmt + " hrs",
                                 color=rx.cond(
                                     BidLineState.pp2_bt_mean > BidLineState.pp1_bt_mean,
                                     rx.color("green", 11),
@@ -214,19 +206,15 @@ def pay_period_comparison() -> rx.Component:
                         rx.table.row(
                             rx.table.cell("Days Off (DO)", weight="medium"),
                             rx.table.cell(
-                                BidLineState.pp1_do_mean.to(str) + " days",
+                                BidLineState.pp1_do_mean_fmt + " days",
                                 color=rx.color("green", 11),
                             ),
                             rx.table.cell(
-                                BidLineState.pp2_do_mean.to(str) + " days",
+                                BidLineState.pp2_do_mean_fmt + " days",
                                 color=rx.color("green", 11),
                             ),
                             rx.table.cell(
-                                rx.cond(
-                                    BidLineState.pp2_do_mean > BidLineState.pp1_do_mean,
-                                    "+" + (BidLineState.pp2_do_mean - BidLineState.pp1_do_mean).to(str) + " days",
-                                    (BidLineState.pp2_do_mean - BidLineState.pp1_do_mean).to(str) + " days",
-                                ),
+                                BidLineState.pp_do_diff_fmt + " days",
                                 color=rx.cond(
                                     BidLineState.pp2_do_mean > BidLineState.pp1_do_mean,
                                     rx.color("green", 11),
@@ -238,19 +226,15 @@ def pay_period_comparison() -> rx.Component:
                         rx.table.row(
                             rx.table.cell("Duty Days (DD)", weight="medium"),
                             rx.table.cell(
-                                BidLineState.pp1_dd_mean.to(str) + " days",
+                                BidLineState.pp1_dd_mean_fmt + " days",
                                 color=rx.color("orange", 11),
                             ),
                             rx.table.cell(
-                                BidLineState.pp2_dd_mean.to(str) + " days",
+                                BidLineState.pp2_dd_mean_fmt + " days",
                                 color=rx.color("orange", 11),
                             ),
                             rx.table.cell(
-                                rx.cond(
-                                    BidLineState.pp2_dd_mean > BidLineState.pp1_dd_mean,
-                                    "+" + (BidLineState.pp2_dd_mean - BidLineState.pp1_dd_mean).to(str) + " days",
-                                    (BidLineState.pp2_dd_mean - BidLineState.pp1_dd_mean).to(str) + " days",
-                                ),
+                                BidLineState.pp_dd_diff_fmt + " days",
                                 color=rx.cond(
                                     BidLineState.pp2_dd_mean > BidLineState.pp1_dd_mean,
                                     rx.color("green", 11),
@@ -388,8 +372,8 @@ def statistics_component() -> rx.Component:
                         "blue",
                         BidLineState.ct_min,
                         BidLineState.ct_max,
-                        BidLineState.ct_mean,
-                        BidLineState.ct_median,
+                        BidLineState.ct_mean_fmt,
+                        BidLineState.ct_median_fmt,
                         "hrs",
                     ),
 
@@ -400,8 +384,8 @@ def statistics_component() -> rx.Component:
                         "cyan",
                         BidLineState.bt_min,
                         BidLineState.bt_max,
-                        BidLineState.bt_mean,
-                        BidLineState.bt_median,
+                        BidLineState.bt_mean_fmt,
+                        BidLineState.bt_median_fmt,
                         "hrs",
                     ),
 
@@ -412,8 +396,8 @@ def statistics_component() -> rx.Component:
                         "green",
                         BidLineState.do_min,
                         BidLineState.do_max,
-                        BidLineState.do_mean,
-                        BidLineState.do_median,
+                        BidLineState.do_mean_fmt,
+                        BidLineState.do_median_fmt,
                         "days",
                     ),
 
@@ -424,8 +408,8 @@ def statistics_component() -> rx.Component:
                         "orange",
                         BidLineState.dd_min,
                         BidLineState.dd_max,
-                        BidLineState.dd_mean,
-                        BidLineState.dd_median,
+                        BidLineState.dd_mean_fmt,
+                        BidLineState.dd_median_fmt,
                         "days",
                     ),
 

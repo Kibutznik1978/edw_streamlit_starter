@@ -6,15 +6,60 @@
 
 ## 📍 Latest Session (START HERE for Sequential Work)
 
-**Session 49 (Nov 17, 2025):** Phase 4 Tasks 4.2 & 4.3 - Bid Line Analyzer Interactive Components
-- **What we did:** Created interactive data editor (upload, header, table) and enhanced change tracking UI
-- **Outcome:** Bid Line Analyzer now has functional upload, editing, and change tracking. Phase 4 is 37.5% complete (3/8 tasks).
-- **Next:** Task 4.4 - Filter Sidebar implementation
-- **Read:** `handoff/sessions/session-49.md`
+**Session 51 (Nov 17, 2025):** Decimal Formatting Fix for Bid Line Editor
+- **What we did:** Fixed numeric display issues - all values now show exactly 2 decimal places. Learned that JavaScript formatting doesn't work with Reflex Vars.
+- **Outcome:** Implemented Python-side formatting in state layer. Clean solution using round() at data load time.
+- **Next:** User testing of decimal formatting, then Task 4.7 - Export & Database Save
+- **Read:** `handoff/sessions/session-51.md`
 
 ---
 
 ## Recent Sessions (Rolling Window - Last 10)
+
+**Session 51 (Nov 17, 2025):** Decimal Formatting Fix for Bid Line Editor
+- **Problem:** Numeric values displayed with excessive decimals and floating-point errors (35.519999999999996)
+- **Initial Attempt:** Tried JavaScript-side formatting with `rx.Var.create()` - FAILED
+  - JavaScript code rendered as text instead of being evaluated
+  - Key learning: Reflex Vars don't execute JavaScript templates in `rx.text()`
+- **Solution:** Python-side formatting in state layer
+  - Added `_format_numeric_values()` method to BidLineState
+  - Rounds all floats to 2 decimal places using Python's `round()`
+  - Applied during data load in `handle_upload()` method
+- **Impact:** All numeric values now display consistently with exactly 2 decimal places
+- **Files:** bid_line_state.py (added method, updated upload), editor.py (removed broken code)
+- **Server:** Running at http://localhost:3002/ (had to restart fresh)
+- **Next:** User testing, then Task 4.7 (Export & Database Save)
+
+**Session 50 (Nov 17, 2025):** Phase 4 Tasks 4.4-4.6 + Refinements - Bid Line Analyzer UI Completion
+- **Task 4.4:** Created filter sidebar component (350 lines)
+  - VTO Type filter (multi-select: None, AEVTO, ASVTO)
+  - VTO Period filter (multi-select: PP1, PP2)
+  - Numeric range filters for CT, BT, DO, DD
+  - Apply/Reset buttons with filter summary display
+  - State methods: apply_filters(), reset_filters()
+- **Task 4.5:** Built statistics display component (446 lines)
+  - Basic stats: Min/max/mean/median for CT, BT, DO, DD
+  - Pay period comparison table (conditional)
+  - Reserve line statistics (conditional)
+  - Color-coded differences and responsive card layouts
+- **Task 4.6:** Created distribution charts component (362 lines)
+  - CT/BT distribution bar charts (10-hour bins)
+  - DO/DD distribution bar charts (discrete values)
+  - Pay period comparison charts (conditional)
+  - Recharts integration with interactive tooltips
+- **Decimal Formatting:** Added 20 formatted computed variables
+  - All averages now display exactly 2 decimal places
+  - Created _fmt versions for means, medians, and differences
+- **Advanced Edit Mode:** Added full editor toggle
+  - Lock/unlock button in editor header
+  - When OFF: All columns read-only
+  - When ON: All columns (except Line) editable
+  - Visual feedback with color-coded button state
+- **Bug Fix:** Resolved VarTypeError with Reflex Var objects
+  - Cannot use Python `if` with reactive Vars
+  - Fixed by using fixed widths instead of conditional logic
+- **Impact:** Phase 4 now 75% complete (6 of 8 tasks done). Full UI functionality ready for user testing.
+- **Commits:** 3fd9bf7 (Task 4.4), aae6192 (Task 4.5), d4d65d6 (Task 4.6), plus refinements
 
 **Session 49 (Nov 17, 2025):** Phase 4 Tasks 4.2 & 4.3 - Bid Line Analyzer Interactive Components
 - **Task 4.2:** Created upload, header, and editor components (809 lines)
