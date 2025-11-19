@@ -125,6 +125,9 @@ class BidLineState(DatabaseState):
     reserve_fo_slots: int = 0
     hot_standby_captain_slots: int = 0
     hot_standby_fo_slots: int = 0
+    gateway_standby_summary: List[Dict[str, Any]] = []
+    reserve_line_count: int = 0
+    hot_standby_line_count: int = 0
 
     # ========== Save to Database State ==========
     save_status: str = ""  # Success/error message
@@ -1288,7 +1291,10 @@ class BidLineState(DatabaseState):
                     self.pp2_dd_mean = float(pp2["DD"].mean()) if "DD" in pp2.columns else 0.0
 
     def _calculate_reserve_statistics(self):
-        """Calculate reserve line slot statistics."""
+        """Calculate reserve line slot statistics and gateway summaries."""
+        self.gateway_standby_summary = []
+        self.reserve_line_count = 0
+        self.hot_standby_line_count = 0
         if not self.reserve_lines_json:
             self.reserve_captain_slots = 0
             self.reserve_fo_slots = 0
@@ -1299,13 +1305,38 @@ class BidLineState(DatabaseState):
         df = pd.DataFrame(self.reserve_lines_json)
 
         # Regular reserve lines (excluding hot standby)
-        regular_reserve = df[~df.get("IsHotStandby", False)]
+        regular_reserve = df[(df.get("IsReserve", False) == True) & (~df.get("IsHotStandby", False))]
         if not regular_reserve.empty:
             self.reserve_captain_slots = int(regular_reserve["CaptainSlots"].sum())
             self.reserve_fo_slots = int(regular_reserve["FOSlots"].sum())
+            self.reserve_line_count = int(regular_reserve["Line"].nunique())
+        else:
+            self.reserve_captain_slots = 0
+            self.reserve_fo_slots = 0
+            self.reserve_line_count = 0
 
         # Hot standby lines
-        hot_standby = df[df.get("IsHotStandby", False)]
+        hot_standby = df[df.get("IsHotStandby", False) == True]
         if not hot_standby.empty:
             self.hot_standby_captain_slots = int(hot_standby["CaptainSlots"].sum())
             self.hot_standby_fo_slots = int(hot_standby["FOSlots"].sum())
+            self.hot_standby_line_count = int(hot_standby["Line"].nunique())
+        else:
+            self.hot_standby_captain_slots = 0
+            self.hot_standby_fo_slots = 0
+            self.hot_standby_line_count = 0
+
+        gateway_standby = hot_standby[hot_standby.get("StandbyType") == "gateway"]
+        if not gateway_standby.empty:
+            valid_gateways = gateway_standby.dropna(subset=["GatewayCode"])
+            if not valid_gateways.empty:
+                summary = (
+                    valid_gateways.groupby("GatewayCode").size().reset_index(name="count")
+                )
+                summary = summary.sort_values("GatewayCode")
+                self.gateway_standby_summary = [
+                    {"gateway": row["GatewayCode"], "line_count": int(row["count"])}
+                    for _, row in summary.iterrows()
+                ]
+        else:
+            self.gateway_standby_summary = []

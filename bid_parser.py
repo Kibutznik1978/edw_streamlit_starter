@@ -40,6 +40,8 @@ _RESERVE_DAY_PATTERN_RE = re.compile(
 )
 _SHIFTABLE_RESERVE_RE = re.compile(re.escape(SHIFTABLE_RESERVE_KEYWORD), re.IGNORECASE)
 _HOT_STANDBY_RE = re.compile(r"\b(HSBY|HOT\s*STANDBY|HOTSTANDBY|GATEWAY\s*STANDBY|AIRPORT\s*STANDBY)\b", re.IGNORECASE)
+_GATEWAY_STANDBY_CAPTURE_RE = re.compile(r"\b([A-Z]{3})\s+GATEWAY\s+STANDBY\b", re.IGNORECASE)
+_AIRPORT_STANDBY_RE = re.compile(r"\bAIRPORT\s+STANDBY\b", re.IGNORECASE)
 _AVAILABILITY_PATTERN_RE = re.compile(r"(\d+)/(\d+)/(\d+)")
 _CREW_COMPOSITION_RE = re.compile(r"^[A-Z]{2,}\s+\d{1,4}\s+(\d+)/(\d+)/(\d+)/?", re.MULTILINE)
 
@@ -436,6 +438,16 @@ def _parse_line_blocks(
         if header_match:
             line_id = int(header_match.group("line"))
             is_reserve, is_hot_standby, captain_slots, fo_slots = _detect_reserve_line(block)
+            standby_type = None
+            gateway_code = None
+            if is_hot_standby:
+                gateway_match = _GATEWAY_STANDBY_CAPTURE_RE.search(block)
+                if gateway_match:
+                    standby_type = "gateway"
+                    gateway_code = gateway_match.group(1).upper()
+                elif _AIRPORT_STANDBY_RE.search(block):
+                    standby_type = "airport"
+
             reserve_info.append(
                 {
                     "Line": line_id,
@@ -443,6 +455,8 @@ def _parse_line_blocks(
                     "IsHotStandby": is_hot_standby,
                     "CaptainSlots": captain_slots,
                     "FOSlots": fo_slots,
+                    "StandbyType": standby_type,
+                    "GatewayCode": gateway_code,
                 }
             )
 

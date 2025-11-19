@@ -280,7 +280,7 @@ def reserve_statistics() -> rx.Component:
     """
     return rx.cond(
         (BidLineState.reserve_captain_slots > 0) | (BidLineState.reserve_fo_slots > 0) |
-        (BidLineState.hot_standby_captain_slots > 0) | (BidLineState.hot_standby_fo_slots > 0),
+        (BidLineState.hot_standby_line_count > 0),
         rx.vstack(
             # Section header
             rx.hstack(
@@ -294,39 +294,105 @@ def reserve_statistics() -> rx.Component:
                 align="center",
             ),
             # Reserve slots cards
-            rx.flex(
-                stat_card(
-                    "Reserve Captain",
-                    BidLineState.reserve_captain_slots,
-                    icon="user-check",
-                    color="blue",
-                    suffix="slots",
+            rx.vstack(
+                rx.flex(
+                    stat_card(
+                        "Reserve Lines",
+                        BidLineState.reserve_line_count,
+                        icon="clipboard-list",
+                        color="blue",
+                        suffix="lines",
+                    ),
+                    stat_card(
+                        "Reserve Captain",
+                        BidLineState.reserve_captain_slots,
+                        icon="user-check",
+                        color="blue",
+                        suffix="lines",
+                    ),
+                    stat_card(
+                        "Reserve F/O",
+                        BidLineState.reserve_fo_slots,
+                        icon="user-check",
+                        color="cyan",
+                        suffix="lines",
+                    ),
+                    direction="row",
+                    wrap="wrap",
+                    spacing="4",
+                    width="100%",
                 ),
-                stat_card(
-                    "Reserve F/O",
-                    BidLineState.reserve_fo_slots,
-                    icon="user-check",
-                    color="cyan",
-                    suffix="slots",
+                rx.flex(
+                    stat_card(
+                        "Hot Standby Lines",
+                        BidLineState.hot_standby_line_count,
+                        icon="zap",
+                        color="red",
+                        suffix="lines",
+                    ),
+                    stat_card(
+                        "Hot Standby Captain",
+                        BidLineState.hot_standby_captain_slots,
+                        icon="zap",
+                        color="red",
+                        suffix="lines",
+                    ),
+                    stat_card(
+                        "Hot Standby F/O",
+                        BidLineState.hot_standby_fo_slots,
+                        icon="zap",
+                        color="orange",
+                        suffix="lines",
+                    ),
+                    direction="row",
+                    wrap="wrap",
+                    spacing="4",
+                    width="100%",
                 ),
-                stat_card(
-                    "Hot Standby Captain",
-                    BidLineState.hot_standby_captain_slots,
-                    icon="zap",
-                    color="red",
-                    suffix="slots",
-                ),
-                stat_card(
-                    "Hot Standby F/O",
-                    BidLineState.hot_standby_fo_slots,
-                    icon="zap",
-                    color="orange",
-                    suffix="slots",
-                ),
-                direction="row",
-                wrap="wrap",
                 spacing="4",
                 width="100%",
+            ),
+            rx.cond(
+                BidLineState.gateway_standby_summary.length() > 0,
+                rx.box(
+                    rx.hstack(
+                        rx.icon("map-pin", size=18, color=rx.color("purple", 9)),
+                        rx.text(
+                            "Gateway Standby Lines",
+                            weight="bold",
+                            size="3",
+                            color=rx.color("gray", 12),
+                        ),
+                        spacing="2",
+                        align="center",
+                    ),
+                    rx.vstack(
+                        rx.foreach(
+                            BidLineState.gateway_standby_summary,
+                            lambda entry: rx.hstack(
+                                rx.badge(
+                                    entry["gateway"].to(str) + " Gateway",
+                                    color_scheme="purple",
+                                    size="2",
+                                ),
+                                rx.text(
+                                    f"{entry['line_count']} lines",
+                                    size="2",
+                                    color=rx.color("gray", 11),
+                                ),
+                                spacing="3",
+                                align="center",
+                            ),
+                        ),
+                        spacing="2",
+                        width="100%",
+                    ),
+                    padding="3",
+                    border_radius="8px",
+                    border=f"1px solid {rx.color('purple', 6)}",
+                    background=rx.color("purple", 1),
+                    width="100%",
+                ),
             ),
             spacing="4",
             width="100%",
