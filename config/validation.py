@@ -64,6 +64,27 @@ DO_PLUS_DD_MAX_DAYS = 31
 
 
 # =============================================================================
+# Aliases for Reflex App (backward compatibility)
+# =============================================================================
+
+# Warning thresholds (aliases)
+CT_MAX_WARNING = CT_WARNING_THRESHOLD_HOURS
+BT_MAX_WARNING = BT_WARNING_THRESHOLD_HOURS
+DO_MAX_WARNING = DO_WARNING_THRESHOLD_DAYS
+DD_MAX_WARNING = DD_WARNING_THRESHOLD_DAYS
+
+# Range constants (aliases)
+CT_RANGE_MIN = CT_MIN_HOURS
+CT_RANGE_MAX = CT_MAX_HOURS
+BT_RANGE_MIN = BT_MIN_HOURS
+BT_RANGE_MAX = BT_MAX_HOURS
+DO_RANGE_MIN = DO_MIN_DAYS
+DO_RANGE_MAX = DO_MAX_DAYS
+DD_RANGE_MIN = DD_MIN_DAYS
+DD_RANGE_MAX = DD_MAX_DAYS
+
+
+# =============================================================================
 # Data Editor Configuration
 # =============================================================================
 

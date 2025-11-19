@@ -95,15 +95,16 @@
     --accent-12: #1e293b;
 }
 
-/* Dark mode overrides */
+/* Dark mode overrides - DISABLED per user request */
+/*
 .dark .radix-themes,
 [data-theme="dark"] .radix-themes {
-    /* Dark backgrounds */
+    Dark backgrounds
     --color-background: #0f172a;
     --color-panel: #1e293b;
     --color-surface: #334155;
 
-    /* Dark gray scale (reversed for dark mode) */
+    Dark gray scale (reversed for dark mode)
     --gray-1: #1e293b;
     --gray-2: #334155;
     --gray-3: #475569;
@@ -117,7 +118,7 @@
     --gray-11: #f1f5f9;
     --gray-12: #ffffff;
 
-    /* Slate gray scale for dark mode */
+    Slate gray scale for dark mode
     --slate-1: #1e293b;
     --slate-2: #334155;
     --slate-3: #475569;
@@ -131,7 +132,7 @@
     --slate-11: #f1f5f9;
     --slate-12: #ffffff;
 
-    /* Navy accent (brighter for dark mode) */
+    Navy accent (brighter for dark mode)
     --blue-1: #1e3a8a;
     --blue-2: #1e3a8a;
     --blue-3: #1d4ed8;
@@ -145,7 +146,7 @@
     --blue-11: #93c5fd;
     --blue-12: #dbeafe;
 
-    /* Indigo (Navy) - brighter for dark mode */
+    Indigo (Navy) - brighter for dark mode
     --indigo-1: #1e3a8a;
     --indigo-2: #1e3a8a;
     --indigo-3: #1d4ed8;
@@ -159,7 +160,7 @@
     --indigo-11: #93c5fd;
     --indigo-12: #dbeafe;
 
-    /* Teal accent (brighter) */
+    Teal accent (brighter)
     --green-1: #134e4a;
     --green-2: #115e59;
     --green-3: #0f766e;
@@ -186,7 +187,7 @@
     --teal-11: #5eead4;
     --teal-12: #ccfbf1;
 
-    /* Sky highlight (brighter) */
+    Sky highlight (brighter)
     --cyan-1: #0c4a6e;
     --cyan-2: #075985;
     --cyan-3: #0369a1;
@@ -200,7 +201,7 @@
     --cyan-11: #bae6fd;
     --cyan-12: #e0f2fe;
 
-    /* Accent color (primary brand color) - Brighter Navy for dark mode */
+    Accent color (primary brand color) - Brighter Navy for dark mode
     --accent-1: #1e3a8a;
     --accent-2: #1e3a8a;
     --accent-3: #1d4ed8;
@@ -215,11 +216,12 @@
     --accent-12: #dbeafe;
 }
 
-/* Dark mode body background */
+Dark mode body background
 .dark {
     background: #0f172a;
     color: #f1f5f9;
 }
+*/
 
 /* ==========================================================================
    Animation Keyframes
@@ -460,4 +462,42 @@ a,
     .main-content-container {
         padding: 2rem !important;
     }
+}
+
+/* ==========================================================================
+   Table Sticky Headers
+   ========================================================================== */
+
+/* Enable sticky headers for Radix UI tables */
+/* This targets the table header cells to make them stick to the top when scrolling */
+.rt-TableHeader .rt-TableRow .rt-TableColumnHeaderCell {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    background-color: var(--color-surface) !important;
+}
+
+/* Ensure the header background is solid (no transparency) */
+.rt-TableHeader {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 99 !important;
+}
+
+/* Fix for dark mode - DISABLED per user request */
+/*
+.dark .rt-TableHeader .rt-TableRow .rt-TableColumnHeaderCell {
+    background-color: var(--gray-2) !important;
+}
+*/
+
+/* Add a subtle shadow to the sticky header to distinguish it from the body */
+.rt-TableHeader .rt-TableRow .rt-TableColumnHeaderCell::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.1), transparent);
 }

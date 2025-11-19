@@ -9,7 +9,7 @@ This component provides inline cell editing functionality for bid line data.
 """
 
 import reflex as rx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from ..bid_line_state import BidLineState
 
 
@@ -139,309 +139,210 @@ def editor_component() -> rx.Component:
     )
 
 
+_BASE_COLUMNS = ["Line", "CT", "BT", "DO", "DD"]
+_READ_ONLY_DYNAMIC_COLUMNS = {"Hot Standby"}
+_DYNAMIC_COLUMN_WIDTH = "180px"
+_CUSTOM_COLUMN_LABELS = {
+    "PayPeriodCode_PP1": "Code PP1",
+    "PayPeriodCode_PP2": "Code PP2",
+}
+
+
 def _editable_table() -> rx.Component:
-    """Create the editable table component.
-
-    Returns:
-        rx.Component: Scrollable table with editable cells
-    """
-    # Define which columns are editable
-    editable_columns = {"CT", "BT", "DO", "DD"}
-
-    # Get column metadata
-    column_config = {
-        "Line": {"type": "int", "range": (0, 1000), "header": "Line"},
-        "CT": {"type": "float", "range": (0.0, 200.0), "header": "CT (hours)"},
-        "BT": {"type": "float", "range": (0.0, 200.0), "header": "BT (hours)"},
-        "DO": {"type": "int", "range": (0, 31), "header": "DO (days)"},
-        "DD": {"type": "int", "range": (0, 31), "header": "DD (days)"},
-    }
-
+    """Render the data editor with a sticky header inside one scroll container."""
     return rx.box(
-        rx.table.root(
-            # Table header (sticky)
-            rx.table.header(
-                rx.table.row(
-                    # Line column
-                    rx.table.column_header_cell(
-                        "Line",
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("gray", 2),
-                            "position": "sticky",
-                            "top": "0px",
-                            "z-index": 100,
-                            "min-width": "60px",
-                        },
-                    ),
-                    # CT column (dynamic header: "AVG CT" or "CT")
-                    rx.table.column_header_cell(
-                        rx.tooltip(
-                            rx.hstack(
-                                rx.text(BidLineState.ct_header),
-                                rx.icon("info", size=14, color=rx.color("gray", 10)),
-                                spacing="1",
-                                align="center",
-                            ),
-                            content=BidLineState.averaging_tooltip,
-                        ),
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("blue", 2),
-                            "position": "sticky",
-                            "top": "0px",
-                            "z-index": 100,
-                            "min-width": "120px",
-                        },
-                    ),
-                    # BT column (dynamic header: "AVG BT" or "BT")
-                    rx.table.column_header_cell(
-                        rx.tooltip(
-                            rx.hstack(
-                                rx.text(BidLineState.bt_header),
-                                rx.icon("info", size=14, color=rx.color("gray", 10)),
-                                spacing="1",
-                                align="center",
-                            ),
-                            content=BidLineState.averaging_tooltip,
-                        ),
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("blue", 2),
-                            "position": "sticky",
-                            "top": "0px",
-                            "z-index": 100,
-                            "min-width": "120px",
-                        },
-                    ),
-                    # DO column (dynamic header: "AVG DO" or "DO")
-                    rx.table.column_header_cell(
-                        rx.tooltip(
-                            rx.hstack(
-                                rx.text(BidLineState.do_header),
-                                rx.icon("info", size=14, color=rx.color("gray", 10)),
-                                spacing="1",
-                                align="center",
-                            ),
-                            content=BidLineState.averaging_tooltip,
-                        ),
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("blue", 2),
-                            "position": "sticky",
-                            "top": "0px",
-                            "z-index": 100,
-                            "min-width": "100px",
-                        },
-                    ),
-                    # DD column (dynamic header: "AVG DD" or "DD")
-                    rx.table.column_header_cell(
-                        rx.tooltip(
-                            rx.hstack(
-                                rx.text(BidLineState.dd_header),
-                                rx.icon("info", size=14, color=rx.color("gray", 10)),
-                                spacing="1",
-                                align="center",
-                            ),
-                            content=BidLineState.averaging_tooltip,
-                        ),
-                        style={
-                            "text-align": "center",
-                            "font-weight": "bold",
-                            "padding": "0.75rem",
-                            "background-color": rx.color("blue", 2),
-                            "position": "sticky",
-                            "top": 0,
-                            "z-index": 10,
-                            "min-width": "100px",
-                        },
-                    ),
-                    # Additional columns (dynamic based on data)
-                    # VTOType, VTOPeriod, pay period columns, etc.
-                    rx.foreach(
-                        BidLineState.filtered_data[0].keys(),
-                        lambda col: rx.cond(
-                            ~rx.Var.create(["Line", "CT", "BT", "DO", "DD"]).contains(col),
-                            rx.table.column_header_cell(
-                                col,
-                                style={
-                                    "text-align": "center",
-                                    "font-weight": "bold",
-                                    "padding": "0.75rem",
-                                    "background-color": rx.color("gray", 2),
-                                    "position": "sticky",
-                                    "top": "0px",
-                                    "z-index": 100,
-                                    "min-width": "120px",
-                                },
-                            ),
-                        ),
-                    ),
-                ),
-                style={
-                    "position": "sticky",
-                    "top": "0px",
-                    "z-index": 99,
-                    "background-color": "white",
-                },
+        _header_row(),
+        rx.vstack(
+            rx.foreach(
+                BidLineState.filtered_data,
+                lambda row, idx: _editable_row(row, idx),
             ),
-            # Table body
-            rx.table.body(
-                rx.foreach(
-                    BidLineState.filtered_data,
-                    lambda row, idx: _editable_row(row, idx),
-                ),
-            ),
-            width="100%",
-            variant="surface",
+            spacing="0",
+            width="max-content",
+            min_width="100%",
         ),
         width="100%",
-        overflow_x="auto",
-        overflow_y="auto",
-        max_height="600px",
+        overflow="auto",
+        max_height="500px",
         border="1px solid",
         border_color=rx.color("gray", 6),
         border_radius="8px",
+        background="white",
+    )
+
+
+def _header_row() -> rx.Component:
+    """Sticky header that stays visible while scrolling vertically and horizontally."""
+
+    def metric_header(text_var: rx.Var, width: str) -> rx.Component:
+        return _header_cell(
+            rx.tooltip(
+                rx.hstack(
+                    rx.text(text_var),
+                    rx.icon("info", size=14, color=rx.color("gray", 10)),
+                    spacing="1",
+                    align="center",
+                ),
+                content=BidLineState.averaging_tooltip,
+            ),
+            width=width,
+            background=rx.color("blue", 2),
+            border_color=rx.color("blue", 6),
+        )
+
+    base_headers = [
+        _header_cell(
+            rx.text("Line"),
+            width="80px",
+            background=rx.color("gray", 2),
+            border_color=rx.color("gray", 6),
+        ),
+        metric_header(BidLineState.ct_header, "140px"),
+        metric_header(BidLineState.bt_header, "140px"),
+        metric_header(BidLineState.do_header, "120px"),
+        metric_header(BidLineState.dd_header, "120px"),
+    ]
+
+    additional_headers = rx.foreach(
+        BidLineState.table_column_names,
+        lambda col: rx.cond(
+            ~rx.Var.create(_BASE_COLUMNS).contains(col),
+            _header_cell(
+                rx.text(_format_column_label(col)),
+                width=_DYNAMIC_COLUMN_WIDTH,
+                background=rx.color("gray", 2),
+                border_color=rx.color("gray", 6),
+            ),
+        ),
+    )
+
+    return rx.box(
+        rx.hstack(
+            *base_headers,
+            additional_headers,
+            spacing="0",
+            width="max-content",
+            min_width="100%",
+        ),
+        position="sticky",
+        top="0",
+        z_index="5",
+        background="white",
+        box_shadow="0 2px 4px rgba(0, 0, 0, 0.05)",
+    )
+
+
+def _header_cell(
+    content: rx.Component,
+    *,
+    width: str,
+    background: str,
+    border_color: str,
+) -> rx.Component:
+    """Consistent styling for header cells."""
+    return rx.box(
+        content,
+        style={
+            "text-align": "center",
+            "font-weight": "bold",
+            "padding": "0.75rem",
+            "background-color": background,
+            "border-bottom": f"2px solid {border_color}",
+            "width": width,
+            "min-width": width,
+            "max-width": width,
+            "color": rx.color("gray", 12),
+        },
     )
 
 
 def _editable_row(row: Dict[str, Any], row_idx: int) -> rx.Component:
-    """Render a single editable table row.
-
-    Args:
-        row: Row data dictionary
-        row_idx: Index of this row
-
-    Returns:
-        rx.Component: Table row with editable and read-only cells
-    """
-    # Check if this row has been edited
-    # We'll use the Line number to track edits
+    """Render a single editable table row."""
     line_number = row["Line"]
 
-    return rx.table.row(
-        # Line (always read-only)
-        rx.table.cell(
-            rx.text(
-                row["Line"].to(str),
-                style={
-                    "text-align": "center",
-                    "padding": "0.5rem",
-                    "color": rx.color("gray", 11),
-                    "min-width": "60px",
-                },
-            ),
-        ),
-        # CT (editable only in advanced mode)
+    base_cells = [
+        _read_only_cell(row["Line"], "80px", color=rx.color("gray", 11)),
         rx.cond(
             BidLineState.advanced_edit_mode,
-            _editable_cell(row_idx, "CT", row["CT"], "float", (0.0, 200.0)),
-            rx.table.cell(
-                rx.text(
-                    row["CT"].to(str),
-                    style={
-                        "text-align": "center",
-                        "padding": "0.5rem",
-                        "color": rx.color("gray", 10),
-                        "min-width": "80px",
-                    },
-                ),
-            ),
+            _editable_cell(row_idx, "CT", row["CT"], "float", (0.0, 200.0), "140px"),
+            _read_only_cell(row["CT"], "140px"),
         ),
-        # BT (editable only in advanced mode)
         rx.cond(
             BidLineState.advanced_edit_mode,
-            _editable_cell(row_idx, "BT", row["BT"], "float", (0.0, 200.0)),
-            rx.table.cell(
-                rx.text(
-                    row["BT"].to(str),
-                    style={
-                        "text-align": "center",
-                        "padding": "0.5rem",
-                        "color": rx.color("gray", 10),
-                        "min-width": "80px",
-                    },
-                ),
-            ),
+            _editable_cell(row_idx, "BT", row["BT"], "float", (0.0, 200.0), "140px"),
+            _read_only_cell(row["BT"], "140px"),
         ),
-        # DO (editable only in advanced mode)
         rx.cond(
             BidLineState.advanced_edit_mode,
-            _editable_cell(row_idx, "DO", row["DO"], "int", (0, 31)),
-            rx.table.cell(
-                rx.text(
-                    row["DO"].to(str),
-                    style={
-                        "text-align": "center",
-                        "padding": "0.5rem",
-                        "color": rx.color("gray", 10),
-                        "min-width": "60px",
-                    },
-                ),
-            ),
+            _editable_cell(row_idx, "DO", row["DO"], "int", (0, 31), "120px"),
+            _read_only_cell(row["DO"], "120px"),
         ),
-        # DD (editable only in advanced mode)
         rx.cond(
             BidLineState.advanced_edit_mode,
-            _editable_cell(row_idx, "DD", row["DD"], "int", (0, 31)),
-            rx.table.cell(
-                rx.text(
-                    row["DD"].to(str),
-                    style={
-                        "text-align": "center",
-                        "padding": "0.5rem",
-                        "color": rx.color("gray", 10),
-                        "min-width": "60px",
-                    },
-                ),
-            ),
+            _editable_cell(row_idx, "DD", row["DD"], "int", (0, 31), "120px"),
+            _read_only_cell(row["DD"], "120px"),
         ),
-        # Additional columns (editable in advanced mode, read-only otherwise)
-        rx.foreach(
-            row.keys(),
-            lambda col: rx.cond(
-                ~rx.Var.create(["Line", "CT", "BT", "DO", "DD"]).contains(col),
+    ]
+
+    additional_cells = rx.foreach(
+        row.keys(),
+        lambda col: rx.cond(
+            ~rx.Var.create(_BASE_COLUMNS).contains(col),
+            rx.cond(
+                BidLineState.advanced_edit_mode,
                 rx.cond(
-                    BidLineState.advanced_edit_mode,
-                    # Editable in advanced mode
-                    _editable_cell(row_idx, col, row[col], "text", (None, None)),
-                    # Read-only otherwise
-                    rx.table.cell(
-                        rx.text(
-                            row[col].to(str),
-                            style={
-                                "text-align": "center",
-                                "padding": "0.5rem",
-                                "color": rx.color("gray", 10),
-                                "font-size": "0.875rem",
-                                "min-width": "100px",
-                            },
-                        ),
+                    rx.Var.create(_READ_ONLY_DYNAMIC_COLUMNS).contains(col),
+                    _read_only_cell(
+                        row[col],
+                        _DYNAMIC_COLUMN_WIDTH,
+                        font_size="0.8rem",
+                    ),
+                    _editable_cell(
+                        row_idx,
+                        col,
+                        row[col],
+                        "text",
+                        (None, None),
+                        _DYNAMIC_COLUMN_WIDTH,
                     ),
                 ),
+                _read_only_cell(
+                    row[col],
+                    _DYNAMIC_COLUMN_WIDTH,
+                    font_size="0.8rem",
+                ),
             ),
         ),
-        # Highlight if row has edits
+    )
+
+    return rx.hstack(
+        *base_cells,
+        additional_cells,
+        spacing="0",
+        width="max-content",
+        min_width="100%",
+        align="stretch",
         background_color=rx.cond(
             BidLineState.edited_line_numbers.contains(line_number),
             rx.color("yellow", 3),
             "white",
         ),
         style={
+            "border-bottom": f"1px solid {rx.color('gray', 4)}",
             "transition": "background-color 0.2s ease",
-            ":hover": {
+            "_hover": {
                 "background-color": rx.color("gray", 2),
             },
         },
     )
+
+
+def _format_column_label(column: Any) -> Any:
+    """Return a human-friendly header label for dynamic columns."""
+    formatted = column
+    for key, label in _CUSTOM_COLUMN_LABELS.items():
+        formatted = rx.cond(column == key, label, formatted)
+    return formatted
 
 
 def _editable_cell(
@@ -450,6 +351,7 @@ def _editable_cell(
     value: Any,
     value_type: str,
     value_range: tuple,
+    cell_width: str = "140px",
 ) -> rx.Component:
     """Render an editable table cell with change highlighting.
 
@@ -459,6 +361,7 @@ def _editable_cell(
         value: Current cell value
         value_type: Data type ("float", "int", or "text")
         value_range: (min, max) validation range (can be (None, None) for text fields)
+        cell_width: Fixed width for cell to match header (e.g., "140px", "120px")
 
     Returns:
         rx.Component: Editable input cell with edit indicator if modified
@@ -497,13 +400,12 @@ def _editable_cell(
     if max_val is not None:
         input_kwargs["max"] = max_val
 
-    return rx.table.cell(
+    return rx.box(
         rx.box(
             rx.input(
                 **input_kwargs,
                 style={
                     "width": "100%",
-                    "min-width": "100px",
                     "padding": "0.5rem",
                     "text-align": "center",
                     "border": "1px solid",
@@ -547,9 +449,43 @@ def _editable_cell(
                 ),
             ),
             position="relative",
-            width="100%",
+            width=cell_width,
         ),
         style={
             "padding": "0.25rem",
+            "width": cell_width,
+            "min-width": cell_width,
+            "max-width": cell_width,
+        },
+    )
+
+
+def _read_only_cell(
+    value: Any,
+    width: str,
+    *,
+    text_align: str = "center",
+    font_size: str = "0.875rem",
+    color: Optional[str] = None,
+) -> rx.Component:
+    """Render a non-editable table cell while keeping widths synchronized."""
+    resolved_color = color or rx.color("gray", 10)
+    display_value = value.to(str) if hasattr(value, "to") else str(value)
+
+    return rx.box(
+        rx.text(
+            display_value,
+            style={
+                "text-align": text_align,
+                "color": resolved_color,
+                "font-size": font_size,
+                "width": "100%",
+            },
+        ),
+        style={
+            "padding": "0.5rem",
+            "width": width,
+            "min-width": width,
+            "max-width": width,
         },
     )

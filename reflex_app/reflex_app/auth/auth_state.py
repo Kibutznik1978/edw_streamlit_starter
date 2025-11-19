@@ -30,43 +30,14 @@ class AuthState(rx.State):
     # Loading state
     is_loading: bool = False
 
-    # Theme state
-    is_dark_mode: bool = False
-
-    def toggle_theme(self):
-        """Toggle dark mode and persist preference."""
-        self.is_dark_mode = not self.is_dark_mode
-        # Apply theme via client-side script
-        return rx.call_script(
-            f"""
-            const isDark = {str(self.is_dark_mode).lower()};
-            if (isDark) {{
-                document.documentElement.classList.add('dark');
-            }} else {{
-                document.documentElement.classList.remove('dark');
-            }}
-            localStorage.setItem('theme', isDark ? 'dark' : 'light');
-            """
-        )
-
     def on_load(self):
-        """Called when page loads - restore session and theme from storage."""
+        """Called when page loads - restore session from storage."""
         # TODO: Cookie persistence - requires proper Reflex cookie API
         # Temporarily disabled to test login flow
         # See: https://reflex.dev/docs/api-reference/state/#cookies
 
-        # Load theme preference from localStorage
-        return rx.call_script(
-            """
-            const theme = localStorage.getItem('theme') || 'light';
-            const isDark = theme === 'dark';
-            if (isDark) {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
-            """
-        )
+        # Dark mode has been disabled - theme is always light
+        pass
 
     def restore_session(self, jwt_token: str):
         """Restore user session from JWT.

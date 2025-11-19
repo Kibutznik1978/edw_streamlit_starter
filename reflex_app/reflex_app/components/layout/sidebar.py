@@ -27,16 +27,21 @@ def nav_item(label: str, icon_name: str, tab_value: str, current_tab: str, on_cl
             align="center",
             width="100%",
         ),
-        padding="3",
         border_radius="8px",
         width="100%",
         background=rx.cond(is_active, Colors.navy_100, "transparent"),
         color=rx.cond(is_active, Colors.navy_700, Colors.gray_700),
-        border_left=rx.cond(is_active, f"3px solid {Colors.navy_600}", "3px solid transparent"),
         cursor="pointer",
         transition="all 150ms ease",
         _hover={
             "background": rx.cond(is_active, Colors.navy_100, Colors.gray_100),
+        },
+        style={
+            "paddingLeft": "12px",
+            "paddingRight": "8px",
+            "paddingTop": "5px",
+            "paddingBottom": "5px",
+            "pointerEvents": "auto",
         },
         on_click=lambda: on_click_handler(tab_value),
     )
@@ -71,7 +76,8 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
                     width="100%",
                     align="center",
                 ),
-                padding="4",
+                padding_x="5",
+                padding_y="4",
                 display=["flex", "flex", "none"],  # Show on mobile/tablet, hide on desktop
             ),
 
@@ -83,7 +89,8 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
                     height="80px",
                     width="auto",
                 ),
-                padding="6",
+                padding_x="5",
+                padding_y="6",
                 display="flex",
                 justify_content="center",
                 align_items="center",
@@ -99,7 +106,9 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
                 nav_item("Database Explorer", "database", "database_explorer", current_tab, on_click_handler),
                 nav_item("Historical Trends", "trending-up", "historical_trends", current_tab, on_click_handler),
                 spacing="1",
-                padding="3",
+                padding_left="6",
+                padding_right="4",
+                padding_y="3",
                 width="100%",
             ),
 
@@ -108,27 +117,6 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
             # Bottom section
             rx.vstack(
                 rx.divider(),
-
-                # Dark mode toggle
-                rx.box(
-                    rx.hstack(
-                        rx.icon(
-                            rx.cond(AuthState.is_dark_mode, "moon", "sun"),
-                            size=20,
-                        ),
-                        rx.text("Theme", size="3", weight="medium"),
-                        rx.spacer(),
-                        rx.switch(
-                            checked=AuthState.is_dark_mode,
-                            on_change=AuthState.toggle_theme,
-                        ),
-                        spacing="2",
-                        align="center",
-                        width="100%",
-                    ),
-                    padding="3",
-                    width="100%",
-                ),
 
                 # Settings
                 nav_item("Settings", "settings", "settings", current_tab, on_click_handler),
@@ -163,7 +151,8 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
                                 spacing="2",
                                 width="100%",
                             ),
-                            padding="3",
+                            padding_x="4",
+                            padding_y="3",
                             width="100%",
                         ),
 
@@ -176,7 +165,8 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
                                 align="center",
                                 width="100%",
                             ),
-                            padding="3",
+                            padding_x="4",
+                            padding_y="3",
                             border_radius="8px",
                             width="100%",
                             color=Colors.error,
@@ -202,7 +192,8 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
                                 align="center",
                                 width="100%",
                             ),
-                            padding="3",
+                            padding_x="4",
+                            padding_y="3",
                             border_radius="8px",
                             width="100%",
                             background=Colors.gray_100,
@@ -222,7 +213,9 @@ def sidebar(current_tab: str, on_click_handler, is_open: bool, toggle_handler) -
                 ),
 
                 spacing="1",
-                padding="3",
+                padding_left="6",
+                padding_right="4",
+                padding_y="3",
                 width="100%",
             ),
 

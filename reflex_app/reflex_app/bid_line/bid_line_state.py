@@ -4,8 +4,11 @@ This module manages the state for the Bid Line Analyzer,
 including PDF upload, processing, data editing, filtering, and exports.
 """
 
+import asyncio
+import contextlib
+import math
 import reflex as rx
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple, Set
 from pathlib import Path
 import tempfile
 import pandas as pd
@@ -15,7 +18,7 @@ from ..database.base_state import DatabaseState
 
 # Add path to import from root directory modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from bid_parser import parse_bid_lines, extract_bid_line_header_info
+from bid_parser import parse_bid_lines, extract_bid_line_header_info, ParseDiagnostics
 from config.validation import (
     CT_MAX_WARNING, BT_MAX_WARNING, DO_MAX_WARNING, DD_MAX_WARNING,
     CT_RANGE_MIN, CT_RANGE_MAX, BT_RANGE_MIN, BT_RANGE_MAX,
@@ -210,6 +213,15 @@ class BidLineState(DatabaseState):
         return filtered
 
     @rx.var
+    def table_column_names(self) -> List[str]:
+        """Ordered list of available columns for the editor."""
+        if not self.edited_data_json:
+            return []
+
+        first_row = self.edited_data_json[0]
+        return list(first_row.keys())
+
+    @rx.var
     def ct_distribution_data(self) -> List[Dict[str, Any]]:
         """Generate Credit Time distribution data for charts.
 
@@ -222,8 +234,13 @@ class BidLineState(DatabaseState):
         bins = {}
         for line in self.filtered_data:
             ct = line.get("CT", 0)
-            # Determine which bin this value belongs to
-            bin_start = int(ct // 10) * 10
+            try:
+                val = float(ct)
+                if math.isnan(val) or val <= 0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            bin_start = int(val // 10) * 10
             bin_label = f"{bin_start}-{bin_start + 10}"
             bins[bin_label] = bins.get(bin_label, 0) + 1
 
@@ -244,8 +261,13 @@ class BidLineState(DatabaseState):
         bins = {}
         for line in self.filtered_data:
             bt = line.get("BT", 0)
-            # Determine which bin this value belongs to
-            bin_start = int(bt // 10) * 10
+            try:
+                val = float(bt)
+                if math.isnan(val) or val <= 0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            bin_start = int(val // 10) * 10
             bin_label = f"{bin_start}-{bin_start + 10}"
             bins[bin_label] = bins.get(bin_label, 0) + 1
 
@@ -263,10 +285,29 @@ class BidLineState(DatabaseState):
             return []
 
         # Count occurrences of each DO value
-        counts = {}
+        counts: Dict[int, int] = {}
+        min_value = None
+        max_value = None
+
         for line in self.filtered_data:
-            do = line.get("DO", 0)
-            counts[do] = counts.get(do, 0) + 1
+            for value in self._collect_metric_values(line, "DO"):
+                try:
+                    numeric = float(value)
+                    if math.isnan(numeric):
+                        continue
+                    do_value = int(round(numeric))
+                except (TypeError, ValueError):
+                    continue
+
+                counts[do_value] = counts.get(do_value, 0) + 1
+                min_value = do_value if min_value is None else min(min_value, do_value)
+                max_value = do_value if max_value is None else max(max_value, do_value)
+
+        if not counts:
+            return []
+
+        for value in range(min_value, max_value + 1):
+            counts.setdefault(value, 0)
 
         # Convert to list of dicts for Recharts, sorted by DO value
         result = [{"Days": days, "Count": count} for days, count in sorted(counts.items())]
@@ -282,14 +323,113 @@ class BidLineState(DatabaseState):
             return []
 
         # Count occurrences of each DD value
-        counts = {}
+        counts: Dict[int, int] = {}
+        min_value = None
+        max_value = None
+
         for line in self.filtered_data:
-            dd = line.get("DD", 0)
-            counts[dd] = counts.get(dd, 0) + 1
+            for value in self._collect_metric_values(line, "DD"):
+                try:
+                    numeric = float(value)
+                    if math.isnan(numeric):
+                        continue
+                    dd_value = int(round(numeric))
+                except (TypeError, ValueError):
+                    continue
+
+                counts[dd_value] = counts.get(dd_value, 0) + 1
+                min_value = dd_value if min_value is None else min(min_value, dd_value)
+                max_value = dd_value if max_value is None else max(max_value, dd_value)
+
+        if not counts:
+            return []
+
+        for value in range(min_value, max_value + 1):
+            counts.setdefault(value, 0)
 
         # Convert to list of dicts for Recharts, sorted by DD value
         result = [{"Days": days, "Count": count} for days, count in sorted(counts.items())]
         return result
+
+    @rx.var
+    def ct_distribution_pp1(self) -> List[Dict[str, Any]]:
+        """CT distribution data for Pay Period 1."""
+        return self._continuous_distribution_by_period("CT", 10)["PP1"]
+
+    @rx.var
+    def ct_distribution_pp2(self) -> List[Dict[str, Any]]:
+        """CT distribution data for Pay Period 2."""
+        return self._continuous_distribution_by_period("CT", 10)["PP2"]
+
+    @rx.var
+    def bt_distribution_pp1(self) -> List[Dict[str, Any]]:
+        """BT distribution data for Pay Period 1."""
+        return self._continuous_distribution_by_period("BT", 10)["PP1"]
+
+    @rx.var
+    def bt_distribution_pp2(self) -> List[Dict[str, Any]]:
+        """BT distribution data for Pay Period 2."""
+        return self._continuous_distribution_by_period("BT", 10)["PP2"]
+
+    @rx.var
+    def do_distribution_pp1(self) -> List[Dict[str, Any]]:
+        """DO distribution data for Pay Period 1."""
+        return self._discrete_distribution_by_period("DO")["PP1"]
+
+    @rx.var
+    def do_distribution_pp2(self) -> List[Dict[str, Any]]:
+        """DO distribution data for Pay Period 2."""
+        return self._discrete_distribution_by_period("DO")["PP2"]
+
+    @rx.var
+    def dd_distribution_pp1(self) -> List[Dict[str, Any]]:
+        """DD distribution data for Pay Period 1."""
+        return self._discrete_distribution_by_period("DD")["PP1"]
+
+    @rx.var
+    def dd_distribution_pp2(self) -> List[Dict[str, Any]]:
+        """DD distribution data for Pay Period 2."""
+        return self._discrete_distribution_by_period("DD")["PP2"]
+
+    @rx.var
+    def ct_distribution_max_count(self) -> int:
+        """Maximum count across CT distribution charts."""
+        return self._max_distribution_count(self.ct_distribution_pp1, self.ct_distribution_pp2)
+
+    @rx.var
+    def bt_distribution_max_count(self) -> int:
+        """Maximum count across BT distribution charts."""
+        return self._max_distribution_count(self.bt_distribution_pp1, self.bt_distribution_pp2)
+
+    @rx.var
+    def do_distribution_max_count(self) -> int:
+        """Maximum count across DO distribution charts."""
+        return self._max_distribution_count(self.do_distribution_pp1, self.do_distribution_pp2)
+
+    @rx.var
+    def dd_distribution_max_count(self) -> int:
+        """Maximum count across DD distribution charts."""
+        return self._max_distribution_count(self.dd_distribution_pp1, self.dd_distribution_pp2)
+
+    @rx.var
+    def ct_distribution_y_domain(self) -> Tuple[int, int]:
+        max_count = max(1, self.ct_distribution_max_count)
+        return (0, max_count + 2)
+
+    @rx.var
+    def bt_distribution_y_domain(self) -> Tuple[int, int]:
+        max_count = max(1, self.bt_distribution_max_count)
+        return (0, max_count + 2)
+
+    @rx.var
+    def do_distribution_y_domain(self) -> Tuple[int, int]:
+        max_count = max(1, self.do_distribution_max_count)
+        return (0, max_count + 2)
+
+    @rx.var
+    def dd_distribution_y_domain(self) -> Tuple[int, int]:
+        max_count = max(1, self.dd_distribution_max_count)
+        return (0, max_count + 2)
 
     @rx.var
     def ct_edit_count(self) -> int:
@@ -514,6 +654,7 @@ class BidLineState(DatabaseState):
         self.processing_message = "Starting PDF processing..."
         yield  # Push initial state to frontend
 
+        parsing_task = None
         try:
             # Read file data
             file = files[0]
@@ -540,18 +681,35 @@ class BidLineState(DatabaseState):
             self.date_range = header_info.get("bid_period_date_range", "")
             self.date_time = header_info.get("date_time", "")
 
-            # Update progress
-            self.processing_progress = 30
-            self.processing_message = "Parsing bid lines..."
-            yield  # Push progress update
+            # Update progress before parsing
+            self.processing_progress = 25
+            self.processing_message = "Preparing to parse bid lines..."
+            yield
 
-            # Parse bid lines
-            with open(pdf_path, "rb") as f:
-                df, diagnostics = parse_bid_lines(f, progress_callback=None)
+            # Parse bid lines with streaming progress updates
+            loop = asyncio.get_running_loop()
+            progress_queue: asyncio.Queue[Tuple[int, int]] = asyncio.Queue()
+            parsing_task = asyncio.create_task(
+                asyncio.to_thread(
+                    self._parse_pdf_with_progress,
+                    pdf_path,
+                    loop,
+                    progress_queue,
+                )
+            )
+
+            async for _ in self._consume_parse_progress(progress_queue, parsing_task):
+                yield
+
+            df, diagnostics = parsing_task.result()
 
             # Convert DataFrame to JSON-serializable format and format numeric values
             raw_data = df.to_dict("records")
             formatted_data = self._format_numeric_values(raw_data)
+
+            self.processing_progress = 92
+            self.processing_message = "Formatting parsed data..."
+            yield
 
             self.original_data_json = formatted_data
             self.edited_data_json = [dict(record) for record in formatted_data]  # Deep copy
@@ -575,11 +733,18 @@ class BidLineState(DatabaseState):
             else:
                 self.reserve_lines_json = []
 
+            # Tag hot standby lines in the main dataset for table display
+            self._annotate_hot_standby_lines()
+
             # Clear any previous edits
             self.edited_cells = []
             self.validation_warnings = []
 
             # Calculate statistics
+            self.processing_progress = 96
+            self.processing_message = "Calculating statistics..."
+            yield
+
             self._calculate_statistics()
 
             # Update progress
@@ -589,6 +754,10 @@ class BidLineState(DatabaseState):
             yield  # Push completion state
 
         except Exception as e:
+            if parsing_task:
+                parsing_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await parsing_task
             self.upload_error = f"Error processing PDF: {str(e)}"
             self.is_processing = False
             self.processing_progress = 0
@@ -649,6 +818,231 @@ class BidLineState(DatabaseState):
     def toggle_advanced_edit_mode(self):
         """Toggle advanced edit mode on/off."""
         self.advanced_edit_mode = not self.advanced_edit_mode
+
+    def _get_hot_standby_line_numbers(self) -> Set[int]:
+        """Return the set of line numbers flagged as Hot Standby."""
+        if not self.reserve_lines_json:
+            return set()
+
+        return {
+            entry.get("Line")
+            for entry in self.reserve_lines_json
+            if entry.get("IsHotStandby") and entry.get("Line") is not None
+        }
+
+    def _annotate_hot_standby_lines(self):
+        """Add/remove the Hot Standby display column on parsed line data."""
+        hs_lines = self._get_hot_standby_line_numbers()
+
+        def apply_flag(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            updated_rows: List[Dict[str, Any]] = []
+            for row in rows:
+                new_row = dict(row)
+                if hs_lines and row.get("Line") in hs_lines:
+                    new_row["Hot Standby"] = "HSBY"
+                elif hs_lines:
+                    new_row["Hot Standby"] = ""
+                else:
+                    new_row.pop("Hot Standby", None)
+                updated_rows.append(new_row)
+            return updated_rows
+
+        self.original_data_json = apply_flag(self.original_data_json)
+        self.edited_data_json = apply_flag(self.edited_data_json)
+
+    def _exclude_hot_standby_lines(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Remove hot standby lines from DataFrame-based calculations."""
+        if df.empty or "Line" not in df.columns:
+            return df
+
+        hs_lines = self._get_hot_standby_line_numbers()
+        if not hs_lines:
+            return df
+
+        return df[~df["Line"].isin(hs_lines)]
+
+    def _collect_metric_values(self, row: Dict[str, Any], metric: str) -> List[Any]:
+        """Collect per-period metric values for a given row."""
+        values: List[Any] = []
+        for suffix in ("PP1", "PP2"):
+            key = f"{metric}_{suffix}"
+            if key in row:
+                val = row.get(key)
+                if val not in (None, "", "NaN"):
+                    values.append(val)
+
+        if not values and metric in row:
+            val = row.get(metric)
+            if val not in (None, "", "NaN"):
+                values.append(val)
+
+        return values
+
+    def _continuous_distribution_by_period(self, metric: str, bucket_size: int) -> Dict[str, List[Dict[str, Any]]]:
+        """Build 10-hour bucket distributions for CT/BT by pay period."""
+        periods = ("PP1", "PP2")
+        distribution: Dict[str, List[Dict[str, Any]]] = {p: [] for p in periods}
+        has_period_data = False
+
+        for period in periods:
+            counts: Dict[str, int] = {}
+            for row in self.filtered_data:
+                key = f"{metric}_{period}"
+                value = row.get(key)
+                if value in (None, "", "NaN"):
+                    continue
+                try:
+                    val = float(value)
+                    if math.isnan(val) or val <= 0:
+                        continue
+                except (TypeError, ValueError):
+                    continue
+
+                bucket_start = int((val // bucket_size) * bucket_size)
+                label = f"{bucket_start}-{bucket_start + bucket_size}"
+                counts[label] = counts.get(label, 0) + 1
+
+            if counts:
+                has_period_data = True
+                distribution[period] = [{"Range": label, "Count": count} for label, count in sorted(counts.items())]
+            else:
+                distribution[period] = []
+
+        if not has_period_data:
+            fallback_counts: Dict[str, int] = {}
+            for row in self.filtered_data:
+                value = row.get(metric)
+                if value in (None, "", "NaN"):
+                    continue
+                try:
+                    val = float(value)
+                    if math.isnan(val) or val <= 0:
+                        continue
+                except (TypeError, ValueError):
+                    continue
+                bucket_start = int((val // bucket_size) * bucket_size)
+                label = f"{bucket_start}-{bucket_start + bucket_size}"
+                fallback_counts[label] = fallback_counts.get(label, 0) + 1
+
+            distribution["PP1"] = [{"Range": label, "Count": count} for label, count in sorted(fallback_counts.items())]
+            distribution["PP2"] = []
+
+        return distribution
+
+    def _discrete_distribution_by_period(self, metric: str) -> Dict[str, List[Dict[str, Any]]]:
+        """Build integer day distributions for DO/DD by pay period."""
+        periods = ("PP1", "PP2")
+        distribution: Dict[str, List[Dict[str, Any]]] = {p: [] for p in periods}
+        has_period_data = False
+
+        for period in periods:
+            counts: Dict[int, int] = {}
+            min_value: Optional[int] = None
+            max_value: Optional[int] = None
+            for row in self.filtered_data:
+                key = f"{metric}_{period}"
+                value = row.get(key)
+                if value in (None, "", "NaN"):
+                    continue
+                try:
+                    numeric = float(value)
+                    if math.isnan(numeric):
+                        continue
+                    day_value = int(round(numeric))
+                except (TypeError, ValueError):
+                    continue
+
+                counts[day_value] = counts.get(day_value, 0) + 1
+                min_value = day_value if min_value is None else min(min_value, day_value)
+                max_value = day_value if max_value is None else max(max_value, day_value)
+
+            if counts:
+                has_period_data = True
+                for day in range(min_value, max_value + 1):
+                    counts.setdefault(day, 0)
+                distribution[period] = [{"Days": day, "Count": count} for day, count in sorted(counts.items())]
+            else:
+                distribution[period] = []
+
+        if not has_period_data:
+            counts: Dict[int, int] = {}
+            min_value: Optional[int] = None
+            max_value: Optional[int] = None
+            for row in self.filtered_data:
+                value = row.get(metric)
+                if value in (None, "", "NaN"):
+                    continue
+                try:
+                    numeric = float(value)
+                    if math.isnan(numeric):
+                        continue
+                    day_value = int(round(numeric))
+                except (TypeError, ValueError):
+                    continue
+                counts[day_value] = counts.get(day_value, 0) + 1
+                min_value = day_value if min_value is None else min(min_value, day_value)
+                max_value = day_value if max_value is None else max(max_value, day_value)
+
+            if counts:
+                for day in range(min_value, max_value + 1):
+                    counts.setdefault(day, 0)
+                distribution["PP1"] = [{"Days": day, "Count": count} for day, count in sorted(counts.items())]
+            else:
+                distribution["PP1"] = []
+
+            distribution["PP2"] = []
+
+        return distribution
+
+    @staticmethod
+    def _max_distribution_count(dataset_a: List[Dict[str, Any]], dataset_b: List[Dict[str, Any]]) -> int:
+        """Return max count across two distribution datasets."""
+        counts = [item.get("Count", 0) for item in dataset_a] + [item.get("Count", 0) for item in dataset_b]
+        return max(counts) if counts else 0
+
+    async def _consume_parse_progress(
+        self,
+        progress_queue: "asyncio.Queue[Tuple[int, int]]",
+        parsing_task: "asyncio.Task",
+    ):
+        """Stream progress updates from the parse thread to the UI."""
+        while True:
+            updated = False
+            while True:
+                try:
+                    current_page, total_pages = progress_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+                updated = True
+                total_pages = max(total_pages, 1)
+                percent = 25 + int((current_page / total_pages) * 60)
+                self.processing_progress = min(percent, 90)
+                self.processing_message = f"Parsing PDF page {current_page} of {total_pages}..."
+                yield
+
+            if parsing_task.done() and progress_queue.empty():
+                break
+
+            if not updated:
+                await asyncio.sleep(0.05)
+
+    def _parse_pdf_with_progress(
+        self,
+        pdf_path: Path,
+        loop: asyncio.AbstractEventLoop,
+        progress_queue: "asyncio.Queue[Tuple[int, int]]",
+    ) -> Tuple[pd.DataFrame, ParseDiagnostics]:
+        """Parse bid lines on a worker thread and push page progress back to the loop."""
+
+        def progress_callback(current_page: int, total_pages: int):
+            loop.call_soon_threadsafe(
+                progress_queue.put_nowait,
+                (current_page, total_pages),
+            )
+
+        with open(pdf_path, "rb") as f:
+            return parse_bid_lines(f, progress_callback=progress_callback)
 
     def undo_edit(self, edit_idx: int):
         """Undo a specific edit by its index in edited_cells list.
@@ -789,11 +1183,7 @@ class BidLineState(DatabaseState):
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
         # Exclude hot standby lines from statistics (they have zero block time and skew averages)
-        if self.reserve_lines_json:
-            reserve_df = pd.DataFrame(self.reserve_lines_json)
-            hot_standby_lines = reserve_df[reserve_df.get("IsHotStandby", False) == True]["Line"].tolist()
-            if hot_standby_lines:
-                df = df[~df["Line"].isin(hot_standby_lines)]
+        df = self._exclude_hot_standby_lines(df)
 
         # If all lines were filtered out, reset statistics
         if df.empty:
@@ -877,6 +1267,7 @@ class BidLineState(DatabaseState):
         # Pay period statistics (if available)
         if self.pay_periods_json:
             pp_df = pd.DataFrame(self.pay_periods_json)
+            pp_df = self._exclude_hot_standby_lines(pp_df)
 
             if "Period" in pp_df.columns:
                 pp1 = pp_df[pp_df["Period"] == 1]

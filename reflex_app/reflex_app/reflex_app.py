@@ -121,9 +121,6 @@ def bid_line_analyzer_tab() -> rx.Component:
         # Header information display (wrapped in card)
         bid_header_component(),
 
-        # Change tracking panel (wrapped in card) - shows when edits exist
-        change_tracker_component(),
-
         # Filter controls (wrapped in card) - shows when data available
         bid_filters_component(),
 
@@ -135,6 +132,9 @@ def bid_line_analyzer_tab() -> rx.Component:
 
         # Interactive data editor (wrapped in card)
         editor_component(),
+
+        # Change tracking panel directly beneath the editor to show recent edits contextually
+        change_tracker_component(),
 
         # TODO: Add remaining components in future tasks
         # - Export & database save (Task 4.7)

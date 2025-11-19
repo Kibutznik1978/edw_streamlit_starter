@@ -8,6 +8,8 @@ This module provides interactive Recharts visualizations for bid line data:
 - Pay period comparison charts (conditional)
 """
 
+from typing import Optional, Tuple
+
 import reflex as rx
 
 from ..bid_line_state import BidLineState
@@ -21,20 +23,10 @@ def distribution_chart(
     y_axis_key: str,
     bar_color: str,
     bar_stroke: str,
+    *,
+    y_domain: Optional[Tuple[int, int]] = None,
 ) -> rx.Component:
-    """Create a distribution bar chart.
-
-    Args:
-        title: Chart title
-        data_var: State variable containing chart data
-        x_axis_key: Key for x-axis data
-        y_axis_key: Key for y-axis data (usually "Count")
-        bar_color: Fill color for bars
-        bar_stroke: Stroke color for bar borders
-
-    Returns:
-        rx.Component: Bar chart component
-    """
+    """Create a distribution bar chart."""
     return rx.box(
         rx.heading(title, size="4", margin_bottom="3", weight="bold"),
         rx.recharts.bar_chart(
@@ -51,17 +43,52 @@ def distribution_chart(
                 text_anchor="end",
                 height=80,
             ),
-            rx.recharts.y_axis(),
+            rx.recharts.y_axis(domain=y_domain),
             rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
-            rx.recharts.graphing_tooltip(
-                cursor={"fill": "rgba(0, 0, 0, 0.1)"},
-            ),
+            rx.recharts.graphing_tooltip(cursor={"fill": "rgba(0, 0, 0, 0.1)"}),
             data=data_var,
             width="100%",
             height=350,
         ),
         flex="1",
         min_width="300px",
+    )
+
+
+def _period_distribution_chart(
+    title: str,
+    data_var,
+    x_axis_key: str,
+    bar_color: str,
+    bar_stroke: str,
+    *,
+    y_domain: Optional[Tuple[int, int]] = None,
+) -> rx.Component:
+    """Render a distribution chart for a specific pay period with fallback messaging."""
+    return rx.cond(
+        data_var.length() > 0,
+        distribution_chart(
+            title,
+            data_var,
+            x_axis_key,
+            "Count",
+            bar_color,
+            bar_stroke,
+            y_domain=y_domain,
+        ),
+        rx.box(
+            rx.heading(title, size="4", margin_bottom="3", weight="bold"),
+            rx.text(
+                "No data available for this pay period.",
+                size="2",
+                color=Colors.gray_700,
+            ),
+            border=f"1px dashed {Colors.gray_400}",
+            border_radius="8px",
+            padding="4",
+            flex="1",
+            min_width="300px",
+        ),
     )
 
 
@@ -258,6 +285,120 @@ def pay_period_comparison_charts() -> rx.Component:
     )
 
 
+def pay_period_distribution_comparison() -> rx.Component:
+    """Pay period distribution comparison section."""
+
+    def distribution_pair(
+        metric_label: str,
+        data_pp1,
+        data_pp2,
+        x_axis_key: str,
+        color_light: str,
+        color_dark: str,
+        y_domain,
+    ) -> rx.Component:
+        return rx.flex(
+            _period_distribution_chart(
+                f"{metric_label} – Pay Period 1",
+                data_pp1,
+                x_axis_key,
+                color_light,
+                Colors.navy_700,
+                y_domain=y_domain,
+            ),
+            rx.cond(
+                BidLineState.has_dual_pay_periods,
+                _period_distribution_chart(
+                    f"{metric_label} – Pay Period 2",
+                    data_pp2,
+                    x_axis_key,
+                    color_dark,
+                    Colors.navy_700,
+                    y_domain=y_domain,
+                ),
+                rx.box(
+                    rx.heading(f"{metric_label} – Pay Period 2", size="4", margin_bottom="3", weight="bold"),
+                    rx.text(
+                        "This bid period only provides a single pay period.",
+                        size="2",
+                        color=Colors.gray_700,
+                    ),
+                    border=f"1px dashed {Colors.gray_400}",
+                    border_radius="8px",
+                    padding="4",
+                    flex="1",
+                    min_width="300px",
+                ),
+            ),
+            direction="row",
+            wrap="wrap",
+            spacing="4",
+            width="100%",
+        )
+
+    return rx.cond(
+        BidLineState.has_pay_periods,
+        rx.vstack(
+            rx.divider(margin_top="4", margin_bottom="4"),
+            rx.hstack(
+                rx.icon("bar-chart-big", size=24, color=rx.color("purple", 9)),
+                rx.heading(
+                    "Pay Period Distribution Comparisons",
+                    size="5",
+                    weight="bold",
+                ),
+                spacing="3",
+                align="center",
+            ),
+            rx.text(
+                "Side-by-side charts compare distributions for each pay period. "
+                "Charts automatically hide when a pay period is unavailable.",
+                size="2",
+                color=Colors.gray_700,
+            ),
+            distribution_pair(
+                "Credit Time (CT)",
+                BidLineState.ct_distribution_pp1,
+                BidLineState.ct_distribution_pp2,
+                "Range",
+                rx.color("blue", 7),
+                rx.color("blue", 9),
+                BidLineState.ct_distribution_y_domain,
+            ),
+            distribution_pair(
+                "Block Time (BT)",
+                BidLineState.bt_distribution_pp1,
+                BidLineState.bt_distribution_pp2,
+                "Range",
+                rx.color("cyan", 7),
+                rx.color("cyan", 9),
+                BidLineState.bt_distribution_y_domain,
+            ),
+            distribution_pair(
+                "Days Off (DO)",
+                BidLineState.do_distribution_pp1,
+                BidLineState.do_distribution_pp2,
+                "Days",
+                rx.color("green", 7),
+                rx.color("green", 9),
+                BidLineState.do_distribution_y_domain,
+            ),
+            distribution_pair(
+                "Duty Days (DD)",
+                BidLineState.dd_distribution_pp1,
+                BidLineState.dd_distribution_pp2,
+                "Days",
+                rx.color("orange", 7),
+                rx.color("orange", 9),
+                BidLineState.dd_distribution_y_domain,
+            ),
+            spacing="5",
+            width="100%",
+        ),
+        rx.fragment(),
+    )
+
+
 def charts_component() -> rx.Component:
     """Distribution charts component.
 
@@ -351,6 +492,7 @@ def charts_component() -> rx.Component:
 
                 # Pay period comparison (conditional)
                 pay_period_comparison_charts(),
+                pay_period_distribution_comparison(),
 
                 spacing="6",
                 width="100%",

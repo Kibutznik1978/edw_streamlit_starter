@@ -764,7 +764,14 @@ def _aggregate_pay_periods(pay_period_df: pd.DataFrame) -> Tuple[pd.DataFrame, p
 
     base = filtered if not filtered.empty else tidy
 
-    aggregated = base.groupby("Line")[value_cols].mean()
+    grouped = base.groupby("Line")
+    aggregated = grouped[value_cols].mean()
+
+    if "BT" in aggregated.columns:
+        bt_adjusted = grouped["BT"].apply(
+            lambda series: series[series > 0].mean() if (series > 0).any() else series.mean()
+        )
+        aggregated["BT"] = bt_adjusted
 
     metric_pivot = base.pivot_table(
         index="Line", columns="Period", values=value_cols, aggfunc="first"
