@@ -10,7 +10,16 @@ from .auth.components import login_page, unauthorized_page
 from .database.base_state import DatabaseState
 from .edw.components import upload_component, header_component, summary_component, charts_component, filters_component, details_component, table_component, downloads_component
 from .edw.edw_state import EDWState
-from .bid_line.components import upload_component as bid_upload_component, header_component as bid_header_component, editor_component, change_tracker_component, filters_component as bid_filters_component, statistics_component as bid_statistics_component, charts_component as bid_charts_component
+from .bid_line.components import (
+    upload_component as bid_upload_component,
+    header_component as bid_header_component,
+    editor_component,
+    change_tracker_component,
+    filters_component as bid_filters_component,
+    statistics_component as bid_statistics_component,
+    charts_component as bid_charts_component,
+    downloads_component as bid_downloads_component,
+)
 from .bid_line.bid_line_state import BidLineState
 from .theme import get_theme_config, get_global_styles, Colors
 from .components.layout import sidebar
@@ -135,6 +144,9 @@ def bid_line_analyzer_tab() -> rx.Component:
 
         # Change tracking panel directly beneath the editor to show recent edits contextually
         change_tracker_component(),
+
+        # Downloads (Excel/PDF) to match Streamlit functionality
+        bid_downloads_component(),
 
         # TODO: Add remaining components in future tasks
         # - Export & database save (Task 4.7)

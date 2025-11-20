@@ -86,12 +86,12 @@ def render_basic_statistics(filtered_df: pd.DataFrame, diagnostics: Optional[Any
     # Extract reserve line numbers
     reserve_line_numbers, hsby_line_numbers = extract_reserve_line_numbers(diagnostics)
 
-    # For CT, DO, DD: exclude regular reserve (keep HSBY)
+    # For CT, DO, DD: exclude both regular reserve and HSBY
     df_non_reserve = filter_by_reserve_lines(
-        filtered_df, reserve_line_numbers, hsby_line_numbers, exclude_hsby=False
+        filtered_df, reserve_line_numbers, hsby_line_numbers, exclude_hsby=True
     )
 
-    # For BT: exclude both regular reserve AND HSBY
+    # For BT: exclude both regular reserve AND HSBY (same as above, kept for clarity)
     df_for_bt = filter_by_reserve_lines(
         filtered_df, reserve_line_numbers, hsby_line_numbers, exclude_hsby=True
     )
@@ -150,9 +150,9 @@ def render_pay_period_analysis(
     # Extract reserve line numbers
     reserve_line_numbers, hsby_line_numbers = extract_reserve_line_numbers(diagnostics)
 
-    # For pay period analysis: exclude reserve lines from CT/DO/DD, exclude reserve+HSBY from BT
+    # For pay period analysis: exclude reserve and HSBY lines from all stats
     pp_non_reserve = filter_by_reserve_lines(
-        filtered_pay_periods, reserve_line_numbers, hsby_line_numbers, exclude_hsby=False
+        filtered_pay_periods, reserve_line_numbers, hsby_line_numbers, exclude_hsby=True
     )
 
     pp_for_bt = filter_by_reserve_lines(
@@ -202,20 +202,28 @@ def render_reserve_summary(
         return
 
     reserve_df = diagnostics.reserve_lines
+    reserve_subset = reserve_df.copy()
 
-    # Filter reserve lines to match filtered data if provided
-    if filtered_df is not None:
-        reserve_df = reserve_df[reserve_df["Line"].isin(filtered_df["Line"])]
+    if filtered_df is not None and "Line" in filtered_df.columns:
+        filtered_lines = set(filtered_df["Line"].tolist())
+        if filtered_lines:
+            candidate = reserve_df[reserve_df["Line"].isin(filtered_lines)]
+            if not candidate.empty:
+                reserve_subset = candidate
 
-    if reserve_df.empty:
+    reserve_subset = reserve_subset[
+        reserve_subset["IsReserve"] | reserve_subset["IsHotStandby"]
+    ]
+
+    if reserve_subset.empty:
         return
 
     st.subheader("🔄 Reserve Lines")
 
     # Count by type
-    if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
-        regular_reserve = reserve_df[reserve_df["IsReserve"] & ~reserve_df["IsHotStandby"]]
-        hsby = reserve_df[reserve_df["IsHotStandby"]]
+    if "IsReserve" in reserve_subset.columns and "IsHotStandby" in reserve_subset.columns:
+        regular_reserve = reserve_subset[reserve_subset["IsReserve"] & ~reserve_subset["IsHotStandby"]]
+        hsby = reserve_subset[reserve_subset["IsHotStandby"]]
 
         col1, col2 = st.columns(2)
 

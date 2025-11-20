@@ -30,13 +30,29 @@ def change_tracker_component() -> rx.Component:
             rx.vstack(
                 # Header
                 rx.hstack(
-                    rx.icon("history", size=24, color=rx.color("blue", 9)),
-                    rx.heading(
-                        "Change History",
-                        size="6",
-                        color=rx.color("gray", 12),
+                    rx.hstack(
+                        rx.icon("history", size=24, color=rx.color("blue", 9)),
+                        rx.heading(
+                            "Change History",
+                            size="6",
+                            color=rx.color("gray", 12),
+                        ),
+                        spacing="2",
+                        align="center",
                     ),
                     rx.spacer(),
+                    rx.icon_button(
+                        rx.cond(
+                            BidLineState.change_history_expanded,
+                            rx.icon("chevron-up", size=18),
+                            rx.icon("chevron-down", size=18),
+                        ),
+                        on_click=BidLineState.toggle_change_history,
+                        variant="ghost",
+                        size="2",
+                        aria_label="Toggle change history",
+                        color_scheme="gray",
+                    ),
                     # Edit count badge
                     rx.badge(
                         f"{BidLineState.edited_cells.length()} changes",
@@ -57,84 +73,93 @@ def change_tracker_component() -> rx.Component:
                     align="center",
                 ),
 
-                # Change summary
-                _change_summary(),
+                rx.cond(
+                    BidLineState.change_history_expanded,
+                    rx.vstack(
+                        # Change summary
+                        _change_summary(),
 
-                # Changes table
-                rx.box(
-                    rx.table.root(
-                        # Header
-                        rx.table.header(
-                            rx.table.row(
-                                rx.table.column_header_cell(
-                                    "Line",
-                                    style={
-                                        "text-align": "center",
-                                        "font-weight": "bold",
-                                        "padding": "0.75rem",
-                                    },
+                        # Changes table
+                        rx.box(
+                            rx.table.root(
+                                # Header
+                                rx.table.header(
+                                    rx.table.row(
+                                        rx.table.column_header_cell(
+                                            "Line",
+                                            style={
+                                                "text-align": "center",
+                                                "font-weight": "bold",
+                                                "padding": "0.75rem",
+                                            },
+                                        ),
+                                        rx.table.column_header_cell(
+                                            "Column",
+                                            style={
+                                                "text-align": "center",
+                                                "font-weight": "bold",
+                                                "padding": "0.75rem",
+                                            },
+                                        ),
+                                        rx.table.column_header_cell(
+                                            "Old Value",
+                                            style={
+                                                "text-align": "center",
+                                                "font-weight": "bold",
+                                                "padding": "0.75rem",
+                                            },
+                                        ),
+                                        rx.table.column_header_cell(
+                                            "→",
+                                            style={
+                                                "text-align": "center",
+                                                "font-weight": "bold",
+                                                "padding": "0.75rem",
+                                                "width": "40px",
+                                            },
+                                        ),
+                                        rx.table.column_header_cell(
+                                            "New Value",
+                                            style={
+                                                "text-align": "center",
+                                                "font-weight": "bold",
+                                                "padding": "0.75rem",
+                                            },
+                                        ),
+                                        rx.table.column_header_cell(
+                                            "Action",
+                                            style={
+                                                "text-align": "center",
+                                                "font-weight": "bold",
+                                                "padding": "0.75rem",
+                                                "width": "100px",
+                                            },
+                                        ),
+                                    ),
                                 ),
-                                rx.table.column_header_cell(
-                                    "Column",
-                                    style={
-                                        "text-align": "center",
-                                        "font-weight": "bold",
-                                        "padding": "0.75rem",
-                                    },
+                                # Body
+                                rx.table.body(
+                                    rx.foreach(
+                                        BidLineState.edited_cells,
+                                        lambda edit, idx: _change_row(edit, idx),
+                                    ),
                                 ),
-                                rx.table.column_header_cell(
-                                    "Old Value",
-                                    style={
-                                        "text-align": "center",
-                                        "font-weight": "bold",
-                                        "padding": "0.75rem",
-                                    },
-                                ),
-                                rx.table.column_header_cell(
-                                    "→",
-                                    style={
-                                        "text-align": "center",
-                                        "font-weight": "bold",
-                                        "padding": "0.75rem",
-                                        "width": "40px",
-                                    },
-                                ),
-                                rx.table.column_header_cell(
-                                    "New Value",
-                                    style={
-                                        "text-align": "center",
-                                        "font-weight": "bold",
-                                        "padding": "0.75rem",
-                                    },
-                                ),
-                                rx.table.column_header_cell(
-                                    "Action",
-                                    style={
-                                        "text-align": "center",
-                                        "font-weight": "bold",
-                                        "padding": "0.75rem",
-                                        "width": "100px",
-                                    },
-                                ),
+                                width="100%",
+                                variant="surface",
                             ),
+                            width="100%",
+                            overflow_x="auto",
+                            max_height="400px",
+                            overflow_y="auto",
+                            border="1px solid",
+                            border_color=rx.color("gray", 6),
+                            border_radius="8px",
                         ),
-                        # Body
-                        rx.table.body(
-                            rx.foreach(
-                                BidLineState.edited_cells,
-                                lambda edit, idx: _change_row(edit, idx),
-                            ),
-                        ),
+
+                        spacing="4",
                         width="100%",
-                        variant="surface",
                     ),
-                    width="100%",
-                    overflow_x="auto",
-                    max_height="400px",
-                    overflow_y="auto",
-                    border="1px solid",
-                    border_color=rx.color("gray", 6),
-                    border_radius="8px",
+                    rx.box(),
                 ),
 
                 spacing="4",

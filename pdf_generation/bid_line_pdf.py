@@ -122,6 +122,104 @@ def _create_value_distribution(series: pd.Series, label: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _summarize_line_availability(
+    df: pd.DataFrame, reserve_lines: Optional[pd.DataFrame]
+) -> Optional[list[list[str]]]:
+    """Build table for line availability by position."""
+    if reserve_lines is None or reserve_lines.empty:
+        return None
+
+    availability_template = {
+        "regular": 0,
+        "reserve": 0,
+        "hot": 0,
+        "airport": 0,
+        "gateway": 0,
+        "vto_full": 0,
+        "vto_split": 0,
+        "vtor": 0,
+    }
+    availability = {
+        "captain": availability_template.copy(),
+        "fo": availability_template.copy(),
+    }
+
+    lines_with_vto_split: set[int] = set()
+    if "VTOType" in df.columns:
+        lines_with_vto_split = set(df[df["VTOType"].notna()]["Line"].tolist())
+
+    gateway_labels: set[str] = set()
+
+    for _, row in reserve_lines.iterrows():
+        line_type = row.get("LineType")
+        if not line_type:
+            if row.get("IsHotStandby"):
+                line_type = "hot_standby"
+            elif row.get("IsReserve"):
+                line_type = "reserve"
+            else:
+                line_type = "regular"
+
+        captain_slots = int(row.get("CaptainSlots") or 0)
+        fo_slots = int(row.get("FOSlots") or 0)
+        line_id = row.get("Line")
+
+        standby_type = row.get("StandbyType")
+
+        if line_type == "vto":
+            bucket = "vto_split" if line_id in lines_with_vto_split else "vto_full"
+        elif line_type == "vtor":
+            bucket = "vtor"
+        elif line_type == "reserve":
+            bucket = "reserve"
+        elif line_type == "hot_standby":
+            bucket = "hot"
+            if standby_type == "airport":
+                availability["captain"]["airport"] += captain_slots
+                availability["fo"]["airport"] += fo_slots
+            elif standby_type == "gateway":
+                availability["captain"]["gateway"] += captain_slots
+                availability["fo"]["gateway"] += fo_slots
+                code = row.get("GatewayCode")
+                if code:
+                    gateway_labels.add(str(code).upper())
+        else:
+            bucket = "regular"
+
+        availability["captain"][bucket] += captain_slots
+        availability["fo"][bucket] += fo_slots
+
+    availability_table = [
+        [
+            "Position",
+            "Regular",
+            "Reserve",
+            "HSBY",
+            "VTO (Full)",
+            "VTO (Split)",
+            "VTOR/VOR",
+        ]
+    ]
+
+    for label, key in [("Captain", "captain"), ("First Officer", "fo")]:
+        counts = availability[key]
+        # Combine airport and gateway standby into HSBY
+        hsby_total = counts['airport'] + counts['gateway']
+        availability_table.append(
+            [
+                label,
+                f"{counts['regular']}",
+                f"{counts['reserve']}",
+                f"{hsby_total}",
+                f"{counts['vto_full']}",
+                f"{counts['vto_split']}",
+                f"{counts['vtor']}",
+            ]
+        )
+
+    return availability_table
+
+
 def create_bid_line_pdf_report(
     df: pd.DataFrame,
     metadata: Optional[ReportMetadata] = None,
@@ -172,6 +270,8 @@ def create_bid_line_pdf_report(
     # For BT: exclude both regular reserve AND HSBY
     all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
     df_for_bt = df[~df["Line"].isin(all_exclude_for_bt)] if all_exclude_for_bt else df
+
+    availability_table_data = _summarize_line_availability(df, reserve_lines)
 
     # Create document
     doc = SimpleDocTemplate(
@@ -237,7 +337,6 @@ def create_bid_line_pdf_report(
             story.append(Spacer(1, 12))
 
         story.append(Spacer(1, 12))
-
         # KPI Cards - Summary Statistics with ranges
         ct_stats = (
             df_non_reserve["CT"].agg(["mean", "min", "max"])
@@ -281,6 +380,17 @@ def create_bid_line_pdf_report(
         kpi_table = make_kpi_row(kpi_metrics, branding)
         story.append(kpi_table)
         story.append(Spacer(1, 20))
+
+        if availability_table_data:
+            story.append(Paragraph("Line Availability by Position", heading2_style))
+            story.append(Spacer(1, 6))
+            availability_table = make_styled_table(
+                availability_table_data,
+                [90, 65, 65, 65, 75, 75, 75],
+                branding,
+            )
+            story.append(availability_table)
+            story.append(Spacer(1, 20))
 
         # Horizontal rule
         hr = HRFlowable(

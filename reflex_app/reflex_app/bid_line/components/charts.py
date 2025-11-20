@@ -155,6 +155,7 @@ def pay_period_comparison_charts() -> rx.Component:
                     ),
                     flex="1",
                     min_width="250px",
+                    max_width="420px",
                 ),
 
                 # BT comparison
@@ -190,6 +191,7 @@ def pay_period_comparison_charts() -> rx.Component:
                     ),
                     flex="1",
                     min_width="250px",
+                    max_width="420px",
                 ),
 
                 # DO comparison
@@ -225,6 +227,7 @@ def pay_period_comparison_charts() -> rx.Component:
                     ),
                     flex="1",
                     min_width="250px",
+                    max_width="420px",
                 ),
 
                 # DD comparison
@@ -260,6 +263,7 @@ def pay_period_comparison_charts() -> rx.Component:
                     ),
                     flex="1",
                     min_width="250px",
+                    max_width="420px",
                 ),
 
                 direction="row",

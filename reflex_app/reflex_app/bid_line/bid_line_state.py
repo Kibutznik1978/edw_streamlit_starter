@@ -7,6 +7,7 @@ including PDF upload, processing, data editing, filtering, and exports.
 import asyncio
 import contextlib
 import math
+from io import BytesIO
 import reflex as rx
 from typing import Optional, Dict, List, Any, Tuple, Set
 from pathlib import Path
@@ -19,6 +20,7 @@ from ..database.base_state import DatabaseState
 # Add path to import from root directory modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from bid_parser import parse_bid_lines, extract_bid_line_header_info, ParseDiagnostics
+from pdf_generation import ReportMetadata, create_bid_line_pdf_report
 from config.validation import (
     CT_MAX_WARNING, BT_MAX_WARNING, DO_MAX_WARNING, DD_MAX_WARNING,
     CT_RANGE_MIN, CT_RANGE_MAX, BT_RANGE_MIN, BT_RANGE_MAX,
@@ -88,6 +90,9 @@ class BidLineState(DatabaseState):
     # Advanced edit mode (allows editing all columns)
     advanced_edit_mode: bool = False
 
+    # UI state: whether the Change History card is expanded
+    change_history_expanded: bool = False
+
     # ========== Statistics State ==========
     # Basic statistics (computed from filtered data)
     ct_min: float = 0.0
@@ -128,6 +133,16 @@ class BidLineState(DatabaseState):
     gateway_standby_summary: List[Dict[str, Any]] = []
     reserve_line_count: int = 0
     hot_standby_line_count: int = 0
+    airport_standby_line_count: int = 0
+    gateway_standby_line_count: int = 0
+    regular_captain_lines: int = 0
+    regular_fo_lines: int = 0
+    vto_full_captain_lines: int = 0
+    vto_full_fo_lines: int = 0
+    vto_split_captain_lines: int = 0
+    vto_split_fo_lines: int = 0
+    vtor_captain_lines: int = 0
+    vtor_fo_lines: int = 0
 
     # ========== Save to Database State ==========
     save_status: str = ""  # Success/error message
@@ -226,16 +241,14 @@ class BidLineState(DatabaseState):
 
     @rx.var
     def ct_distribution_data(self) -> List[Dict[str, Any]]:
-        """Generate Credit Time distribution data for charts.
-
-        Creates histogram bins in 10-hour increments.
-        """
-        if not self.filtered_data:
+        """Generate Credit Time distribution data for charts (5-hour buckets)."""
+        rows = self._filter_regular_rows(self.filtered_data)
+        if not rows:
             return []
 
-        # Create bins: 0-10, 10-20, 20-30, etc. up to 200
-        bins = {}
-        for line in self.filtered_data:
+        bucket_size = 5
+        bins: Dict[str, int] = {}
+        for line in rows:
             ct = line.get("CT", 0)
             try:
                 val = float(ct)
@@ -243,8 +256,8 @@ class BidLineState(DatabaseState):
                     continue
             except (TypeError, ValueError):
                 continue
-            bin_start = int(val // 10) * 10
-            bin_label = f"{bin_start}-{bin_start + 10}"
+            bin_start = int((val // bucket_size) * bucket_size)
+            bin_label = f"{bin_start}-{bin_start + bucket_size}"
             bins[bin_label] = bins.get(bin_label, 0) + 1
 
         # Convert to list of dicts for Recharts
@@ -253,16 +266,14 @@ class BidLineState(DatabaseState):
 
     @rx.var
     def bt_distribution_data(self) -> List[Dict[str, Any]]:
-        """Generate Block Time distribution data for charts.
-
-        Creates histogram bins in 10-hour increments.
-        """
-        if not self.filtered_data:
+        """Generate Block Time distribution data for charts (5-hour buckets)."""
+        rows = self._filter_regular_rows(self.filtered_data)
+        if not rows:
             return []
 
-        # Create bins: 0-10, 10-20, 20-30, etc. up to 200
-        bins = {}
-        for line in self.filtered_data:
+        bucket_size = 5
+        bins: Dict[str, int] = {}
+        for line in rows:
             bt = line.get("BT", 0)
             try:
                 val = float(bt)
@@ -270,8 +281,8 @@ class BidLineState(DatabaseState):
                     continue
             except (TypeError, ValueError):
                 continue
-            bin_start = int(val // 10) * 10
-            bin_label = f"{bin_start}-{bin_start + 10}"
+            bin_start = int((val // bucket_size) * bucket_size)
+            bin_label = f"{bin_start}-{bin_start + bucket_size}"
             bins[bin_label] = bins.get(bin_label, 0) + 1
 
         # Convert to list of dicts for Recharts
@@ -284,7 +295,8 @@ class BidLineState(DatabaseState):
 
         Counts occurrences of each discrete value.
         """
-        if not self.filtered_data:
+        rows = self._filter_regular_rows(self.filtered_data)
+        if not rows:
             return []
 
         # Count occurrences of each DO value
@@ -292,7 +304,7 @@ class BidLineState(DatabaseState):
         min_value = None
         max_value = None
 
-        for line in self.filtered_data:
+        for line in rows:
             for value in self._collect_metric_values(line, "DO"):
                 try:
                     numeric = float(value)
@@ -322,7 +334,8 @@ class BidLineState(DatabaseState):
 
         Counts occurrences of each discrete value.
         """
-        if not self.filtered_data:
+        rows = self._filter_regular_rows(self.filtered_data)
+        if not rows:
             return []
 
         # Count occurrences of each DD value
@@ -330,7 +343,7 @@ class BidLineState(DatabaseState):
         min_value = None
         max_value = None
 
-        for line in self.filtered_data:
+        for line in rows:
             for value in self._collect_metric_values(line, "DD"):
                 try:
                     numeric = float(value)
@@ -357,22 +370,22 @@ class BidLineState(DatabaseState):
     @rx.var
     def ct_distribution_pp1(self) -> List[Dict[str, Any]]:
         """CT distribution data for Pay Period 1."""
-        return self._continuous_distribution_by_period("CT", 10)["PP1"]
+        return self._continuous_distribution_by_period("CT", 5)["PP1"]
 
     @rx.var
     def ct_distribution_pp2(self) -> List[Dict[str, Any]]:
         """CT distribution data for Pay Period 2."""
-        return self._continuous_distribution_by_period("CT", 10)["PP2"]
+        return self._continuous_distribution_by_period("CT", 5)["PP2"]
 
     @rx.var
     def bt_distribution_pp1(self) -> List[Dict[str, Any]]:
         """BT distribution data for Pay Period 1."""
-        return self._continuous_distribution_by_period("BT", 10)["PP1"]
+        return self._continuous_distribution_by_period("BT", 5)["PP1"]
 
     @rx.var
     def bt_distribution_pp2(self) -> List[Dict[str, Any]]:
         """BT distribution data for Pay Period 2."""
-        return self._continuous_distribution_by_period("BT", 10)["PP2"]
+        return self._continuous_distribution_by_period("BT", 5)["PP2"]
 
     @rx.var
     def do_distribution_pp1(self) -> List[Dict[str, Any]]:
@@ -735,6 +748,10 @@ class BidLineState(DatabaseState):
                 self._calculate_reserve_statistics()
             else:
                 self.reserve_lines_json = []
+                self._calculate_reserve_statistics()
+
+            # Update line category counts
+            self._calculate_line_category_counts()
 
             # Tag hot standby lines in the main dataset for table display
             self._annotate_hot_standby_lines()
@@ -822,6 +839,10 @@ class BidLineState(DatabaseState):
         """Toggle advanced edit mode on/off."""
         self.advanced_edit_mode = not self.advanced_edit_mode
 
+    def toggle_change_history(self):
+        """Toggle the change history card between collapsed/expanded."""
+        self.change_history_expanded = not self.change_history_expanded
+
     def _get_hot_standby_line_numbers(self) -> Set[int]:
         """Return the set of line numbers flagged as Hot Standby."""
         if not self.reserve_lines_json:
@@ -832,6 +853,38 @@ class BidLineState(DatabaseState):
             for entry in self.reserve_lines_json
             if entry.get("IsHotStandby") and entry.get("Line") is not None
         }
+
+    def _get_regular_reserve_line_numbers(self) -> Set[int]:
+        """Return the set of reserve line numbers (excluding HSBY)."""
+        if not self.reserve_lines_json:
+            return set()
+
+        return {
+            entry.get("Line")
+            for entry in self.reserve_lines_json
+            if entry.get("IsReserve") and not entry.get("IsHotStandby") and entry.get("Line") is not None
+        }
+
+    def _get_non_regular_line_numbers(self) -> Set[int]:
+        """Lines that should be excluded from regular statistics (reserve + HSBY)."""
+        return self._get_regular_reserve_line_numbers() | self._get_hot_standby_line_numbers()
+
+    def _filter_regular_rows(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove reserve and HSBY lines from a list of row dictionaries."""
+        if not rows:
+            return []
+
+        exclude = self._get_non_regular_line_numbers()
+        if not exclude:
+            return rows
+
+        filtered_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            line_id = row.get("Line")
+            if line_id in exclude:
+                continue
+            filtered_rows.append(row)
+        return filtered_rows
 
     def _annotate_hot_standby_lines(self):
         """Add/remove the Hot Standby display column on parsed line data."""
@@ -853,16 +906,16 @@ class BidLineState(DatabaseState):
         self.original_data_json = apply_flag(self.original_data_json)
         self.edited_data_json = apply_flag(self.edited_data_json)
 
-    def _exclude_hot_standby_lines(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Remove hot standby lines from DataFrame-based calculations."""
+    def _exclude_non_regular_lines(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Remove reserve and HSBY lines from DataFrame-based calculations."""
         if df.empty or "Line" not in df.columns:
             return df
 
-        hs_lines = self._get_hot_standby_line_numbers()
-        if not hs_lines:
+        exclude = self._get_non_regular_line_numbers()
+        if not exclude:
             return df
 
-        return df[~df["Line"].isin(hs_lines)]
+        return df[~df["Line"].isin(exclude)]
 
     def _collect_metric_values(self, row: Dict[str, Any], metric: str) -> List[Any]:
         """Collect per-period metric values for a given row."""
@@ -882,14 +935,15 @@ class BidLineState(DatabaseState):
         return values
 
     def _continuous_distribution_by_period(self, metric: str, bucket_size: int) -> Dict[str, List[Dict[str, Any]]]:
-        """Build 10-hour bucket distributions for CT/BT by pay period."""
+        """Build bucketed distributions for CT/BT by pay period."""
         periods = ("PP1", "PP2")
         distribution: Dict[str, List[Dict[str, Any]]] = {p: [] for p in periods}
         has_period_data = False
+        rows = self._filter_regular_rows(self.filtered_data)
 
         for period in periods:
             counts: Dict[str, int] = {}
-            for row in self.filtered_data:
+            for row in rows:
                 key = f"{metric}_{period}"
                 value = row.get(key)
                 if value in (None, "", "NaN"):
@@ -913,7 +967,7 @@ class BidLineState(DatabaseState):
 
         if not has_period_data:
             fallback_counts: Dict[str, int] = {}
-            for row in self.filtered_data:
+            for row in rows:
                 value = row.get(metric)
                 if value in (None, "", "NaN"):
                     continue
@@ -937,12 +991,13 @@ class BidLineState(DatabaseState):
         periods = ("PP1", "PP2")
         distribution: Dict[str, List[Dict[str, Any]]] = {p: [] for p in periods}
         has_period_data = False
+        rows = self._filter_regular_rows(self.filtered_data)
 
         for period in periods:
             counts: Dict[int, int] = {}
             min_value: Optional[int] = None
             max_value: Optional[int] = None
-            for row in self.filtered_data:
+            for row in rows:
                 key = f"{metric}_{period}"
                 value = row.get(key)
                 if value in (None, "", "NaN"):
@@ -971,7 +1026,7 @@ class BidLineState(DatabaseState):
             counts: Dict[int, int] = {}
             min_value: Optional[int] = None
             max_value: Optional[int] = None
-            for row in self.filtered_data:
+            for row in rows:
                 value = row.get(metric)
                 if value in (None, "", "NaN"):
                     continue
@@ -1185,8 +1240,8 @@ class BidLineState(DatabaseState):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Exclude hot standby lines from statistics (they have zero block time and skew averages)
-        df = self._exclude_hot_standby_lines(df)
+        # Exclude reserve and hot standby lines from statistics
+        df = self._exclude_non_regular_lines(df)
 
         # If all lines were filtered out, reset statistics
         if df.empty:
@@ -1270,7 +1325,7 @@ class BidLineState(DatabaseState):
         # Pay period statistics (if available)
         if self.pay_periods_json:
             pp_df = pd.DataFrame(self.pay_periods_json)
-            pp_df = self._exclude_hot_standby_lines(pp_df)
+            pp_df = self._exclude_non_regular_lines(pp_df)
 
             if "Period" in pp_df.columns:
                 pp1 = pp_df[pp_df["Period"] == 1]
@@ -1295,6 +1350,8 @@ class BidLineState(DatabaseState):
         self.gateway_standby_summary = []
         self.reserve_line_count = 0
         self.hot_standby_line_count = 0
+        self.airport_standby_line_count = 0
+        self.gateway_standby_line_count = 0
         if not self.reserve_lines_json:
             self.reserve_captain_slots = 0
             self.reserve_fo_slots = 0
@@ -1326,8 +1383,14 @@ class BidLineState(DatabaseState):
             self.hot_standby_fo_slots = 0
             self.hot_standby_line_count = 0
 
+        airport_standby = hot_standby[hot_standby.get("StandbyType") == "airport"]
+        self.airport_standby_line_count = (
+            int(airport_standby["Line"].nunique()) if not airport_standby.empty else 0
+        )
+
         gateway_standby = hot_standby[hot_standby.get("StandbyType") == "gateway"]
         if not gateway_standby.empty:
+            self.gateway_standby_line_count = int(gateway_standby["Line"].nunique())
             valid_gateways = gateway_standby.dropna(subset=["GatewayCode"])
             if not valid_gateways.empty:
                 summary = (
@@ -1338,5 +1401,207 @@ class BidLineState(DatabaseState):
                     {"gateway": row["GatewayCode"], "line_count": int(row["count"])}
                     for _, row in summary.iterrows()
                 ]
+            else:
+                self.gateway_standby_summary = []
         else:
+            self.gateway_standby_line_count = 0
             self.gateway_standby_summary = []
+
+    def _calculate_line_category_counts(self):
+        """Calculate regular/VTO/VTOR line counts per position."""
+        self.regular_captain_lines = 0
+        self.regular_fo_lines = 0
+        self.vto_full_captain_lines = 0
+        self.vto_full_fo_lines = 0
+        self.vto_split_captain_lines = 0
+        self.vto_split_fo_lines = 0
+        self.vtor_captain_lines = 0
+        self.vtor_fo_lines = 0
+
+        if not self.reserve_lines_json:
+            return
+
+        lines_with_vto_data = {row.get("Line") for row in self.original_data_json if row.get("VTOType")}
+
+        for entry in self.reserve_lines_json:
+            line_type = entry.get("LineType") or (
+                "hot_standby"
+                if entry.get("IsHotStandby")
+                else ("reserve" if entry.get("IsReserve") else "regular")
+            )
+            captain_slots = int(entry.get("CaptainSlots") or 0)
+            fo_slots = int(entry.get("FOSlots") or 0)
+            line_id = entry.get("Line")
+
+            if line_type == "regular":
+                self.regular_captain_lines += captain_slots
+                self.regular_fo_lines += fo_slots
+            elif line_type == "vto":
+                if line_id in lines_with_vto_data:
+                    self.vto_split_captain_lines += captain_slots
+                    self.vto_split_fo_lines += fo_slots
+                else:
+                    self.vto_full_captain_lines += captain_slots
+                    self.vto_full_fo_lines += fo_slots
+            elif line_type == "vtor":
+                self.vtor_captain_lines += captain_slots
+                self.vtor_fo_lines += fo_slots
+    # ========== Download Generation ==========
+
+    def _build_download_filename(self, extension: str) -> str:
+        """Construct a consistent filename for bid line exports."""
+        domicile = self.domicile or "BID"
+        aircraft = self.aircraft or "LINE"
+        bid_period = self.bid_period or "XXXX"
+        return f"{domicile}_{aircraft}_Bid{bid_period}_BidLines.{extension}"
+
+    def _filtered_pay_periods_dataframe(self) -> pd.DataFrame:
+        """Return pay period data limited to the currently filtered lines."""
+        if not self.pay_periods_json:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(self.pay_periods_json)
+        if df.empty or "Line" not in df.columns:
+            return df
+
+        filtered_lines = {
+            row.get("Line")
+            for row in self.filtered_data
+            if row.get("Line") is not None
+        }
+        if filtered_lines:
+            df = df[df["Line"].isin(filtered_lines)]
+        return df
+
+    def _reserve_dataframe(self) -> pd.DataFrame:
+        """Return DataFrame of reserve lines."""
+        if not self.reserve_lines_json:
+            return pd.DataFrame()
+        return pd.DataFrame(self.reserve_lines_json)
+
+    def _summary_dataframe(self) -> pd.DataFrame:
+        """Build a summary table for Excel export."""
+        summary_rows = [
+            {"Metric": "Total Lines (Filtered)", "Value": len(self.filtered_data)},
+            {"Metric": "Average Credit Time (CT)", "Value": f"{self.ct_mean:.2f} hrs"},
+            {"Metric": "Average Block Time (BT)", "Value": f"{self.bt_mean:.2f} hrs"},
+            {"Metric": "Average Days Off (DO)", "Value": f"{self.do_mean:.1f} days"},
+            {"Metric": "Average Duty Days (DD)", "Value": f"{self.dd_mean:.1f} days"},
+            {"Metric": "Reserve Lines", "Value": self.reserve_line_count},
+            {"Metric": "Reserve Captain Slots", "Value": self.reserve_captain_slots},
+            {"Metric": "Reserve F/O Slots", "Value": self.reserve_fo_slots},
+            {"Metric": "Hot Standby Lines", "Value": self.hot_standby_line_count},
+            {"Metric": "HSBY Captain Slots", "Value": self.hot_standby_captain_slots},
+            {"Metric": "HSBY F/O Slots", "Value": self.hot_standby_fo_slots},
+        ]
+        return pd.DataFrame(summary_rows)
+
+    def generate_excel_download(self) -> bytes:
+        """Create an Excel workbook that mirrors the filtered data and diagnostics."""
+        if not self.filtered_data:
+            return b""
+
+        try:
+            df_lines = pd.DataFrame(self.filtered_data)
+            if df_lines.empty:
+                return b""
+
+            preferred_columns = [
+                "Line", "CT", "BT", "DO", "DD",
+                "CT_PP1", "BT_PP1", "DO_PP1", "DD_PP1",
+                "CT_PP2", "BT_PP2", "DO_PP2", "DD_PP2",
+                "CaptainSlots", "FOSlots", "VTOType", "VTOPeriod",
+                "Hot Standby",
+            ]
+            existing_cols = [col for col in preferred_columns if col in df_lines.columns]
+            remaining_cols = [col for col in df_lines.columns if col not in existing_cols]
+            ordered_cols = existing_cols + remaining_cols
+            df_lines = df_lines[ordered_cols]
+            if "Line" in df_lines.columns:
+                df_lines = df_lines.sort_values("Line")
+
+            summary_df = self._summary_dataframe()
+            pay_periods_df = self._filtered_pay_periods_dataframe()
+            reserve_df = self._reserve_dataframe()
+
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df_lines.to_excel(writer, sheet_name="Bid Lines", index=False)
+                if not summary_df.empty:
+                    summary_df.to_excel(writer, sheet_name="Summary", index=False)
+                if not pay_periods_df.empty:
+                    pay_periods_df.to_excel(writer, sheet_name="Pay Periods", index=False)
+                if not reserve_df.empty:
+                    reserve_df.to_excel(writer, sheet_name="Reserve Lines", index=False)
+
+            output.seek(0)
+            return output.getvalue()
+
+        except Exception as exc:  # pragma: no cover - defensive logging
+            print(f"Error generating bid line Excel export: {exc}")
+            return b""
+
+    def generate_pdf_download(self) -> bytes:
+        """Create the bid line PDF report using the shared generator."""
+        if not self.filtered_data:
+            return b""
+
+        try:
+            df = pd.DataFrame(self.filtered_data)
+            if df.empty:
+                return b""
+
+            title = f"{self.domicile} {self.aircraft} – Bid {self.bid_period}".strip()
+            subtitle = (
+                f"Bid Line Analysis Report • {self.date_range}"
+                if self.date_range
+                else "Bid Line Analysis Report"
+            )
+            metadata = ReportMetadata(title=title or "Bid Line Analysis Report", subtitle=subtitle)
+
+            branding = {
+                "primary_hex": "#1E40AF",
+                "accent_hex": "#F3F4F6",
+                "rule_hex": "#E5E7EB",
+                "muted_hex": "#6B7280",
+                "bg_alt_hex": "#FAFAFA",
+                "logo_path": None,
+                "title_left": f"{title} | Bid Line Analysis Report" if title else None,
+            }
+
+            pay_periods_df = pd.DataFrame(self.pay_periods_json) if self.pay_periods_json else None
+            if pay_periods_df is not None and pay_periods_df.empty:
+                pay_periods_df = None
+
+            reserve_df = pd.DataFrame(self.reserve_lines_json) if self.reserve_lines_json else None
+            if reserve_df is not None and reserve_df.empty:
+                reserve_df = None
+
+            pdf_bytes = create_bid_line_pdf_report(
+                df,
+                metadata=metadata,
+                pay_periods=pay_periods_df,
+                reserve_lines=reserve_df,
+                branding=branding,
+            )
+            return pdf_bytes
+
+        except Exception as exc:  # pragma: no cover - defensive logging
+            print(f"Error generating bid line PDF: {exc}")
+            return b""
+
+    # ========== Download Event Handlers ==========
+
+    def download_excel(self):
+        """Trigger Excel download using Reflex download helper."""
+        excel_bytes = self.generate_excel_download()
+        if excel_bytes:
+            filename = self._build_download_filename("xlsx")
+            return rx.download(data=excel_bytes, filename=filename)
+
+    def download_pdf(self):
+        """Trigger PDF download using Reflex download helper."""
+        pdf_bytes = self.generate_pdf_download()
+        if pdf_bytes:
+            filename = self._build_download_filename("pdf")
+            return rx.download(data=pdf_bytes, filename=filename)

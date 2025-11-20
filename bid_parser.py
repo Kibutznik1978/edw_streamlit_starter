@@ -253,8 +253,8 @@ def parse_bid_lines(
         used_tables=bool(table_records),
         warnings=warnings,
         pay_periods=pay_periods_output if not pay_periods_output.empty else None,
-        reserve_lines=reserve_df,
-    )
+    reserve_lines=reserve_df,
+)
     return df, diagnostics
 
 
@@ -437,7 +437,9 @@ def _parse_line_blocks(
         # Track reserve line status even if records are empty (excluded reserve lines)
         if header_match:
             line_id = int(header_match.group("line"))
-            is_reserve, is_hot_standby, captain_slots, fo_slots = _detect_reserve_line(block)
+            is_reserve, is_hot_standby, _, _ = _detect_reserve_line(block)
+            captain_slots, fo_slots = _extract_crew_composition(block)
+            line_type = _classify_line_type(block, is_reserve, is_hot_standby)
             standby_type = None
             gateway_code = None
             if is_hot_standby:
@@ -457,6 +459,7 @@ def _parse_line_blocks(
                     "FOSlots": fo_slots,
                     "StandbyType": standby_type,
                     "GatewayCode": gateway_code,
+                    "LineType": line_type,
                 }
             )
 
@@ -961,3 +964,18 @@ def _merge_records(
         warnings.append("No line entries detected in the document.")
 
     return list(merged.values()), warnings
+def _classify_line_type(block: str, is_reserve: bool, is_hot_standby: bool) -> str:
+    """Determine the general line type for diagnostics."""
+    if is_hot_standby:
+        return "hot_standby"
+    if is_reserve:
+        return "reserve"
+
+    match = _VTO_PATTERN_RE.search(block)
+    if match:
+        keyword = match.group(1).upper()
+        if keyword == "VTO":
+            return "vto"
+        return "vtor"  # Treat VTOR and VOR alike
+
+    return "regular"

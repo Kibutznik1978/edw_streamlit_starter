@@ -7,6 +7,7 @@ from .change_tracker import change_tracker_component
 from .filters import filters_component
 from .statistics import statistics_component
 from .charts import charts_component
+from .downloads import downloads_component
 
 __all__ = [
     "upload_component",
@@ -16,4 +17,5 @@ __all__ = [
     "filters_component",
     "statistics_component",
     "charts_component",
+    "downloads_component",
 ]

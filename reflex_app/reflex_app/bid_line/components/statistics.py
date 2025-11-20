@@ -6,6 +6,8 @@ This module provides comprehensive statistics display for bid line data:
 - Reserve line statistics (conditional on reserve data availability)
 """
 
+from typing import Any
+
 import reflex as rx
 
 from ..bid_line_state import BidLineState
@@ -270,133 +272,239 @@ def pay_period_comparison() -> rx.Component:
 
 
 def reserve_statistics() -> rx.Component:
-    """Reserve line statistics section (conditional).
+    """Reserve and Hot Standby statistics with dedicated sections."""
+    show_reserve = (BidLineState.reserve_captain_slots > 0) | (BidLineState.reserve_fo_slots > 0)
+    show_hot = BidLineState.hot_standby_line_count > 0
 
-    Shows reserve and hot standby slots for Captain and F/O positions.
-    Only displayed when reserve data is available.
-
-    Returns:
-        rx.Component: Reserve statistics section
-    """
     return rx.cond(
-        (BidLineState.reserve_captain_slots > 0) | (BidLineState.reserve_fo_slots > 0) |
-        (BidLineState.hot_standby_line_count > 0),
+        show_reserve | show_hot,
         rx.vstack(
-            # Section header
             rx.hstack(
                 rx.icon("users", size=24, color=rx.color("amber", 9)),
-                rx.heading(
-                    "Reserve Line Statistics",
-                    size="5",
-                    weight="bold",
-                ),
+                rx.heading("Reserve Line Statistics", size="5", weight="bold"),
                 spacing="3",
                 align="center",
             ),
-            # Reserve slots cards
-            rx.vstack(
-                rx.flex(
-                    stat_card(
-                        "Reserve Lines",
-                        BidLineState.reserve_line_count,
-                        icon="clipboard-list",
-                        color="blue",
-                        suffix="lines",
-                    ),
-                    stat_card(
-                        "Reserve Captain",
-                        BidLineState.reserve_captain_slots,
-                        icon="user-check",
-                        color="blue",
-                        suffix="lines",
-                    ),
-                    stat_card(
-                        "Reserve F/O",
-                        BidLineState.reserve_fo_slots,
-                        icon="user-check",
-                        color="cyan",
-                        suffix="lines",
-                    ),
-                    direction="row",
-                    wrap="wrap",
-                    spacing="4",
-                    width="100%",
-                ),
-                rx.flex(
-                    stat_card(
-                        "Hot Standby Lines",
-                        BidLineState.hot_standby_line_count,
-                        icon="zap",
-                        color="red",
-                        suffix="lines",
-                    ),
-                    stat_card(
-                        "Hot Standby Captain",
-                        BidLineState.hot_standby_captain_slots,
-                        icon="zap",
-                        color="red",
-                        suffix="lines",
-                    ),
-                    stat_card(
-                        "Hot Standby F/O",
-                        BidLineState.hot_standby_fo_slots,
-                        icon="zap",
-                        color="orange",
-                        suffix="lines",
-                    ),
-                    direction="row",
-                    wrap="wrap",
-                    spacing="4",
-                    width="100%",
-                ),
-                spacing="4",
-                width="100%",
-            ),
             rx.cond(
-                BidLineState.gateway_standby_summary.length() > 0,
+                show_reserve,
                 rx.box(
-                    rx.hstack(
-                        rx.icon("map-pin", size=18, color=rx.color("purple", 9)),
-                        rx.text(
-                            "Gateway Standby Lines",
-                            weight="bold",
-                            size="3",
-                            color=rx.color("gray", 12),
-                        ),
-                        spacing="2",
-                        align="center",
-                    ),
                     rx.vstack(
-                        rx.foreach(
-                            BidLineState.gateway_standby_summary,
-                            lambda entry: rx.hstack(
-                                rx.badge(
-                                    entry["gateway"].to(str) + " Gateway",
-                                    color_scheme="purple",
-                                    size="2",
-                                ),
-                                rx.text(
-                                    f"{entry['line_count']} lines",
-                                    size="2",
-                                    color=rx.color("gray", 11),
-                                ),
-                                spacing="3",
-                                align="center",
-                            ),
+                        rx.hstack(
+                            rx.icon("clipboard-list", size=18, color=rx.color("blue", 9)),
+                            rx.text("Reserve Lines", weight="bold", size="3", color=rx.color("gray", 12)),
+                            spacing="2",
+                            align="center",
                         ),
-                        spacing="2",
+                        rx.flex(
+                            stat_card(
+                                "Reserve Captain Lines",
+                                BidLineState.reserve_captain_slots,
+                                icon="user-check",
+                                color="blue",
+                                suffix="lines",
+                            ),
+                            stat_card(
+                                "Reserve F/O Lines",
+                                BidLineState.reserve_fo_slots,
+                                icon="user-check",
+                                color="cyan",
+                                suffix="lines",
+                            ),
+                            direction="row",
+                            wrap="wrap",
+                            spacing="4",
+                            width="100%",
+                        ),
+                        spacing="3",
                         width="100%",
                     ),
                     padding="3",
                     border_radius="8px",
-                    border=f"1px solid {rx.color('purple', 6)}",
-                    background=rx.color("purple", 1),
+                    border=f"1px solid {rx.color('blue', 5)}",
+                    background=rx.color("blue", 1),
                     width="100%",
                 ),
+                rx.fragment(),
+            ),
+            rx.cond(
+                show_hot,
+                rx.box(
+                    rx.vstack(
+                        rx.hstack(
+                            rx.icon("zap", size=18, color=rx.color("red", 9)),
+                            rx.text("Hot Standby Lines", weight="bold", size="3", color=rx.color("gray", 12)),
+                            spacing="2",
+                            align="center",
+                        ),
+                        rx.flex(
+                            rx.cond(
+                                BidLineState.airport_standby_line_count > 0,
+                                stat_card(
+                                    "Airport Standby Lines",
+                                    BidLineState.airport_standby_line_count,
+                                    icon="plane",
+                                    color="red",
+                                    suffix="lines",
+                                ),
+                                rx.fragment(),
+                            ),
+                            rx.cond(
+                                BidLineState.gateway_standby_line_count > 0,
+                                stat_card(
+                                    "Gateway Standby Lines",
+                                    BidLineState.gateway_standby_line_count,
+                                    icon="map-pin",
+                                    color="purple",
+                                    suffix="lines",
+                                ),
+                                rx.fragment(),
+                            ),
+                            direction="row",
+                            wrap="wrap",
+                            spacing="4",
+                            width="100%",
+                        ),
+                        rx.cond(
+                            BidLineState.gateway_standby_summary.length() > 0,
+                            rx.box(
+                                rx.vstack(
+                                    rx.foreach(
+                                        BidLineState.gateway_standby_summary,
+                                        lambda entry: rx.hstack(
+                                            rx.badge(
+                                                entry["gateway"].to(str) + " Gateway",
+                                                color_scheme="purple",
+                                                size="2",
+                                            ),
+                                            rx.text(
+                                                f"{entry['line_count']} lines",
+                                                size="2",
+                                                color=rx.color("gray", 11),
+                                            ),
+                                            spacing="3",
+                                            align="center",
+                                        ),
+                                    ),
+                                    spacing="2",
+                                    width="100%",
+                                ),
+                                padding="3",
+                                border_radius="8px",
+                                border=f"1px solid {rx.color('purple', 6)}",
+                                background=rx.color("purple", 1),
+                                width="100%",
+                            ),
+                            rx.fragment(),
+                        ),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    padding="3",
+                    border_radius="8px",
+                    border=f"1px solid {rx.color('red', 5)}",
+                    background=rx.color("red", 1),
+                    width="100%",
+                ),
+                rx.fragment(),
             ),
             spacing="4",
             width="100%",
         ),
+    )
+
+
+def _position_column(title: str, entries: list[tuple[str, Any]], accent: str) -> rx.Component:
+    def row(label: str, value: Any) -> rx.Component:
+        return rx.box(
+            rx.hstack(
+                rx.text(label, size="2", color=rx.color("gray", 11)),
+                rx.spacer(),
+                rx.text(
+                    f"{value} lines",
+                    size="3",
+                    weight="bold",
+                    color=rx.color(accent, 10),
+                ),
+                align="center",
+                width="100%",
+            ),
+            padding="8px 14px",
+            border_radius="10px",
+            background=rx.color("gray", 1),
+        )
+
+    return rx.box(
+        rx.heading(
+            title,
+            size="3",
+            weight="bold",
+            color=rx.color(accent, 10),
+            margin_bottom="6px",
+        ),
+        rx.vstack(
+            *(row(label, value) for label, value in entries),
+            spacing="2",
+            width="100%",
+        ),
+        padding="5",
+        border_radius="16px",
+        border=f"1px solid {rx.color(accent, 5)}",
+        background=rx.color(f"{accent}", 1),
+        flex="1",
+        min_width="280px",
+        box_shadow="0 4px 14px rgba(15, 23, 42, 0.06)",
+    )
+
+
+def line_position_summary() -> rx.Component:
+    """Display line availability by position for major line categories."""
+    return rx.cond(
+        BidLineState.has_results,
+        rx.box(
+            rx.hstack(
+                rx.icon("layers", size=22, color=rx.color("blue", 9)),
+                rx.heading("Line Availability by Position", size="5", weight="bold"),
+                spacing="3",
+                align="center",
+                margin_bottom="3",
+            ),
+            rx.flex(
+                _position_column(
+                    "Captain",
+                    [
+                        ("Regular Lines", BidLineState.regular_captain_lines),
+                        ("Reserve Lines", BidLineState.reserve_captain_slots),
+                        ("Hot Standby Lines", BidLineState.hot_standby_captain_slots),
+                        ("VTO Lines (Full)", BidLineState.vto_full_captain_lines),
+                        ("VTO Lines (Split)", BidLineState.vto_split_captain_lines),
+                        ("VTOR/VOR Lines", BidLineState.vtor_captain_lines),
+                    ],
+                    accent="blue",
+                ),
+                _position_column(
+                    "First Officer",
+                    [
+                        ("Regular Lines", BidLineState.regular_fo_lines),
+                        ("Reserve Lines", BidLineState.reserve_fo_slots),
+                        ("Hot Standby Lines", BidLineState.hot_standby_fo_slots),
+                        ("VTO Lines (Full)", BidLineState.vto_full_fo_lines),
+                        ("VTO Lines (Split)", BidLineState.vto_split_fo_lines),
+                        ("VTOR/VOR Lines", BidLineState.vtor_fo_lines),
+                    ],
+                    accent="purple",
+                ),
+                direction="row",
+                wrap="wrap",
+                spacing="4",
+                width="100%",
+            ),
+            padding="5",
+            border_radius="16px",
+            border=f"1px solid {rx.color('gray', 6)}",
+            background=rx.color("gray", 1),
+            width="100%",
+        ),
+        rx.fragment(),
     )
 
 
@@ -428,6 +536,9 @@ def statistics_component() -> rx.Component:
                     spacing="3",
                     align="center",
                 ),
+
+                # Line availability summary
+                line_position_summary(),
 
                 # Basic Statistics Section
                 rx.vstack(
@@ -481,6 +592,12 @@ def statistics_component() -> rx.Component:
 
                     spacing="6",
                     width="100%",
+                ),
+                rx.text(
+                    "Reserve and Hot Standby lines are excluded from the averages shown above.",
+                    size="2",
+                    color=rx.color("gray", 11),
+                    style={"fontStyle": "italic"},
                 ),
 
                 # Divider before conditional sections

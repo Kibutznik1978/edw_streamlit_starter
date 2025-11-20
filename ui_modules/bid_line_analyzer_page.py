@@ -614,49 +614,42 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     if diagnostics and diagnostics.reserve_lines is not None:
         reserve_df = diagnostics.reserve_lines
         if "IsReserve" in reserve_df.columns and "IsHotStandby" in reserve_df.columns:
-            # Regular reserve lines (not HSBY): exclude from everything
+            # Track regular reserve lines (not HSBY)
             regular_reserve_mask = reserve_df["IsReserve"] & ~reserve_df["IsHotStandby"]
             reserve_line_numbers = set(reserve_df[regular_reserve_mask]["Line"].tolist())
 
-            # HSBY lines: exclude only from BT
+            # Track HSBY lines (treated separately from both reserve and regular stats)
             hsby_mask = reserve_df["IsHotStandby"]
             hsby_line_numbers = set(reserve_df[hsby_mask]["Line"].tolist())
 
-    # For CT, DO, DD: exclude regular reserve (keep HSBY)
-    df_non_reserve = (
-        filtered_df[~filtered_df["Line"].isin(reserve_line_numbers)]
-        if reserve_line_numbers
-        else filtered_df
-    )
-
-    # For BT: exclude both regular reserve AND HSBY
-    all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
-    df_for_bt = (
-        filtered_df[~filtered_df["Line"].isin(all_exclude_for_bt)]
-        if all_exclude_for_bt
+    # Exclude both regular reserve and HSBY lines from regular statistics
+    excluded_line_numbers = reserve_line_numbers | hsby_line_numbers
+    df_regular_lines = (
+        filtered_df[~filtered_df["Line"].isin(excluded_line_numbers)]
+        if excluded_line_numbers
         else filtered_df
     )
 
     # Calculate statistics
     ct_stats = (
-        df_non_reserve["CT"].agg(["min", "max", "mean"])
-        if not df_non_reserve.empty
-        else filtered_df["CT"].agg(["min", "max", "mean"])
+        df_regular_lines["CT"].agg(["min", "max", "mean"])
+        if not df_regular_lines.empty
+        else pd.Series({"min": 0, "max": 0, "mean": 0})
     )
     bt_stats = (
-        df_for_bt["BT"].agg(["min", "max", "mean"])
-        if not df_for_bt.empty
-        else filtered_df["BT"].agg(["min", "max", "mean"])
+        df_regular_lines["BT"].agg(["min", "max", "mean"])
+        if not df_regular_lines.empty
+        else pd.Series({"min": 0, "max": 0, "mean": 0})
     )
     do_stats = (
-        df_non_reserve["DO"].agg(["min", "max", "mean"])
-        if not df_non_reserve.empty
-        else filtered_df["DO"].agg(["min", "max", "mean"])
+        df_regular_lines["DO"].agg(["min", "max", "mean"])
+        if not df_regular_lines.empty
+        else pd.Series({"min": 0, "max": 0, "mean": 0})
     )
     dd_stats = (
-        df_non_reserve["DD"].agg(["min", "max", "mean"])
-        if not df_non_reserve.empty
-        else filtered_df["DD"].agg(["min", "max", "mean"])
+        df_regular_lines["DD"].agg(["min", "max", "mean"])
+        if not df_regular_lines.empty
+        else pd.Series({"min": 0, "max": 0, "mean": 0})
     )
 
     # Create summary statistics table
@@ -687,8 +680,8 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
     summary_df = pd.DataFrame(summary_data)
     st.dataframe(summary_df, hide_index=True, width="stretch")
 
-    # Add note about reserve line exclusions
-    st.caption("*Reserve lines excluded from averages. HSBY lines excluded from Block Time only.")
+    # Add note about exclusions
+    st.caption("*Reserve & HSBY lines are excluded from the averages shown above.*")
 
     st.divider()
 
@@ -701,15 +694,10 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         # Filter pay periods to match filtered lines
         filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
 
-        # For pay period analysis: exclude reserve lines from CT/DO/DD, exclude reserve+HSBY from BT
-        pp_non_reserve = (
-            filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)]
-            if reserve_line_numbers
-            else filtered_pay_periods
-        )
-        pp_for_bt = (
-            filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)]
-            if all_exclude_for_bt
+        # Exclude reserve + HSBY lines from pay period analysis
+        pp_regular = (
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(excluded_line_numbers)]
+            if excluded_line_numbers
             else filtered_pay_periods
         )
 
@@ -725,19 +713,15 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             }
 
             for period in sorted(filtered_pay_periods["Period"].unique()):
-                period_data_non_reserve = pp_non_reserve[pp_non_reserve["Period"] == period]
-                period_data_for_bt = pp_for_bt[pp_for_bt["Period"] == period]
+                period_data_regular = pp_regular[pp_regular["Period"] == period]
 
-                if not period_data_non_reserve.empty:
-                    pp_ct = period_data_non_reserve["CT"].mean()
-                    pp_do = period_data_non_reserve["DO"].mean()
-                    pp_dd = period_data_non_reserve["DD"].mean()
+                if not period_data_regular.empty:
+                    pp_ct = period_data_regular["CT"].mean()
+                    pp_do = period_data_regular["DO"].mean()
+                    pp_dd = period_data_regular["DD"].mean()
+                    pp_bt = period_data_regular["BT"].mean()
                 else:
                     pp_ct, pp_do, pp_dd = 0, 0, 0
-
-                if not period_data_for_bt.empty:
-                    pp_bt = period_data_for_bt["BT"].mean()
-                else:
                     pp_bt = 0
 
                 pp_data[f"Pay Period {int(period)}"] = [
@@ -756,31 +740,40 @@ def _render_summary_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         st.subheader("🔄 Reserve Lines")
 
         reserve_df = diagnostics.reserve_lines
-        # Filter to only show reserve lines in the filtered dataset
-        reserve_in_view = reserve_df[reserve_df["Line"].isin(filtered_df["Line"])]
-        # Only show actual reserve lines (IsReserve is True)
-        reserve_in_view = reserve_in_view[reserve_in_view["IsReserve"]]
+        reserve_only = reserve_df[reserve_df["IsReserve"] & ~reserve_df["IsHotStandby"]]
+        hsby_lines = reserve_df[reserve_df["IsHotStandby"]]
 
-        if not reserve_in_view.empty:
-            total_reserve = len(reserve_in_view)
-            captain_slots = int(reserve_in_view["CaptainSlots"].sum())
-            fo_slots = int(reserve_in_view["FOSlots"].sum())
-            total_slots = captain_slots + fo_slots
-            total_regular = len(filtered_df) - total_reserve
+        if reserve_only.empty and hsby_lines.empty:
+            st.info("No reserve lines detected in this bid period.")
+        else:
+            reserve_line_ids = set(reserve_only["Line"].tolist())
+            hsby_line_ids = set(hsby_lines["Line"].tolist())
+            total_reserve = len(reserve_line_ids)
+            total_hsby = len(hsby_line_ids)
+
+            reserve_captain_slots = int(reserve_only["CaptainSlots"].sum())
+            reserve_fo_slots = int(reserve_only["FOSlots"].sum())
+
+            hsby_captain_slots = int(hsby_lines["CaptainSlots"].sum())
+            hsby_fo_slots = int(hsby_lines["FOSlots"].sum())
+
+            regular_df = df[~df["Line"].isin(hsby_line_ids)]
+            total_regular = len(regular_df)
+            denominator = total_regular + total_reserve
+            reserve_pct = (total_reserve / denominator * 100) if denominator > 0 else 0.0
 
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Reserve Lines", total_reserve)
                 st.metric("Regular Lines", total_regular)
-            with col2:
-                st.metric("Captain Slots", captain_slots)
-                st.metric("F/O Slots", fo_slots)
-            with col3:
-                st.metric("Total Reserve Slots", total_slots)
-                reserve_pct = (total_slots / total_regular * 100) if total_regular > 0 else 0.0
                 st.metric("Reserve %", f"{reserve_pct:.1f}%")
-        else:
-            st.info("No reserve lines found in current filter")
+            with col2:
+                st.metric("Reserve Captain Slots", reserve_captain_slots)
+                st.metric("Reserve F/O Slots", reserve_fo_slots)
+            with col3:
+                st.metric("HSBY Lines", total_hsby)
+                st.metric("HSBY Captain Slots", hsby_captain_slots)
+                st.metric("HSBY F/O Slots", hsby_fo_slots)
 
 
 def _create_time_distribution_chart(data: pd.Series, metric_name: str, is_percentage: bool = False):
@@ -873,20 +866,15 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             hsby_mask = reserve_df["IsHotStandby"]
             hsby_line_numbers = set(reserve_df[hsby_mask]["Line"].tolist())
 
-    # For CT, DO, DD: exclude regular reserve (keep HSBY)
-    df_non_reserve = (
-        filtered_df[~filtered_df["Line"].isin(reserve_line_numbers)]
-        if reserve_line_numbers
-        else filtered_df
-    )
+    excluded_lines = reserve_line_numbers | hsby_line_numbers
 
-    # For BT: exclude both regular reserve AND HSBY
-    all_exclude_for_bt = reserve_line_numbers | hsby_line_numbers
-    df_for_bt = (
-        filtered_df[~filtered_df["Line"].isin(all_exclude_for_bt)]
-        if all_exclude_for_bt
+    # Exclude both reserve and HSBY lines from all visualizations
+    df_non_reserve = (
+        filtered_df[~filtered_df["Line"].isin(excluded_lines)]
+        if excluded_lines
         else filtered_df
     )
+    df_for_bt = df_non_reserve
 
     # Determine if we have multiple pay periods
     has_multiple_periods = False
@@ -913,7 +901,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             if fig:
                 st.plotly_chart(fig, width="stretch")
         else:
-            st.info("No data available (all lines are reserve)")
+            st.info("No data available (all reserve/HSBY lines)")
     with col2:
         if not df_non_reserve.empty:
             fig = _create_time_distribution_chart(
@@ -922,7 +910,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
             if fig:
                 st.plotly_chart(fig, width="stretch")
         else:
-            st.info("No data available (all lines are reserve)")
+            st.info("No data available (all reserve/HSBY lines)")
 
     st.divider()
 
@@ -957,10 +945,10 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
         pay_periods_df = diagnostics.pay_periods
         # Filter to match filtered lines
         filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
-        # Exclude reserve lines
+        # Exclude reserve + HSBY lines
         pp_non_reserve = (
-            filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)]
-            if reserve_line_numbers
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(excluded_lines)]
+            if excluded_lines
             else filtered_pay_periods
         )
 
@@ -972,7 +960,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
         with col2:
             if not pp_non_reserve.empty:
                 do_int = pp_non_reserve["DO"].round().astype(int)
@@ -983,7 +971,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
     else:
         # Fallback to averaged DO if pay_periods not available
         with col1:
@@ -994,7 +982,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Averaged across pay periods")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
         with col2:
             if not df_non_reserve.empty:
                 do_int = df_non_reserve["DO"].round().astype(int)
@@ -1005,7 +993,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Averaged across pay periods")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
 
     st.divider()
 
@@ -1023,7 +1011,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
         with col2:
             if not pp_non_reserve.empty:
                 dd_int = pp_non_reserve["DD"].round().astype(int)
@@ -1034,7 +1022,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Showing both pay periods (2 entries per line)")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
     else:
         # Fallback to averaged DD if pay_periods not available
         with col1:
@@ -1045,7 +1033,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Averaged across pay periods")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
         with col2:
             if not df_non_reserve.empty:
                 dd_int = df_non_reserve["DD"].round().astype(int)
@@ -1056,7 +1044,7 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
                 )
                 st.caption("*Averaged across pay periods")
             else:
-                st.info("No data available (all lines are reserve)")
+                st.info("No data available (all reserve/HSBY lines)")
 
     # Pay Period Breakdown Section (only if multiple pay periods exist)
     if has_multiple_periods and pay_periods_df is not None:
@@ -1066,17 +1054,12 @@ def _render_visuals_tab(df: pd.DataFrame, filtered_df: pd.DataFrame, diagnostics
 
         # Get filtered pay periods data
         filtered_pay_periods = pay_periods_df[pay_periods_df["Line"].isin(filtered_df["Line"])]
-        # Exclude reserve lines
         pp_non_reserve = (
-            filtered_pay_periods[~filtered_pay_periods["Line"].isin(reserve_line_numbers)]
-            if reserve_line_numbers
+            filtered_pay_periods[~filtered_pay_periods["Line"].isin(excluded_lines)]
+            if excluded_lines
             else filtered_pay_periods
         )
-        pp_for_bt = (
-            filtered_pay_periods[~filtered_pay_periods["Line"].isin(all_exclude_for_bt)]
-            if all_exclude_for_bt
-            else filtered_pay_periods
-        )
+        pp_for_bt = pp_non_reserve.copy()
 
         # Get sorted list of unique periods
         unique_periods = sorted(filtered_pay_periods["Period"].unique())
